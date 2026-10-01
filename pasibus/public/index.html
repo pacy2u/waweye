@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#242428">
+<title>Pasibus – Warszawa na żywo</title>
+<link rel="stylesheet" href="vendor/leaflet.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="map" aria-label="Mapa pojazdów"></div>
+
+<header id="bar">
+  <div class="brand">Pasibus</div>
+  <input id="search" type="search" inputmode="search" placeholder="Linia, np. 175" autocomplete="off" aria-label="Filtruj linię">
+  <div class="chips" role="group" aria-label="Typ pojazdu">
+    <button id="t-bus" class="chip on" aria-pressed="true">Autobusy</button>
+    <button id="t-tram" class="chip on" aria-pressed="true">Tramwaje</button>
+  </div>
+</header>
+
+<div id="status" role="status"><span id="dot"></span><span id="status-text">Ładowanie…</span></div>
+
+<aside id="panel" hidden>
+  <button id="close" aria-label="Odznacz pojazd">×</button>
+  <div class="line-badge" id="p-line"></div>
+  <div class="meta">
+    <div id="p-type"></div>
+    <div id="p-details"></div>
+  </div>
+  <button id="follow" class="chip">Śledź</button>
+</aside>
+
+<script src="vendor/leaflet.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
