@@ -327,3 +327,19 @@ test('worker: incidents resource, and prototype keys are not treated as resource
   const bad = await handle(new Request('https://w.dev/?resource=constructor', { headers: { 'x-proxy-secret': 's' } }), env, f);
   assert.equal(bad.status, 400);
 });
+
+test('handler: rejects invalid types with 400 and non-GET methods with 405', async () => {
+  const bad = await call('/api/vehicles?types=abc', { env: { MOCK: '1' } });
+  assert.equal(bad.status, 400);
+  const mixed = await call('/api/vehicles?types=1,3', { env: { MOCK: '1' } });
+  assert.equal(mixed.status, 400);
+  const dup = await call('/api/vehicles?types=1,1', { env: { MOCK: '1' } });
+  assert.equal(dup.status, 200);
+  for (const handler of [vehiclesHandler, parkingHandler, incidentsHandler]) {
+    const r = await new Promise((resolve) => {
+      const res = { headers: {}, statusCode: 200, setHeader(k, v) { this.headers[k] = v; }, end(b) { resolve({ status: this.statusCode, headers: this.headers, body: JSON.parse(b) }); } };
+      handler({ url: '/x', method: 'POST' }, res, { env: { MOCK: '1' } });
+    });
+    assert.equal(r.status, 405); assert.equal(r.headers.Allow, 'GET, HEAD');
+  }
+});
