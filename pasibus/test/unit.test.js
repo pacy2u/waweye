@@ -17,8 +17,9 @@ test('normalize drops stale, invalid and out-of-area vehicles', () => {
   assert.equal(out.length, 1);
   assert.equal(out[0].type, 'tram');
 });
-const fakeFetch = (bodyFor) => async (url) => {
-  const type = new URL(url).searchParams.get('type');
+const typeOf = (url, opts) => (opts && opts.body ? String(JSON.parse(opts.body).type) : new URL(url).searchParams.get('type'));
+const fakeFetch = (bodyFor) => async (url, opts) => {
+  const type = typeOf(url, opts);
   const b = bodyFor(type, url);
   return { ok: true, status: 200, json: async () => b };
 };
@@ -35,8 +36,8 @@ test('API error string (bad key) is surfaced', async () => {
 });
 test('partial failure keeps working type', async () => {
   const t = new Date(Date.now() + 2 * 3600e3).toISOString().slice(0, 19).replace('T', ' ');
-  const f = async (url) => {
-    if (new URL(url).searchParams.get('type') === '2') throw new Error('boom');
+  const f = async (url, opts) => {
+    if (typeOf(url, opts) === '2') throw new Error('boom');
     return { ok: true, json: async () => ({ result: [row({ Time: t })] }) };
   };
   const r = await fetchVehicles({ apiKey: 'k', fetchImpl: f });
@@ -98,8 +99,8 @@ test('worker: rejects bad secret/type, relays with key', async () => {
   assert.equal((await handle(req('?type=9', 's3'), env)).status, 400);
   assert.equal((await handle(req('?type=1', 's3'), { PROXY_SECRET: 's3' })).status, 500);
   let called;
-  const ok = await handle(req('?type=2', 's3'), env, async (u) => { called = u; return new Response('{"result":[]}', { status: 200 }); });
-  assert.equal(ok.status, 200); assert.match(called, /apikey=KEY&type=2/);
+  const ok = await handle(req('?type=2', 's3'), env, async (u, init) => { called = { url: u, init }; return new Response('{"result":[]}', { status: 200 }); });
+  assert.equal(ok.status, 200); assert.equal(called.url, 'https://dane.um.warszawa.pl/api/action/get_ztm_lokalizacja_pojazdow'); assert.equal(called.init.method, 'POST'); assert.equal(called.init.headers.Authorization, 'KEY'); assert.deepEqual(JSON.parse(called.init.body), { type: 2 });
   const bad = await handle(req('?type=1', 's3'), env, async () => { throw new Error('boom'); });
   assert.equal(bad.status, 502);
 });
@@ -107,10 +108,10 @@ test('worker: rejects bad secret/type, relays with key', async () => {
 test('worker: default export works the way Cloudflare calls it (request, env, ctx)', async () => {
   const worker = (await import('../worker/index.js')).default;
   const realFetch = globalThis.fetch; let called;
-  globalThis.fetch = async (u) => { called = u; return new Response('{"result":[]}'); };
+  globalThis.fetch = async (u, init) => { called = { u, init }; return new Response('{"result":[]}'); };
   try {
     const res = await worker.fetch(new Request('https://w.dev/?type=1', { headers: { 'x-proxy-secret': 's3' } }), { PROXY_SECRET: 's3', WARSAW_API_KEY: 'KEY' }, { waitUntil() {} });
-    assert.equal(res.status, 200); assert.match(called, /apikey=KEY/);
+    assert.equal(res.status, 200); assert.equal(called.init.headers.Authorization, 'KEY');
   } finally { globalThis.fetch = realFetch; }
 });
 
@@ -122,4 +123,28 @@ test('HTTP errors include the JSON error body (e.g. relay 403 forbidden)', async
 test('bad-key message shows the API error text, not just "false"', async () => {
   const f = async () => ({ ok: true, json: async () => ({ result: 'false', error: 'Błędny apikey lub jego brak' }) });
   await assert.rejects(fetchVehicles({ apiKey: 'x', types: [1], fetchImpl: f }), /Błędny apikey/);
+});
+
+test('direct mode: POST with Authorization token and JSON type; falls back to Bearer on 403', async () => {
+  const t = new Date(Date.now() + 2 * 3600e3).toISOString().slice(0, 19).replace('T', ' ');
+  const calls = [];
+  const f = async (url, opts) => {
+    calls.push({ url, opts });
+    if (opts.headers.Authorization === 'TOK') return { ok: false, status: 403, json: async () => ({ error: 'forbidden' }) };
+    return { ok: true, json: async () => ({ result: [row({ Time: t })] }) };
+  };
+  const r = await fetchVehicles({ apiKey: 'TOK', types: [1], fetchImpl: f });
+  assert.equal(r.vehicles.length, 1);
+  assert.equal(calls.length, 2);
+  assert.ok(calls.every((c) => c.opts.method === 'POST' && c.url === 'https://dane.um.warszawa.pl/api/action/get_ztm_lokalizacja_pojazdow' && !c.url.includes('TOK')));
+  assert.deepEqual(JSON.parse(calls[0].opts.body), { type: 1 });
+  assert.equal(calls[1].opts.headers.Authorization, 'Bearer TOK');
+});
+
+test('worker: falls back to Bearer on 401/403 from the API', async () => {
+  const { handle } = await import('../worker/index.js');
+  const seen = [];
+  const res = await handle(new Request('https://w.dev/?type=1', { headers: { 'x-proxy-secret': 's' } }), { PROXY_SECRET: 's', WARSAW_API_KEY: 'TOK' },
+    async (u, init) => { seen.push(init.headers.Authorization); return seen.length === 1 ? new Response('{"error":"no"}', { status: 401 }) : new Response('{"result":[]}', { status: 200 }); });
+  assert.equal(res.status, 200); assert.deepEqual(seen, ['TOK', 'Bearer TOK']);
 });
