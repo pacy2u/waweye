@@ -2,6 +2,8 @@
 
 Data: 2026-10-02. Na podstawie kodu z `main` (po PR #18), `README.md`, `CONTEXT.md` i `RAPORT_TESTOW_EKSPLORACYJNYCH.md`. Testy w dniu analizy: `npm test` – 39/39, `npm run test:e2e` – 43/43 (dane MOCK).
 
+**Decyzje właściciela produktu (2026-10-02):** grupa docelowa to codzienni pasażerowie; rozkłady tylko z oficjalnych zbiorów miasta; budżet 0 zł; bez analityki użytkowników; domena `dane.um.warszawa.pl` zostanie dodana do środowiska sesji; stary token jest unieważniony. Skutki dla planu opisuje [sekcja 6](#6-decyzje-właściciela-produktu-i-ich-skutki).
+
 ## 1. W skrócie
 
 Pasibus to lekka mapa komunikacji miejskiej Warszawy na żywo. Od zera do produkcji (https://pasibus.vercel.app) powstał w dwa dni. Pokazuje autobusy i tramwaje, parkingi z wolnymi miejscami, utrudnienia drogowe i dane o taborze. Kod jest mały (ok. 1 700 linii razem z testami), dobrze przetestowany i odporny na kaprysy API Warszawy.
@@ -13,6 +15,8 @@ Najważniejsze wnioski:
 3. **Skalowanie ma ukryte limity.** Kafelki z `tile.openstreetmap.org` nie są przeznaczone do aplikacji z dużym ruchem, a odpytywanie co 10 s (ok. 37 KB na odpowiedź) zużywa limity żądań i transferu Vercel proporcjonalnie do liczby użytkowników.
 
 Proponowana kolejność: **fundamenty (Faza 0) → trasy i przystanki (Faza 1) → funkcje dla codziennego pasażera (Faza 2) → kontekst miasta i skala (Faza 3)**.
+
+Faza 0 jest w dużej części zrobiona na gałęzi `faza-0/fundamenty-pasibus` (status w tabeli Fazy 0).
 
 ## 2. Stan obecny
 
@@ -44,7 +48,7 @@ Przeglądarka (Leaflet, bez bundlera) → funkcje Vercel `/api/*` (region `fra1`
 | D5 | Trzy panele z powielonym CSS i logiką otwierania/zamykania | `public/style.css`, `public/app.js` | kolejny panel (przystanek, linia) powieli to po raz czwarty |
 | D6 | Dokumentacja się rozjechała: README każe kopiować usunięty `.env.example`; `CONTEXT.md` podaje 34/41 testów zamiast 39/43; `README1st` zawiera tylko testową linię | `README.md`, `CONTEXT.md`, `README1st` | myli następne sesje i nowych kontrybutorów |
 | D7 | Odpytywanie trwa w ukrytej karcie (wznowienie tylko przyspiesza poll) | `public/app.js` (`setInterval(poll…)`) | zbędne żądania i transfer, bateria telefonu |
-| D8 | Połączenie z danymi o taborze niezweryfikowane na żywym API | `CONTEXT.md` | panel może pokazywać „brak w zbiorze” dla wszystkich pojazdów |
+| D8 | ~~Połączenie z danymi o taborze niezweryfikowane na żywym API~~ **Sprawdzone 2026-10-02:** w zbiorze jest 99,5% autobusów i 99,6% tramwajów na żywo | `CONTEXT.md` | – |
 | D9 | `maxDuration` ustawione tylko dla `vehicles` i `fleet` | `vercel.json` | niespójne limity czasu dla `parking`/`incidents` |
 | D10 | Pasek statusu ma `role="status"`, a tekst zmienia się co 10 s | `public/index.html` | czytnik ekranu ogłasza go bez przerwy |
 | D11 | Markery niedostępne z klawiatury, brak alternatywy (lista) | `public/app.js` | aplikacja nieużywalna bez myszy/dotyku |
@@ -54,19 +58,23 @@ Przeglądarka (Leaflet, bez bundlera) → funkcje Vercel `/api/*` (region `fra1`
 |---|---|---|---|
 | Zmiana formatu lub zachowania API Warszawy | średnie | wysoki | tolerancyjne parsery już są; dodać monitoring (D3) |
 | Polityka użycia kafelków OSM przy większym ruchu | średnie | wysoki | dostawca kafelków z darmowym progiem lub własny |
-| Limity planu Vercel Hobby (żądania, transfer; plan tylko do użytku niekomercyjnego) | rośnie z ruchem | średni | mniejsze odpowiedzi, pauza w ukrytej karcie, decyzja o planie |
-| Stary token w historii gita | – | wysoki | potwierdzić, że został unieważniony na portalu |
+| Limity planu Vercel Hobby (żądania, transfer; plan tylko do użytku niekomercyjnego) | rośnie z ruchem | średni | przy budżecie 0 zł zostajemy na Hobby: mniejsze odpowiedzi, pauza w ukrytej karcie (zrobione), bez komercjalizacji |
+| Wyczerpanie darmowej puli minut GitHub Actions (repo prywatne, 2000 min/mies.) | niskie | niski | monitoring co 2 h (~360 min), testy pomijają zmiany samych `.md`; po wyczerpaniu zadania stają, bez kosztów |
+| Wolne odpowiedzi API Warszawy (pierwsze pobranie zbioru taboru ok. 21 s przy limicie 25 s; pojedyncze odpowiedzi `/api/vehicles` ok. 20 s, mierzone z sesji przez jej pośrednika) | średnie | średni | monitoring zapisuje czasy odpowiedzi; jeśli się potwierdzi, dłuższy limit dla taboru |
+| ~~Stary token w historii gita~~ | – | – | unieważniony (potwierdzone 2026-10-02) |
 
 ## 3. Kierunek produktu
 
-**Dla kogo.** Główny użytkownik to pasażer w Warszawie, który chce wiedzieć, gdzie jest jego autobus i czy zdąży. Drugi to miłośnik komunikacji (tabor, malowania, zajezdnie), którego już dziś obsługuje panel pojazdu.
+**Dla kogo (decyzja).** Główny użytkownik to **codzienny pasażer** w Warszawie, który chce wiedzieć, gdzie jest jego autobus i czy zdąży. Miłośnik komunikacji (tabor, malowania, zajezdnie) jest obsłużony tym, co już jest w panelu pojazdu; funkcje tylko dla niego nie mają priorytetu.
 
 **Wyróżnik.** Jakdojade i Google Maps planują podróże; Pasibus ma być **najszybszym podglądem miasta na żywo**: otwierasz i od razu widzisz pojazdy, utrudnienia i parkingi na jednej mapie. Bez instalacji, bez reklam, z danymi o konkretnym pojeździe.
 
 **Czego nie robimy (na razie):**
 - planera podróży (to robią inni i wymaga ogromnej pracy),
 - aplikacji natywnej (wystarczy PWA),
-- kont użytkowników i bazy danych, dopóki nie wymagają tego powiadomienia lub historia.
+- kont użytkowników i bazy danych, dopóki nie wymagają tego powiadomienia lub historia,
+- analityki użytkowników (decyzja: nie, także bezciasteczkowej),
+- niczego, co wymaga płatnej usługi (budżet 0 zł).
 
 ## 4. Roadmapa
 
@@ -75,28 +83,28 @@ Rozmiar: **S** – jeden PR/sesja, **M** – 2–4 PR, **L** – wiele PR plus r
 ### Faza 0 – Fundamenty (październik 2026)
 Cel: każda zmiana jest testowana i wdrażana automatycznie, a awaria jest widoczna, zanim zgłosi ją użytkownik.
 
-| Zadanie | Dlaczego | Rozmiar |
-|---|---|---|
-| Potwierdzić unieważnienie starego tokenu | token jest w historii gita | S (właściciel) |
-| Zweryfikować dane o taborze na żywym API (D8) | ostatnia funkcja może nie działać | S |
-| CI w GitHub Actions: `npm test` + `npm run test:e2e` przy każdym PR | koniec regresji na `main` (D2) | S |
-| Automatyczne wdrażanie Workera (`wrangler deploy` w Actions, sekret `CLOUDFLARE_API_TOKEN`) + nagłówek z wersją Workera | koniec ręcznego wklejania (D1); użytkownik nie ma CLI | S |
-| Monitoring syntetyczny: cykliczne zapytanie do `/api/vehicles` i alert, gdy `received = 0` lub błąd | szybkie wykrycie awarii (D3) | S |
-| Porządek w dokumentacji (D6), `maxDuration` dla wszystkich funkcji (D9) | następne sesje startują z poprawnego stanu | S |
-| Pauza odpytywania w ukrytej karcie (D7) | mniej żądań i transferu, oszczędność baterii | S |
-| Wspólny handler zasobów i wspólny komponent panelu (D4, D5) | tańsze dodawanie zbiorów w Fazie 1 i 2 | M |
+| Zadanie | Dlaczego | Rozmiar | Status |
+|---|---|---|---|
+| Potwierdzić unieważnienie starego tokenu | token jest w historii gita | S (właściciel) | zrobione (właściciel) |
+| Zweryfikować dane o taborze na żywym API (D8) | ostatnia funkcja może nie działać | S | zrobione: 99,5% / 99,6% |
+| CI w GitHub Actions: `npm test` + `npm run test:e2e` przy każdym PR | koniec regresji na `main` (D2) | S | zrobione (`pasibus-testy.yml`) |
+| Automatyczne wdrażanie Workera (`wrangler deploy` w Actions) | koniec ręcznego wklejania (D1); użytkownik nie ma CLI | S | zrobione; czeka na sekrety `CLOUDFLARE_API_TOKEN` i `CLOUDFLARE_ACCOUNT_ID` |
+| Monitoring syntetyczny co 2 h: wszystkie `/api/*` + dopasowanie pojazdów do taboru; przy awarii issue i e-mail | wykrycie awarii (D3) w 0 zł | S | zrobione (`pasibus-monitoring-produkcji.yml`) |
+| Porządek w dokumentacji (D6), `maxDuration` dla wszystkich funkcji (D9) | następne sesje startują z poprawnego stanu | S | zrobione, poza `README1st` (plik właściciela) |
+| Pauza odpytywania w ukrytej karcie (D7) | mniej żądań i transferu, oszczędność baterii | S | zrobione |
+| Wspólny handler zasobów i wspólny komponent panelu (D4, D5) | tańsze dodawanie zbiorów w Fazie 1 i 2 | M | następny PR |
 
 ### Faza 1 – Trasy i przystanki: domknięcie pierwotnego celu (listopad 2026)
 Cel: po kliknięciu pojazdu widać trasę linii i przystanki; z linku można wrócić do tego samego widoku.
 
 | Zadanie | Dlaczego | Rozmiar |
 |---|---|---|
-| **Rozpoznanie źródła tras i przystanków.** Kandydaci do sprawdzenia: zbiory rozkładowe ZTM na `dane.um.warszawa.pl` (w starym API były m.in. `public_transport_routes` i `dbtimetable_get`) albo GTFS Warszawy z kształtami tras (`shapes.txt`) | bez tego nie ma tras ani odjazdów; wcześniej zablokowane brakiem dostępu do portalu z sesji | M |
-| Statyczne dane linii generowane raz dziennie (Actions → pliki JSON per linia: przebieg + przystanki) | trasy zmieniają się rzadko; nie potrzeba bazy ani nowych funkcji serwerowych | M |
+| **Rozpoznanie źródła tras i przystanków – tylko oficjalne zbiory miasta** (decyzja). Do sprawdzenia na `dane.um.warszawa.pl`: odpowiedniki starych `public_transport_routes` (przebieg linii jako lista przystanków) i `dbtimetable_get` (przystanki, rozkłady). Jeśli miasto nie publikuje kształtu trasy, rysujemy linię przez kolejne przystanki | bez tego nie ma tras ani odjazdów; po dodaniu domeny do środowiska rozpoznanie da się zrobić w sesji | M |
+| Dane linii z długim cache (zbiory rozkładowe zmieniają się rzadko): endpoint przez Workera z cache na krawędzi na dobę, ewentualnie pliki JSON per linia generowane raz dziennie w Actions | bez bazy danych i w darmowych progach | M |
 | Trasa wybranej linii na mapie + przystanki na trasie | pierwotny wymóg produktu | M |
 | Warstwa przystanków (od zoomu ~15) z panelem: nazwa, linie | punkt wyjścia do odjazdów w Fazie 2 | M |
 | Linki do stanu (`?linia=175`, `?pojazd=1-1234`) | udostępnianie („gdzie jest mój autobus”), zakładki | S |
-| Metro M1/M2: statyczne linie i stacje (OSM, licencja ODbL) | luka w obrazie komunikacji; API pojazdów nie ma metra | S |
+| Metro M1/M2: statyczne linie i stacje (oficjalny zbiór, jeśli istnieje; inaczej geometria z OSM, licencja ODbL – to mapa, nie rozkład) | luka w obrazie komunikacji; API pojazdów nie ma metra | S |
 
 ### Faza 2 – Codzienny pasażer (grudzień 2026 – styczeń 2027)
 Cel: aplikację da się zainstalować na telefonie i używać codziennie do sprawdzania „swoich” linii.
@@ -117,32 +125,35 @@ Cel: Pasibus wytrzymuje większy ruch i łączy komunikację z innymi danymi mie
 
 | Zadanie | Dlaczego | Rozmiar |
 |---|---|---|
-| Własny lub komercyjny dostawca kafelków (np. z darmowym progiem), opcjonalnie ciemny motyw mapy | zgodność z polityką OSM przy ruchu | S |
+| Kafelki zgodne z polityką OSM przy większym ruchu: tylko darmowe opcje (darmowy próg dostawcy dla projektów niekomercyjnych), opcjonalnie ciemny motyw mapy | zgodność z polityką OSM przy budżecie 0 zł | S |
 | Mniejsze odpowiedzi `/api/vehicles` (format tablicowy, zaokrąglone współrzędne, opcjonalnie tylko zmiany) | transfer i limity Vercel rosną liniowo z użytkownikami | M |
 | Powiązanie utrudnień z liniami (bliskość geometrii utrudnienia do trasy) | „czy to utrudnienie dotyczy mojej linii?” | M |
 | Veturilo / rowery miejskie (publiczny feed GBFS) | pierwszy i ostatni kilometr | M |
-| Powiadomienia push o utrudnieniach na ulubionych liniach (Web Push działa też w PWA na iOS) | wymaga przechowywania subskrypcji – pierwsza potrzeba backendu z danymi | L |
-| Historia i punktualność linii (zapisywanie migawek np. w Cloudflare D1/R2 przez cron) | treści dla mediów/miłośników, przewaga nad konkurencją | L |
+| Powiadomienia push o utrudnieniach na ulubionych liniach (Web Push działa też w PWA na iOS) | wymaga przechowywania subskrypcji – tylko jeśli zmieści się w darmowym progu (np. Cloudflare KV/D1) | L |
+| Historia i punktualność linii (migawki w Cloudflare D1/R2 przez cron) | niski priorytet: bardziej dla miłośników niż pasażerów; tylko w darmowych progach | L |
 
 ### Pomysły na później (bez zobowiązań)
 Mapa cieplna punktualności, porównanie linii w czasie, „najstarszy tabor na mieście” i inne treści dla miłośników, tryb kiosku/tablicy dla przystanków lub biur.
 
 ## 5. Mierniki sukcesu
 
-Dziś aplikacja nie zbiera żadnych danych o użyciu. Proponuję analitykę bez ciasteczek (np. Vercel Web Analytics lub Plausible – bez banera zgody) i śledzenie:
+Decyzja: **bez analityki użytkowników**. Mierzymy wyłącznie technicznie – monitoring produkcji (`scripts/check-production.js`) i panel zużycia Vercel (liczba wywołań funkcji, transfer) jako przybliżenie ruchu, bez śledzenia osób.
 
-| Miernik | Cel orientacyjny |
+| Miernik | Źródło | Cel orientacyjny |
+|---|---|---|
+| Kontrole produkcji zakończone sukcesem | monitoring (Actions) | > 99% |
+| Czas wykrycia awarii (od wystąpienia do e-maila z issue) | monitoring | ≤ 2 h (co 2 h, w budżecie minut) |
+| Czas odpowiedzi `/api/vehicles` | raport monitoringu | < 3 s |
+| Dopasowanie pojazdów na żywo do zbioru taboru | monitoring | > 90% (dziś 99,5%) |
+| Transfer i wywołania funkcji na miesiąc | panel Vercel | w limitach planu Hobby |
+
+## 6. Decyzje właściciela produktu i ich skutki
+
+| Decyzja (2026-10-02) | Skutek dla roadmapy |
 |---|---|
-| Czas do pierwszych pojazdów na mapie (p75) | < 3 s |
-| Udział udanych odświeżeń `/api/vehicles` | > 99 % |
-| Czas wykrycia awarii API (od wystąpienia do alertu) | < 15 min |
-| Użytkownicy wracający w ciągu 7 dni | rośnie po Fazie 2 (PWA, ulubione) |
-| Użycie funkcji: kliknięcie pojazdu, „Śledź”, parkingi, utrudnienia, trasy | pokazuje, w co inwestować dalej |
-
-## 6. Decyzje do podjęcia przez właściciela produktu
-
-1. **Główna grupa docelowa:** codzienni pasażerowie (priorytet: odjazdy, ulubione, PWA) czy miłośnicy komunikacji (priorytet: tabor, historia)? Roadmapa zakłada pasażerów.
-2. **Źródło rozkładów:** tylko oficjalne zbiory miasta czy także społecznościowy GTFS, jeśli jest pełniejszy?
-3. **Budżet:** czy zostajemy przy 0 zł (Vercel Hobby, darmowe progi), czy dopuszczamy kilka–kilkanaście dolarów miesięcznie za kafelki i plan Vercel przy większym ruchu? Plan Hobby wyklucza użycie komercyjne.
-4. **Analityka:** zgoda na analitykę bez ciasteczek?
-5. **Dostęp do API z sesji:** dodanie `dane.um.warszawa.pl` do dozwolonych domen środowiska znacznie przyspieszy Fazę 1 (rozpoznanie zbiorów rozkładowych).
+| Grupa docelowa: **codzienni pasażerowie** | Faza 1 i 2 bez zmian (trasy, odjazdy, ulubione, PWA). Funkcje dla miłośników (historia, statystyki taboru) spadają na koniec. |
+| Rozkłady **tylko z oficjalnych zbiorów** miasta | Bez społecznościowego GTFS. Jeśli miasto nie publikuje kształtu tras, trasa jest linią przez kolejne przystanki. Szacowanie opóźnień zależy od tego, czy oficjalne rozkłady mają brygady. |
+| Budżet **0 zł** | Zostajemy na Vercel Hobby (bez komercjalizacji), kafelki tylko w darmowych opcjach, monitoring co 2 h zamiast co kilka minut (pula minut Actions), push i historia tylko w darmowych progach. Mniejsze odpowiedzi API (Faza 3) zyskują na znaczeniu. |
+| **Bez analityki** | Mierniki wyłącznie techniczne (sekcja 5). O priorytetach decydują rozmowy z użytkownikami i zgłoszenia, nie dane o użyciu. |
+| **Dodać `dane.um.warszawa.pl`** do środowiska sesji | Rozpoznanie oficjalnych zbiorów tras i przystanków (pierwsze zadanie Fazy 1) da się zrobić w sesji. Zmiana działa w nowych sesjach. |
+| Stary token **unieważniony** | Ryzyko zamknięte. |

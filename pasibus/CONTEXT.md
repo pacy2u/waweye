@@ -7,17 +7,19 @@ Aplikacja webowa (komputer + telefon) pokazująca na mapie Warszawy w czasie rze
 
 ## Stan (działa na produkcji: https://pasibus.vercel.app)
 - **Pojazdy** (autobusy + tramwaje): odświeżanie co 10 s, płynny ruch, zoom, wybór pojazdu (pomarańczowy pierścień, reszta wyszarzona), panel szczegółów, „Śledź”, filtry typu i linii, numery linii od zoomu 14.
-- **Dane o pojeździe**: po kliknięciu panel dociąga `/api/fleet` (zbiór `get_ztm_pojazdy`, raz na sesję) i łączy po `numerTaborowy` = `vehicle` + typ (autobus/tramwaj). Format odpowiedzi live NIE sprawdzony (brak dostępu do API z sesji) – jeśli panel pokazuje „brak w zbiorze”, porównaj numery. Wymaga ponownego wklejenia `worker/index.js` w Cloudflare.
+- **Dane o pojeździe**: po kliknięciu panel dociąga `/api/fleet` (zbiór `get_ztm_pojazdy`, raz na sesję) i łączy po `numerTaborowy` = `vehicle` + typ (autobus/tramwaj). Sprawdzone na produkcji 2026-10-02: w zbiorze jest 99,5% autobusów i 99,6% tramwajów na żywo (braki to pojedyncze numery). Monitoring pilnuje, żeby dopasowanie nie spadło poniżej 90%.
 - **Parking** (przycisk z ikoną P): znaczniki „P <wolne>” (zielony/czerwony), panel: wolne z pojemności, podział standard/niepełnosprawni/elektryczne, godziny, cennik, telefon. Odświeżanie 60 s.
 - **Utrudnienia** (przycisk z ikoną ostrzeżenia): punkty i linie, status trwa/zaplanowane/zakończone, panel z treścią i linkiem do infoulice. Odświeżanie 60 s.
 - Panele pojazdu/parkingu/utrudnienia wzajemnie się wykluczają.
-- Testy: `npm test` (jednostkowe, 34), `npm run test:e2e` (Chromium, desktop + telefon, ok. 41 kroków, na danych MOCK).
+- Odświeżanie wstrzymuje się w ukrytej karcie i wraca od razu po jej pokazaniu.
+- Testy: `npm test` (jednostkowe), `npm run test:e2e` (Chromium, desktop + telefon, na danych MOCK). Uruchamiane automatycznie w GitHub Actions przy każdym PR (`.github/workflows/pasibus-testy.yml`).
+- Monitoring: co 2 h `scripts/check-production.js` w Actions; przy awarii otwiera issue „[monitoring] …” i zamyka je po powrocie do normy.
 
 ## Architektura
 ```
 przeglądarka (Leaflet, public/app.js)
-   └─ /api/vehicles | /api/parking | /api/incidents   (funkcje Vercel, region fra1, maxDuration 60)
-        └─ UPSTREAM_URL ustawione? → Cloudflare Worker (GET ?type=1|2 | ?resource=parking|incidents, nagłówek x-proxy-secret)
+   └─ /api/vehicles | /api/parking | /api/incidents | /api/fleet   (funkcje Vercel, region fra1, maxDuration 60)
+        └─ UPSTREAM_URL ustawione? → Cloudflare Worker (GET ?type=1|2 | ?resource=parking|incidents|fleet, nagłówek x-proxy-secret)
                                           └─ POST https://dane.um.warszawa.pl/api/action/…  (token w Authorization)
         └─ brak UPSTREAM_URL → bezpośrednio POST do dane.um.warszawa.pl (tryb awaryjny/lokalny)
 ```
@@ -44,21 +46,27 @@ Lokalnie: `pasibus/.env` (w `.gitignore`).
 6. API pojazdów nie zawiera **metra** (`typ` 1 = autobus, 2 = tramwaj).
 7. Cloudflare wywołuje `fetch(request, env, ctx)` – trzeci argument to NIE funkcja fetch (był błąd).
 
+## Decyzje produktowe (2026-10-02, szczegóły w `ROADMAPA.md`)
+- Grupa docelowa: **codzienni pasażerowie**.
+- Rozkłady, trasy i przystanki: **tylko oficjalne zbiory miasta** (bez społecznościowego GTFS).
+- Budżet: **0 zł** (Vercel Hobby, darmowe progi, darmowa pula minut GitHub Actions dla prywatnego repo).
+- **Bez analityki** użytkowników, także bezciasteczkowej. Mierzymy tylko technicznie (monitoring).
+
 ## Środowisko pracy (sesje w chmurze)
-- Dostęp sieciowy sesji ustawia się w edycji środowiska (`apck01`); **zmiany stosują się tylko do nowych sesji**. Potrzebne domeny: `dane.um.warszawa.pl` (czytanie opisów zbiorów i test API), `tile.openstreetmap.org` (kafelki w testach), `api.um.warszawa.pl` (stary host).
-- Branch roboczy: `claude/warsaw-transit-tracker-jkgnwz`; zmiany idą przez PR do `main` (użytkownik merguje, Vercel wdraża z `main`). Po zmergowanym PR zaczynaj od `git fetch && git merge --ff-only origin/main`.
+- Dostęp sieciowy sesji ustawia się w edycji środowiska (`apck01`); **zmiany stosują się tylko do nowych sesji**. Potrzebne domeny: `dane.um.warszawa.pl` (czytanie opisów zbiorów i test API; użytkownik zgodził się ją dodać 2026-10-02), `tile.openstreetmap.org` (kafelki w testach), `api.um.warszawa.pl` (stary host). Produkcja `pasibus.vercel.app` jest osiągalna z sesji, więc żywe dane można sprawdzać przez `/api/*` albo `node scripts/check-production.js`.
+- Gałęzie: **opisowe nazwy** (`CLAUDE.md`), np. `faza-0/fundamenty-pasibus`; zmiany idą przez PR do `main` (użytkownik merguje, Vercel wdraża z `main`). Po zmergowanym PR zaczynaj od `git fetch && git merge --ff-only origin/main`.
 - Użytkownik nie ma CLI; wkleja kod i wyniki z konsoli/zrzuty ekranu. Pytaj o to, czego nie da się sprawdzić bez żywego API (ja zwykle nie mam dostępu do `dane.um.warszawa.pl`).
 
 ## Zasady / pułapki
-- **Nie commituj tokenu.** Token pojawił się w czacie i na zrzutach ekranu; pierwszy token został wymieniony, a stary zostawiony w `.env.example` na `main` (poprawione razem z tym plikiem – nadal jest w historii gita, więc stary token musi być unieważniony na portalu).
-- Nowy zbiór danych = nowy endpoint w `lib/warsaw.js` + `lib/handler.js` + `api/<nazwa>.js` + `dev-server.js` + wpis w `RESOURCES` w `worker/index.js` + testy (jednostkowe z rekordem z dokumentacji, e2e na MOCK) + przypomnienie użytkownikowi o wklejeniu Workera.
+- **Nie commituj tokenu.** Token pojawił się w czacie i na zrzutach ekranu; stary token jest w historii gita, ale użytkownik potwierdził jego unieważnienie (2026-10-02). `.env.example` usunięto.
+- Nowy zbiór danych = nowy endpoint w `lib/warsaw.js` + `lib/handler.js` + `api/<nazwa>.js` + `dev-server.js` + wpis w `RESOURCES` w `worker/index.js` + testy (jednostkowe z rekordem z dokumentacji, e2e na MOCK). Worker wdraża się sam po merge'u (`.github/workflows/pasibus-wdrozenie-workera.yml`), o ile w repo są sekrety `CLOUDFLARE_API_TOKEN` i `CLOUDFLARE_ACCOUNT_ID`; bez nich przypomnij o ręcznym wklejeniu. Faza 0 roadmapy przewiduje uproszczenie tego do wspólnego handlera.
 - Pasek statusu „0 pojazdów” bywa po prostu efektem wyłączonych przycisków Autobusy/Tramwaje (nie błąd).
 
 ## Odłożone / pomysły (kolejność wg wartości)
 Pełna analiza i plan rozwoju w fazach: `ROADMAPA.md`.
 1. **Trasa wybranej linii** (pierwotny wymóg: zaznaczenie pojazdu pokazuje całą planowaną trasę linii) – zaparkowane. Potrzebny zbiór z rozkładami/przebiegiem linii z `dane.um.warszawa.pl`; poproś użytkownika o sekcję „Parametry API / Przykłady wywołań” albo odczytaj stronę, gdy domena jest dozwolona w sesji.
 2. **Metro** – brak w zbiorze pojazdów; opcje: statyczne linie M1/M2 i stacje albo osobny zbiór na żywo (nie znaleziono).
-3. Drobne: w panelu utrudnień brak daty końca pokazuje „?” (lepiej „do odwołania”); opcjonalny filtr starych utrudnień; grupowanie gęstych znaczników/etykiet; ewentualnie ukrycie zakończonych utrudnień.
+3. Drobne: opcjonalny filtr starych utrudnień; grupowanie gęstych znaczników/etykiet; ewentualnie ukrycie zakończonych utrudnień.
 
 ## Historia (PR-y w `pacy2u/tst`)
-#1–#2 aplikacja + poprawki Vercel (region fra1) · #3 przyczyna błędu sieci w komunikatach · #4–#5 Worker Cloudflare · #6 treść błędu API · #7 przejście na nowe API (`Authorization`) · #8 timeout 25 s, podgląd odpowiedzi · #9 goła tablica + strefa czasowa · #10–#11 Parking (`carParks`) · #12 Utrudnienia · #13 licznik pojazdów liczony przy wyświetlaniu.
+#1–#2 aplikacja + poprawki Vercel (region fra1) · #3 przyczyna błędu sieci w komunikatach · #4–#5 Worker Cloudflare · #6 treść błędu API · #7 przejście na nowe API (`Authorization`) · #8 timeout 25 s, podgląd odpowiedzi · #9 goła tablica + strefa czasowa · #10–#11 Parking (`carParks`) · #12 Utrudnienia · #13 licznik pojazdów liczony przy wyświetlaniu · #14 CONTEXT.md + CLAUDE.md · #15–#16 raport z testów eksploracyjnych · #17 poprawki z raportu · #18 dane o taborze · gałąź `faza-0/fundamenty-pasibus`: roadmapa, CI, monitoring, automatyczne wdrażanie Workera, pauza w ukrytej karcie.
