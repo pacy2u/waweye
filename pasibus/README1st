@@ -1,3 +1,1 @@
-#linia dodana przez VS jako rozwiaznaie propownowane przez claude w chrome
-#Rozwiązanie: zrobić nowy commit na main w pacy2u/tst jako Ty (pacy2u). Wcześniejsze wdrożenie Twojego commita z pacy2u/pasibus przeszło, więc Twoje konto Vercel jest powiązane z pacy2u. Najprościej w GitHubie: otwórz README1st w pacy2u/tst, dodaj np. jedną pustą linię i zrób „Commit changes” bezpośrednio na main. Vercel powinien wtedy sam uruchomić wdrożenie produkcyjne.
-#koniec
+#dodane linia for commit
