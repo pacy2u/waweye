@@ -118,3 +118,8 @@ test('HTTP errors include the JSON error body (e.g. relay 403 forbidden)', async
   const f = async () => ({ ok: false, status: 403, json: async () => ({ error: 'forbidden' }) });
   await assert.rejects(fetchVehicles({ types: [1], fetchImpl: f, upstream: { url: 'https://w.dev', secret: 'x' } }), /HTTP 403 \(forbidden\)/);
 });
+
+test('bad-key message shows the API error text, not just "false"', async () => {
+  const f = async () => ({ ok: true, json: async () => ({ result: 'false', error: 'Błędny apikey lub jego brak' }) });
+  await assert.rejects(fetchVehicles({ apiKey: 'x', types: [1], fetchImpl: f }), /Błędny apikey/);
+});

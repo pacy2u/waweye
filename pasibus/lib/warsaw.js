@@ -51,7 +51,7 @@ async function fetchOnce(url, fetchImpl, headers) {
   }
   const body = await res.json();
   if (!Array.isArray(body.result)) {
-    throw new Error(typeof body.result === 'string' ? body.result : (body.error || 'Unexpected API response'));
+    throw new Error(body.error || (typeof body.result === 'string' ? body.result : 'Unexpected API response'));
   }
   return body.result;
 }
