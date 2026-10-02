@@ -62,3 +62,15 @@ test('handler: 502 without key, never leaks key', async () => {
   const r2 = await call('/api/vehicles', { env: { WARSAW_API_KEY: 'SECRETKEY' }, fetchImpl: async () => { throw new Error('down'); } });
   assert.equal(r2.status, 502); assert.ok(!JSON.stringify(r2.body).includes('SECRETKEY'));
 });
+
+test('retries once on timeout, but not on bad key', async () => {
+  const t = new Date(Date.now() + 2 * 3600e3).toISOString().slice(0, 19).replace('T', ' ');
+  let calls = 0;
+  const flaky = async () => { if (++calls === 1) throw new Error('The operation was aborted due to timeout'); return { ok: true, json: async () => ({ result: [row({ Time: t })] }) }; };
+  const r = await fetchVehicles({ apiKey: 'k', types: [1], fetchImpl: flaky });
+  assert.equal(r.vehicles.length, 1); assert.equal(calls, 2);
+  let bad = 0;
+  const badKey = async () => { bad++; return { ok: true, json: async () => ({ result: 'false', error: 'Błędny apikey lub jego brak' }) }; };
+  await assert.rejects(fetchVehicles({ apiKey: 'x', types: [1], fetchImpl: badKey }));
+  assert.equal(bad, 1);
+});
