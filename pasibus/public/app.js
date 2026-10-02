@@ -95,7 +95,7 @@
     const el = $('status'), t = $('status-text');
     const n = t.dataset.count || 0;
     if (state.error) { el.className = 'err'; t.textContent = state.error; }
-    else if (state.lastOk) { el.className = 'ok'; t.textContent = `${n} pojazdów · ${new Date(state.lastOk).toLocaleTimeString('pl-PL')}${state.source === 'mock' ? ' · dane testowe' : ''}${state.parkError ? ' · parkingi: ' + state.parkError : ''}`; }
+    else if (state.lastOk) { el.className = 'ok'; t.textContent = `${n} pojazdów · ${new Date(state.lastOk).toLocaleTimeString('pl-PL')}${state.source === 'mock' ? ' · dane testowe' : ''}${state.parkError ? ' · parkingi: ' + state.parkError : ''}${state.data.length === 0 && state.received > 0 ? ` · API zwróciło ${state.received}, wszystkie odrzucone (nieaktualne/poza Warszawą)` : state.data.length === 0 && state.received === 0 ? ' · API zwróciło pustą listę' : ''}`; }
   }
 
   // Smooth movement between polls.
@@ -122,7 +122,7 @@
       const res = await fetch('/api/vehicles?types=' + (types.length ? types.join(',') : '1,2'), { cache: 'no-store' });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error || 'HTTP ' + res.status);
-      state.error = null; state.lastOk = body.updated; state.source = body.source;
+      state.error = null; state.lastOk = body.updated; state.source = body.source; state.received = body.received;
       sync(body.vehicles);
     } catch (e) {
       state.error = 'Brak danych: ' + e.message + (state.lastOk ? ' (pokazuję ostatnie)' : '');

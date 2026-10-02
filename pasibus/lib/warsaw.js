@@ -62,8 +62,10 @@ const extractVehicles = (b) => (Array.isArray(b) ? b : Array.isArray(b && b.resu
 const extractParkings = (b) => {
   if (Array.isArray(b)) return b;
   if (!b || typeof b !== 'object') return null;
-  for (const c of [b.Parkings, b.parkings, b.result && b.result.Parkings, b.result]) if (Array.isArray(c)) return c;
-  return null;
+  // Docs say "Parkings", the live API answers {"Status", "Timestamp", "carParks": [...]}: take the first list we find.
+  for (const c of [b.carParks, b.Parkings, b.parkings, b.result && b.result.carParks, b.result && b.result.Parkings, b.result]) if (Array.isArray(c)) return c;
+  const any = Object.values(b).find((v) => Array.isArray(v));
+  return any || null;
 };
 
 async function fetchOnce(url, fetchImpl, init, extract) {
@@ -118,7 +120,7 @@ async function requestList({ endpoint, jsonBody, relayQuery, extract, apiKey, fe
 
 async function fetchType(type, apiKey, fetchImpl, upstream) {
   const raw = await requestList({ endpoint: ENDPOINT, jsonBody: { type }, relayQuery: `type=${type}`, extract: extractVehicles, apiKey, fetchImpl, upstream });
-  return normalize(raw, type);
+  return { items: normalize(raw, type), received: raw.length };
 }
 
 // ---- Parkings (dataset "Wolne miejsca parkingowe") ----
@@ -164,12 +166,13 @@ async function fetchVehicles({ apiKey, types = [1, 2], fetchImpl = fetch, upstre
   if (!apiKey && !upstream) throw new Error('Missing WARSAW_API_KEY');
   const settled = await Promise.allSettled(types.map((t) => fetchType(t, apiKey, fetchImpl, upstream)));
   const vehicles = [], errors = [];
+  let received = 0; // raw records from the API, before filtering stale/out-of-area ones
   settled.forEach((s, i) => {
-    if (s.status === 'fulfilled') vehicles.push(...s.value);
+    if (s.status === 'fulfilled') { vehicles.push(...s.value.items); received += s.value.received; }
     else errors.push(`${TYPES[types[i]]}: ${s.reason.message}`);
   });
   if (errors.length === types.length) throw new Error(errors.join('; '));
-  return { vehicles, errors };
+  return { vehicles, errors, received };
 }
 
 module.exports = { fetchVehicles, fetchParkings, normalize, normalizeParkings, TYPES };

@@ -9,20 +9,20 @@ async function vehiclesHandler(req, res, { env = process.env, fetchImpl = fetch 
   const types = wanted.length ? wanted : [1, 2];
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   try {
-    let vehicles, errors = [], source = 'live';
+    let vehicles, errors = [], source = 'live', received;
     if (env.MOCK === '1') {
       source = 'mock';
       const names = types.map((t) => (t === 1 ? 'bus' : 'tram'));
       vehicles = mockVehicles().filter((v) => names.includes(v.type));
     } else {
-      ({ vehicles, errors } = await fetchVehicles({
+      ({ vehicles, errors, received } = await fetchVehicles({
         apiKey: env.WARSAW_API_KEY, types, fetchImpl,
         upstream: env.UPSTREAM_URL ? { url: env.UPSTREAM_URL, secret: env.UPSTREAM_SECRET || '' } : undefined,
       }));
     }
     res.setHeader('Cache-Control', 's-maxage=5, stale-while-revalidate=10');
     res.statusCode = 200;
-    res.end(JSON.stringify({ updated: Date.now(), source, errors, vehicles }));
+    res.end(JSON.stringify({ updated: Date.now(), source, errors, received: received ?? vehicles.length, vehicles }));
   } catch (e) {
     res.setHeader('Cache-Control', 'no-store');
     res.statusCode = 502;
