@@ -64,10 +64,10 @@ test('handler: 502 without key, never leaks key', async () => {
   assert.equal(r2.status, 502); assert.ok(!JSON.stringify(r2.body).includes('SECRETKEY'));
 });
 
-test('retries once on timeout, but not on bad key', async () => {
+test('retries once on a network error, but not on timeout or bad key', async () => {
   const t = new Date(Date.now() + 2 * 3600e3).toISOString().slice(0, 19).replace('T', ' ');
   let calls = 0;
-  const flaky = async () => { if (++calls === 1) throw new Error('The operation was aborted due to timeout'); return { ok: true, json: async () => ({ result: [row({ Time: t })] }) }; };
+  const flaky = async () => { if (++calls === 1) throw new Error('fetch failed (ECONNRESET)'); return { ok: true, json: async () => ({ result: [row({ Time: t })] }) }; };
   const r = await fetchVehicles({ apiKey: 'k', types: [1], fetchImpl: flaky });
   assert.equal(r.vehicles.length, 1); assert.equal(calls, 2);
   let bad = 0;
@@ -147,4 +147,13 @@ test('worker: falls back to Bearer on 401/403 from the API', async () => {
   const res = await handle(new Request('https://w.dev/?type=1', { headers: { 'x-proxy-secret': 's' } }), { PROXY_SECRET: 's', WARSAW_API_KEY: 'TOK' },
     async (u, init) => { seen.push(init.headers.Authorization); return seen.length === 1 ? new Response('{"error":"no"}', { status: 401 }) : new Response('{"result":[]}', { status: 200 }); });
   assert.equal(res.status, 200); assert.deepEqual(seen, ['TOK', 'Bearer TOK']);
+});
+
+test('timeouts are not retried; odd responses are shown with a preview', async () => {
+  let n = 0;
+  const slow = async () => { n++; throw new Error('The operation was aborted due to timeout'); };
+  await assert.rejects(fetchVehicles({ apiKey: 'k', types: [1], fetchImpl: slow }), /timeout/);
+  assert.equal(n, 1);
+  const odd = async () => ({ ok: true, json: async () => ({ success: true, result: null }) });
+  await assert.rejects(fetchVehicles({ apiKey: 'k', types: [2], fetchImpl: odd }), /Unexpected API response: \{"success":true,"result":null\}/);
 });
