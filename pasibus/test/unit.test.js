@@ -113,3 +113,8 @@ test('worker: default export works the way Cloudflare calls it (request, env, ct
     assert.equal(res.status, 200); assert.match(called, /apikey=KEY/);
   } finally { globalThis.fetch = realFetch; }
 });
+
+test('HTTP errors include the JSON error body (e.g. relay 403 forbidden)', async () => {
+  const f = async () => ({ ok: false, status: 403, json: async () => ({ error: 'forbidden' }) });
+  await assert.rejects(fetchVehicles({ types: [1], fetchImpl: f, upstream: { url: 'https://w.dev', secret: 'x' } }), /HTTP 403 \(forbidden\)/);
+});

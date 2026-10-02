@@ -43,7 +43,12 @@ async function fetchOnce(url, fetchImpl, headers) {
   } catch (e) {
     throw new Error(describe(e));
   }
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  if (!res.ok) {
+    // Relay/API errors carry a JSON {error}; include it so "HTTP 403" says who refused and why.
+    let why = '';
+    try { why = (await res.json()).error || ''; } catch {}
+    throw new Error(`HTTP ${res.status}${why ? ` (${why})` : ''}`);
+  }
   const body = await res.json();
   if (!Array.isArray(body.result)) {
     throw new Error(typeof body.result === 'string' ? body.result : (body.error || 'Unexpected API response'));
