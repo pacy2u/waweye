@@ -2,10 +2,12 @@
 
 Mapa pojazdów (autobusy, tramwaje) w czasie rzeczywistym. Dane: [Lokalizacja pojazdów komunikacji miejskiej](https://dane.um.warszawa.pl/pl/catalogue/f319f602-7292-4e8c-b3d1-f5898aa9a638), m.st. Warszawa. Mapa: OpenStreetMap + Leaflet.
 
-Funkcje: zoom (przyciski, scroll, pinch), odświeżanie co 10 s z płynnym ruchem pojazdów, kliknięcie pojazdu wyróżnia go (pomarańczowy pierścień, reszta wyszarzona) i pokazuje panel ze szczegółami, tryb „Śledź”, filtr typu i linii. Wyświetlanie całej trasy linii jest zaparkowane.
+Funkcje: zoom (przyciski, scroll, pinch), odświeżanie co 10 s z płynnym ruchem pojazdów, kliknięcie pojazdu wyróżnia go (pomarańczowy pierścień, reszta wyszarzona) i pokazuje panel ze szczegółami, tryb „Śledź”, filtr typu i linii. Przycisk **Parking** (ikona P) pokazuje na mapie parkingi z liczbą wolnych miejsc (zielony: są wolne, czerwony: brak); po kliknięciu panel z wolnymi miejscami z podziałem na standardowe/dla niepełnosprawnych/elektryczne, pojemnością, godzinami, cennikiem i telefonem (zbiór „Wolne miejsca parkingowe”, odświeżany co minutę). Wyświetlanie całej trasy linii jest zaparkowane.
 
 ## Źródło danych
 API ZTM na nowym portalu: `POST https://dane.um.warszawa.pl/api/action/get_ztm_lokalizacja_pojazdow`, token w nagłówku `Authorization`, treść `{"type": 1}` (autobusy) lub `{"type": 2}` (tramwaje). Token generuje się na https://dane.um.warszawa.pl/key-api. Stary adres `api.um.warszawa.pl` z parametrem `apikey` nie przyjmuje tych tokenów.
+
+Parkingi: `POST https://dane.um.warszawa.pl/api/action/get_m_parkingi_wolne_miejsca` (ten sam token w `Authorization`, bez treści); odpowiedź `{"Parkings": [...]}`. W trybie z Workerem Worker obsługuje oba zasoby (`?type=1|2` i `?resource=parking`) – po aktualizacji repo trzeba wkleić nowy kod `worker/index.js` do Cloudflare.
 
 ## Uruchomienie lokalne
 ```bash

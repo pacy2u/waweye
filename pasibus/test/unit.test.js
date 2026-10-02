@@ -1,8 +1,8 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { normalize, fetchVehicles } = require('../lib/warsaw');
-const { vehiclesHandler } = require('../lib/handler');
+const { normalize, fetchVehicles, fetchParkings, normalizeParkings } = require('../lib/warsaw');
+const { vehiclesHandler, parkingHandler } = require('../lib/handler');
 
 const NOW = Date.parse('2026-10-01T12:00:30+02:00');
 const row = (o = {}) => ({ Lines: '175', Lon: 21.0, Lat: 52.2, VehicleNumber: '1234', Brigade: '3', Time: '2026-10-01 12:00:00', ...o });
@@ -172,4 +172,74 @@ test('Warsaw local time is converted correctly in summer and winter', () => {
   const winter = normalize([row({ Time: '2026-01-15 12:00:00' })], 1, Date.parse('2026-01-15T11:00:30Z'));
   assert.equal(winter.length, 1);
   assert.equal(winter[0].time, Date.parse('2026-01-15T11:00:00Z')); // CET = UTC+1
+});
+
+// Example record copied from the dataset documentation ("Wolne miejsca parkingowe").
+const DOC_PARKING = {
+  name: 'Parking na Pl. Żelaznej Bramy', latitude: '52.239560', longitude: '21.001779', adress: '',
+  opening_hours: [{ monday: '00:00-23:59', sunday: '00:00-23:59' }],
+  tariffs: [{ VehicleType: 'Motor', Prices: [{ StayLength: '1.00', StayPrice: '5.00' }] },
+    { VehicleType: 'Samochód osobowy', Prices: [{ StayLength: '1.00', StayPrice: '5.00' }, { StayLength: '2.00', StayPrice: '11.00' }] }],
+  levels: 1, total_places: [{ level: '0', standard: 47, disabled: 0, electric: 0 }],
+  free_places_total: { public: 0, disabled: 0, electric: 0 },
+  acceptedPaymentMethod: 'Gotówka, karta płatnicza', additionalSecurity: 'Parking strzeżony',
+  manager: 'Zarząd Terenów Publicznych', operatorTelephone: '+48 730-255-220', parkingCategory: 'Publiczny',
+};
+
+test('parkings: normalize the documented record', () => {
+  const [p] = normalizeParkings([DOC_PARKING]);
+  assert.equal(p.name, 'Parking na Pl. Żelaznej Bramy');
+  assert.equal(p.lat, 52.23956); assert.equal(p.lon, 21.001779);
+  assert.deepEqual(p.free, { standard: 0, disabled: 0, electric: 0 });
+  assert.deepEqual(p.capacity, { standard: 47, disabled: 0, electric: 0 });
+  assert.deepEqual(p.carTariff, [{ hours: 1, price: 5 }, { hours: 2, price: 11 }]);
+  assert.equal(p.phone, '+48 730-255-220');
+});
+
+test('parkings: sums capacity over levels, skips bad coordinates', () => {
+  const multi = { ...DOC_PARKING, total_places: [{ standard: 10, disabled: 1, electric: 2 }, { standard: 5, disabled: 0, electric: 0 }], free_places_total: { public: '7', disabled: 1, electric: 0 } };
+  const out = normalizeParkings([multi, { ...DOC_PARKING, latitude: 'x' }, { ...DOC_PARKING, latitude: '0', longitude: '0' }]);
+  assert.equal(out.length, 1);
+  assert.deepEqual(out[0].capacity, { standard: 15, disabled: 1, electric: 2 });
+  assert.equal(out[0].free.standard, 7);
+});
+
+test('parkings: direct mode POSTs without a body, token in Authorization, accepts several reply shapes', async () => {
+  for (const reply of [{ Parkings: [DOC_PARKING] }, [DOC_PARKING], { result: { Parkings: [DOC_PARKING] } }, { result: [DOC_PARKING] }]) {
+    let seen;
+    const f = async (url, opts) => { seen = { url, opts }; return { ok: true, json: async () => reply }; };
+    const r = await fetchParkings({ apiKey: 'TOK', fetchImpl: f });
+    assert.equal(r.length, 1);
+    assert.equal(seen.url, 'https://dane.um.warszawa.pl/api/action/get_m_parkingi_wolne_miejsca');
+    assert.equal(seen.opts.method, 'POST'); assert.equal(seen.opts.headers.Authorization, 'TOK'); assert.equal(seen.opts.body, undefined);
+  }
+});
+
+test('parkings: relay mode asks the worker for resource=parking', async () => {
+  let seen;
+  const f = async (url, opts) => { seen = { url, opts }; return { ok: true, json: async () => ({ Parkings: [DOC_PARKING] }) }; };
+  await fetchParkings({ fetchImpl: f, upstream: { url: 'https://w.dev', secret: 's' } });
+  assert.equal(seen.url, 'https://w.dev?resource=parking'); assert.equal(seen.opts.headers['x-proxy-secret'], 's');
+  await assert.rejects(fetchParkings({ fetchImpl: async () => ({ ok: true, json: async () => ({ foo: 1 }) }), apiKey: 'k' }), /Unexpected API response: \{"foo":1\}/);
+});
+
+test('parking handler: mock mode and error path', async () => {
+  const call = (opts) => new Promise((resolve) => {
+    const res = { headers: {}, statusCode: 200, setHeader(k, v) { this.headers[k] = v; }, end(b) { resolve({ status: this.statusCode, body: JSON.parse(b), headers: this.headers }); } };
+    parkingHandler({ url: '/api/parking' }, res, opts);
+  });
+  const ok = await call({ env: { MOCK: '1' } });
+  assert.equal(ok.status, 200); assert.ok(ok.body.parkings.length >= 5); assert.match(ok.headers['Cache-Control'], /s-maxage=30/);
+  const bad = await call({ env: {} });
+  assert.equal(bad.status, 502);
+});
+
+test('worker: parking resource uses the parking endpoint without a body', async () => {
+  const { handle } = await import('../worker/index.js');
+  let seen;
+  const res = await handle(new Request('https://w.dev/?resource=parking', { headers: { 'x-proxy-secret': 's' } }), { PROXY_SECRET: 's', WARSAW_API_KEY: 'TOK' },
+    async (u, init) => { seen = { u, init }; return new Response('{"Parkings":[]}', { status: 200 }); });
+  assert.equal(res.status, 200);
+  assert.equal(seen.u, 'https://dane.um.warszawa.pl/api/action/get_m_parkingi_wolne_miejsca');
+  assert.equal(seen.init.body, undefined); assert.equal(seen.init.headers.Authorization, 'TOK');
 });
