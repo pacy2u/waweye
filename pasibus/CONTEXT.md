@@ -1,0 +1,62 @@
+# Pasibus – kontekst projektu (przekazanie między sesjami)
+
+Aktualizowane: 2026-10-02. Czytaj to najpierw, jeśli wznawiasz pracę w nowej sesji. Szczegóły uruchomienia i wdrożenia: `README.md`.
+
+## Cel
+Aplikacja webowa (komputer + telefon) pokazująca na mapie Warszawy w czasie rzeczywistym pojazdy komunikacji miejskiej, z możliwością zoomu i wyboru pojedynczego pojazdu (wyróżnienie na tle pozostałych). Kolorystyka jak w Strava (pomarańcz `#FC4C02`, grafit `#242428`). Wszystko w folderze `pasibus/` repo `pacy2u/tst`. Użytkownik pisze po polsku; oczekuje: pytań przed generowaniem kodu przy niejasnościach i przetestowania wszystkiego przed oddaniem.
+
+## Stan (działa na produkcji: https://pasibus.vercel.app)
+- **Pojazdy** (autobusy + tramwaje): odświeżanie co 10 s, płynny ruch, zoom, wybór pojazdu (pomarańczowy pierścień, reszta wyszarzona), panel szczegółów, „Śledź”, filtry typu i linii, numery linii od zoomu 14.
+- **Parking** (przycisk z ikoną P): znaczniki „P <wolne>” (zielony/czerwony), panel: wolne z pojemności, podział standard/niepełnosprawni/elektryczne, godziny, cennik, telefon. Odświeżanie 60 s.
+- **Utrudnienia** (przycisk z ikoną ostrzeżenia): punkty i linie, status trwa/zaplanowane/zakończone, panel z treścią i linkiem do infoulice. Odświeżanie 60 s.
+- Panele pojazdu/parkingu/utrudnienia wzajemnie się wykluczają.
+- Testy: `npm test` (jednostkowe, 34), `npm run test:e2e` (Chromium, desktop + telefon, ok. 41 kroków, na danych MOCK).
+
+## Architektura
+```
+przeglądarka (Leaflet, public/app.js)
+   └─ /api/vehicles | /api/parking | /api/incidents   (funkcje Vercel, region fra1, maxDuration 60)
+        └─ UPSTREAM_URL ustawione? → Cloudflare Worker (GET ?type=1|2 | ?resource=parking|incidents, nagłówek x-proxy-secret)
+                                          └─ POST https://dane.um.warszawa.pl/api/action/…  (token w Authorization)
+        └─ brak UPSTREAM_URL → bezpośrednio POST do dane.um.warszawa.pl (tryb awaryjny/lokalny)
+```
+- `lib/warsaw.js` – pobieranie, normalizacja (pojazdy, parkingi, utrudnienia), parsowanie czasu Europe/Warsaw, ponowienia, czytelne błędy.
+- `lib/handler.js` – handlery wspólne dla Vercel i `dev-server.js`; `lib/mock.js` – dane symulowane (`MOCK=1`).
+- `worker/index.js` – kod Workera. **Po każdej zmianie tego pliku trzeba ręcznie wkleić go w Cloudflare (Edit code → Deploy)**; Vercel go nie wdraża.
+- `public/` – front bez bundlera; Leaflet lokalnie w `public/vendor/`.
+
+## Zmienne / sekrety (tylko nazwy, wartości NIGDY w repo)
+| Gdzie | Nazwa | Uwagi |
+|---|---|---|
+| Cloudflare Worker `pasibus-proxy` (adres `https://pasibus-proxy.andrzejgpacek.workers.dev`) | `WARSAW_API_KEY` (Secret) | token z https://dane.um.warszawa.pl/key-api |
+| Cloudflare Worker | `PROXY_SECRET` (Secret) | losowy ciąg, inny niż token |
+| Vercel (Production + Preview) | `UPSTREAM_URL` | adres Workera, bez końcowego `/` |
+| Vercel | `UPSTREAM_SECRET` | taki sam jak `PROXY_SECRET`; po zmianie zmiennych → Redeploy |
+Lokalnie: `pasibus/.env` (w `.gitignore`).
+
+## Ustalenia o API (ważne, wiele kosztowało debugowania)
+1. **Stary host `api.um.warszawa.pl` + `?apikey=` nie przyjmuje tokenów z nowego portalu** (`Błędny apikey`). Używamy nowego API: `POST https://dane.um.warszawa.pl/api/action/<nazwa>`, token w nagłówku `Authorization` (kod próbuje samego tokenu, a przy 401/403 `Bearer <token>`).
+2. Endpointy: pojazdy `get_ztm_lokalizacja_pojazdow` (treść JSON `{"type":1|2}`), parkingi `get_m_parkingi_wolne_miejsca`, utrudnienia `get_bin_utrudnienia_drogowe` (oba bez treści).
+3. **Format odpowiedzi różni się od dokumentacji**: pojazdy to goła tablica (nie `{result:[]}`); parkingi pod kluczem `carParks` (dok.: `Parkings`), obok `Status` i `Timestamp`. Parsery są tolerancyjne. Przy nowym zbiorze zakładaj, że przykład z dokumentacji może się różnić – dlatego błędy zawierają podgląd odpowiedzi (`Unexpected API response: …`).
+4. **Serwery Warszawy nie łączą się z adresów Vercel/AWS** (`UND_ERR_CONNECT_TIMEOUT`); też z sandboxa sesji bywały zrywane połączenia. Rozwiązanie: Cloudflare Worker jako pośrednik. Test z przeglądarki w Polsce potwierdził brak CORS, więc bezpośrednio z przeglądarki się nie da.
+5. `Time` pojazdów to czas lokalny Warszawy; parsowany strefą `Europe/Warsaw` (DST), pojazdy starsze niż 5 min i spoza bboxa są odrzucane.
+6. API pojazdów nie zawiera **metra** (`typ` 1 = autobus, 2 = tramwaj).
+7. Cloudflare wywołuje `fetch(request, env, ctx)` – trzeci argument to NIE funkcja fetch (był błąd).
+
+## Środowisko pracy (sesje w chmurze)
+- Dostęp sieciowy sesji ustawia się w edycji środowiska (`apck01`); **zmiany stosują się tylko do nowych sesji**. Potrzebne domeny: `dane.um.warszawa.pl` (czytanie opisów zbiorów i test API), `tile.openstreetmap.org` (kafelki w testach), `api.um.warszawa.pl` (stary host).
+- Branch roboczy: `claude/warsaw-transit-tracker-jkgnwz`; zmiany idą przez PR do `main` (użytkownik merguje, Vercel wdraża z `main`). Po zmergowanym PR zaczynaj od `git fetch && git merge --ff-only origin/main`.
+- Użytkownik nie ma CLI; wkleja kod i wyniki z konsoli/zrzuty ekranu. Pytaj o to, czego nie da się sprawdzić bez żywego API (ja zwykle nie mam dostępu do `dane.um.warszawa.pl`).
+
+## Zasady / pułapki
+- **Nie commituj tokenu.** Token pojawił się w czacie i na zrzutach ekranu; pierwszy token został wymieniony, a stary zostawiony w `.env.example` na `main` (poprawione razem z tym plikiem – nadal jest w historii gita, więc stary token musi być unieważniony na portalu).
+- Nowy zbiór danych = nowy endpoint w `lib/warsaw.js` + `lib/handler.js` + `api/<nazwa>.js` + `dev-server.js` + wpis w `RESOURCES` w `worker/index.js` + testy (jednostkowe z rekordem z dokumentacji, e2e na MOCK) + przypomnienie użytkownikowi o wklejeniu Workera.
+- Pasek statusu „0 pojazdów” bywa po prostu efektem wyłączonych przycisków Autobusy/Tramwaje (nie błąd).
+
+## Odłożone / pomysły (kolejność wg wartości)
+1. **Trasa wybranej linii** (pierwotny wymóg: zaznaczenie pojazdu pokazuje całą planowaną trasę linii) – zaparkowane. Potrzebny zbiór z rozkładami/przebiegiem linii z `dane.um.warszawa.pl`; poproś użytkownika o sekcję „Parametry API / Przykłady wywołań” albo odczytaj stronę, gdy domena jest dozwolona w sesji.
+2. **Metro** – brak w zbiorze pojazdów; opcje: statyczne linie M1/M2 i stacje albo osobny zbiór na żywo (nie znaleziono).
+3. Drobne: w panelu utrudnień brak daty końca pokazuje „?” (lepiej „do odwołania”); opcjonalny filtr starych utrudnień; grupowanie gęstych znaczników/etykiet; ewentualnie ukrycie zakończonych utrudnień.
+
+## Historia (PR-y w `pacy2u/tst`)
+#1–#2 aplikacja + poprawki Vercel (region fra1) · #3 przyczyna błędu sieci w komunikatach · #4–#5 Worker Cloudflare · #6 treść błędu API · #7 przejście na nowe API (`Authorization`) · #8 timeout 25 s, podgląd odpowiedzi · #9 goła tablica + strefa czasowa · #10–#11 Parking (`carParks`) · #12 Utrudnienia · #13 licznik pojazdów liczony przy wyświetlaniu.
