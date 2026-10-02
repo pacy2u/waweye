@@ -243,3 +243,18 @@ test('worker: parking resource uses the parking endpoint without a body', async 
   assert.equal(seen.u, 'https://dane.um.warszawa.pl/api/action/get_m_parkingi_wolne_miejsca');
   assert.equal(seen.init.body, undefined); assert.equal(seen.init.headers.Authorization, 'TOK');
 });
+
+test('parkings: live API wraps the list in "carParks"', async () => {
+  const reply = { Status: 1, Timestamp: '2026-10-02T17:53:05', carParks: [DOC_PARKING] };
+  const f = async () => ({ ok: true, json: async () => reply });
+  const r = await fetchParkings({ apiKey: 'k', fetchImpl: f });
+  assert.equal(r.length, 1); assert.equal(r[0].name, 'Parking na Pl. Żelaznej Bramy');
+  const other = async () => ({ ok: true, json: async () => ({ Status: 1, whatever: [DOC_PARKING] }) });
+  assert.equal((await fetchParkings({ apiKey: 'k', fetchImpl: other })).length, 1);
+});
+
+test('vehicles: reports how many raw records the API returned, even when all are filtered out', async () => {
+  const stale = async () => ({ ok: true, json: async () => [row({ Time: '2020-01-01 10:00:00' }), row({ VehicleNumber: '2', Time: '2020-01-01 10:00:00' })] });
+  const r = await fetchVehicles({ apiKey: 'k', types: [1], fetchImpl: stale });
+  assert.equal(r.vehicles.length, 0); assert.equal(r.received, 2);
+});
