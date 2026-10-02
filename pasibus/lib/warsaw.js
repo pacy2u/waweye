@@ -36,10 +36,10 @@ function describe(err) {
   return detail && !String(err.message).includes(detail) ? `${err.message} (${detail})` : err.message;
 }
 
-async function fetchOnce(url, fetchImpl) {
+async function fetchOnce(url, fetchImpl, headers) {
   let res;
   try {
-    res = await fetchImpl(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+    res = await fetchImpl(url, { signal: AbortSignal.timeout(TIMEOUT_MS), headers });
   } catch (e) {
     throw new Error(describe(e));
   }
@@ -51,22 +51,26 @@ async function fetchOnce(url, fetchImpl) {
   return body.result;
 }
 
-async function fetchType(type, apiKey, fetchImpl) {
-  const url = `${ENDPOINT}?resource_id=${RESOURCE_ID}&apikey=${encodeURIComponent(apiKey)}&type=${type}`;
+async function fetchType(type, apiKey, fetchImpl, upstream) {
+  // With an upstream relay (Cloudflare Worker) the key lives there, not here.
+  const url = upstream
+    ? `${upstream.url}${upstream.url.includes('?') ? '&' : '?'}type=${type}`
+    : `${ENDPOINT}?resource_id=${RESOURCE_ID}&apikey=${encodeURIComponent(apiKey)}&type=${type}`;
+  const headers = upstream ? { 'x-proxy-secret': upstream.secret } : undefined;
   let raw;
   try {
-    raw = await fetchOnce(url, fetchImpl);
+    raw = await fetchOnce(url, fetchImpl, headers);
   } catch (e) {
     // The Warsaw API is occasionally slow; one retry for network errors/timeouts/5xx (not for bad key).
-    if (!/^(HTTP 4|false)/.test(e.message) && !/apikey/i.test(e.message)) raw = await fetchOnce(url, fetchImpl);
+    if (!/^(HTTP 4|false)/.test(e.message) && !/apikey/i.test(e.message)) raw = await fetchOnce(url, fetchImpl, headers);
     else throw e;
   }
   return normalize(raw, type);
 }
 
-async function fetchVehicles({ apiKey, types = [1, 2], fetchImpl = fetch }) {
-  if (!apiKey) throw new Error('Missing WARSAW_API_KEY');
-  const settled = await Promise.allSettled(types.map((t) => fetchType(t, apiKey, fetchImpl)));
+async function fetchVehicles({ apiKey, types = [1, 2], fetchImpl = fetch, upstream }) {
+  if (!apiKey && !upstream) throw new Error('Missing WARSAW_API_KEY');
+  const settled = await Promise.allSettled(types.map((t) => fetchType(t, apiKey, fetchImpl, upstream)));
   const vehicles = [], errors = [];
   settled.forEach((s, i) => {
     if (s.status === 'fulfilled') vehicles.push(...s.value);

@@ -27,7 +27,18 @@ npm run test:e2e  # przeglądarka (Chromium, desktop + mobile) na danych symulow
 
 Klucz jest tylko po stronie serwera (`api/vehicles.js`); przeglądarka nigdy go nie widzi. Odpowiedzi są cache'owane na krawędzi przez 5 s, więc wielu użytkowników nie przeciąża API.
 
+## Pośrednik Cloudflare Worker (gdy Vercel nie łączy się z API Warszawy)
+`api.um.warszawa.pl` nie przyjmuje połączeń z adresów Vercel/AWS (`UND_ERR_CONNECT_TIMEOUT`), a przeglądarka nie może pytać API wprost (brak CORS). Rozwiązanie: Worker w Cloudflare trzyma klucz i odpytuje Warszawę, a funkcja Vercel pyta Worker.
+
+1. Konto na cloudflare.com (darmowe) → **Workers & Pages → Create → Create Worker**, nazwa `pasibus-proxy`, Deploy.
+2. **Edit code**: wklej zawartość `worker/index.js`, Deploy.
+3. **Settings → Variables and Secrets** (typ *Secret*): `WARSAW_API_KEY` = klucz z Warszawy, `PROXY_SECRET` = dowolny długi losowy ciąg.
+4. W Vercel (**Settings → Environment Variables**) dodaj: `UPSTREAM_URL` = adres Workera (`https://pasibus-proxy.<konto>.workers.dev`), `UPSTREAM_SECRET` = ten sam ciąg co `PROXY_SECRET`. Zrób **Redeploy**.
+
+(Alternatywa z CLI: `cd worker && npx wrangler deploy`, potem `npx wrangler secret put WARSAW_API_KEY` i `PROXY_SECRET`.)
+
 ## Struktura
 - `public/` – front (Leaflet, `app.js`, `style.css`)
+- `worker/` – opcjonalny pośrednik Cloudflare
 - `api/vehicles.js` – funkcja Vercel; `lib/` – logika API, mock, handler
 - `dev-server.js` – serwer lokalny
