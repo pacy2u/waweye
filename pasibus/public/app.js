@@ -60,7 +60,6 @@
       } else if (!wantLabel && m.label) { m.label.remove(); m.label = null; }
     }
     updateHighlight();
-    $('status-text').dataset.count = [...state.markers.values()].filter((m) => visible(m.v)).length;
     renderStatus();
   }
 
@@ -95,7 +94,7 @@
 
   function renderStatus() {
     const el = $('status'), t = $('status-text');
-    const n = t.dataset.count || 0;
+    const n = [...state.markers.values()].filter((m) => visible(m.v)).length; // computed now, never cached
     if (state.error) { el.className = 'err'; t.textContent = state.error; }
     else if (state.lastOk) { el.className = 'ok'; t.textContent = `${n} pojazdów · ${new Date(state.lastOk).toLocaleTimeString('pl-PL')}${state.source === 'mock' ? ' · dane testowe' : ''}${state.parkError ? ' · parkingi: ' + state.parkError : ''}${state.incError ? ' · utrudnienia: ' + state.incError : ''}${state.data.length === 0 && state.received > 0 ? ` · API zwróciło ${state.received}, wszystkie odrzucone (nieaktualne/poza Warszawą)` : state.data.length === 0 && state.received === 0 ? ' · API zwróciło pustą listę' : ''}`; }
   }

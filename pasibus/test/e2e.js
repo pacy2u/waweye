@@ -154,6 +154,15 @@ function findChromium() {
       assert.equal(await page.locator('.ic').count(), 0);
       assert.ok(await page.evaluate(() => document.getElementById('ipanel').hidden));
     });
+    await step(`${label}: status count always matches the visible vehicles, also after a layer error`, async () => {
+      await page.route('**/api/incidents', (route) => route.fulfill({ status: 502, contentType: 'application/json', body: '{"error":"HTTP 400 (bad type)"}' }));
+      await page.click('#t-inc');
+      await page.waitForFunction(() => /utrudnienia: brak danych/.test(document.getElementById('status-text').textContent));
+      const r = await page.evaluate(() => ({ text: document.getElementById('status-text').textContent,
+        shown: [...window.__pasibus.state.markers.values()].filter((m) => window.__pasibus.map.hasLayer(m.mk)).length }));
+      assert.ok(r.shown > 50); assert.ok(r.text.startsWith(`${r.shown} pojazdów`), r.text + ' vs ' + r.shown);
+      await page.click('#t-inc'); await page.unroute('**/api/incidents');
+    });
     await step(`${label}: no horizontal overflow`, async () => {
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
     });
