@@ -1,0 +1,47 @@
+name: Pasibus – testy
+
+# Unit and browser tests on every PR and on main. Docs-only changes (*.md) do not use Actions minutes.
+on:
+  pull_request:
+    paths: ['pasibus/**', '!pasibus/**/*.md', '.github/workflows/pasibus-*.yml']
+  push:
+    branches: [main]
+    paths: ['pasibus/**', '!pasibus/**/*.md', '.github/workflows/pasibus-*.yml']
+  workflow_dispatch:
+
+concurrency:
+  group: pasibus-testy-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  testy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: pasibus
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: pasibus/package-lock.json
+      - run: npm ci
+      - name: Testy jednostkowe
+        run: npm test
+      - name: Testy w przeglądarce (dane MOCK, desktop + telefon)
+        run: npm run test:e2e
+        env:
+          CHROME_PATH: /usr/bin/google-chrome # preinstalled on GitHub runners
+          SHOTS: ${{ runner.temp }}
+      - name: Zrzuty ekranu z testów
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zrzuty-ekranu-e2e
+          path: ${{ runner.temp }}/pasibus-*.png
+          retention-days: 7

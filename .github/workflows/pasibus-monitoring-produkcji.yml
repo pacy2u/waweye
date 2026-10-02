@@ -1,0 +1,54 @@
+name: Pasibus – monitoring produkcji
+
+# Every 2 hours: checks vehicles, parkings, incidents and fleet on https://pasibus.vercel.app.
+# On failure it opens one issue (GitHub e-mails the repository owner) and closes it after the next good check.
+# Budget: about 12 runs a day x 1 billed minute = ~360 of the 2000 free minutes a month of a private repository.
+on:
+  schedule:
+    - cron: '7 */2 * * *' # UTC
+  workflow_dispatch:
+
+concurrency:
+  group: pasibus-monitoring
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  kontrola:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TITLE: '[monitoring] pasibus.vercel.app nie działa poprawnie'
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Kontrola produkcji
+        id: kontrola
+        continue-on-error: true
+        run: |
+          node pasibus/scripts/check-production.js https://pasibus.vercel.app > raport.md && status=0 || status=$?
+          cat raport.md >> "$GITHUB_STEP_SUMMARY"
+          exit $status
+      - name: Zgłoś problem (jedno otwarte zgłoszenie naraz)
+        if: steps.kontrola.outcome == 'failure'
+        run: |
+          nr=$(gh issue list --state open --limit 100 --json number,title --jq '.[] | select(.title == $ENV.TITLE) | .number' | head -n1)
+          if [ -n "$nr" ]; then echo "Zgłoszenie #$nr jest już otwarte."; exit 0; fi
+          { cat raport.md; echo; echo "Przebieg: $RUN_URL"; echo; echo "Zgłoszenie zamknie się samo po pierwszej udanej kontroli."; } > tresc.md
+          gh issue create --title "$TITLE" --body-file tresc.md
+      - name: Zamknij zgłoszenie po powrocie do normy
+        if: steps.kontrola.outcome == 'success'
+        run: |
+          nr=$(gh issue list --state open --limit 100 --json number,title --jq '.[] | select(.title == $ENV.TITLE) | .number' | head -n1)
+          if [ -n "$nr" ]; then gh issue close "$nr" --comment "Kontrola przeszła, produkcja działa ponownie. Przebieg: $RUN_URL"; fi
+      - name: Wynik
+        if: steps.kontrola.outcome == 'failure'
+        run: exit 1

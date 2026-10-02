@@ -177,6 +177,7 @@
   }
 
   async function poll() {
+    if (document.hidden) return; // hidden tab: no requests; visibilitychange catches up
     try {
       const types = [state.types.bus && 1, state.types.tram && 2].filter(Boolean);
       if (!types.length) { refresh(); return; } // nothing to show, nothing to fetch
@@ -250,7 +251,7 @@
   }
 
   async function pollParkings() {
-    if (!state.park) return;
+    if (!state.park || document.hidden) return;
     try {
       const res = await fetch('/api/parking', { cache: 'no-store' });
       const body = await res.json();
@@ -321,7 +322,7 @@
     state.selectedInc = null; $('ipanel').hidden = true; renderIncidents();
   }
   async function pollIncidents() {
-    if (!state.inc) return;
+    if (!state.inc || document.hidden) return;
     try {
       const res = await fetch('/api/incidents', { cache: 'no-store' });
       const body = await res.json();
@@ -358,8 +359,9 @@
   map.on('click', () => { if (state.selected) deselect(); if (state.selectedPark) deselectPark(); if (state.selectedInc !== null) deselectInc(); });
   map.on('zoomend moveend', refresh);
 
-  window.__pasibus = { state, map, select, deselect, selectPark, deselectPark, selectInc, deselectInc };
+  window.__pasibus = { state, map, poll, select, deselect, selectPark, deselectPark, selectInc, deselectInc };
   poll(); setInterval(poll, POLL_MS);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
+  // Polling pauses while the tab is hidden (saves requests, transfer and battery) and catches up when it is shown again.
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { poll(); pollParkings(); pollIncidents(); } });
   requestAnimationFrame(frame);
 })();

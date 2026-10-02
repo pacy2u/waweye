@@ -395,3 +395,52 @@ test('worker: fleet resource uses get_ztm_pojazdy without a body', async () => {
     async (u, init) => { seen = { u, init }; return new Response('{"busy":[]}', { status: 200 }); });
   assert.equal(res.status, 200); assert.equal(seen.u, 'https://dane.um.warszawa.pl/api/action/get_ztm_pojazdy'); assert.equal(seen.init.body, undefined);
 });
+
+// ---- Production health check (scripts/check-production.js) ----
+const { evaluate, report } = require('../scripts/check-production');
+const okResp = (body, ms = 100) => ({ status: 200, body, ms });
+const liveSet = () => {
+  const vehicles = [];
+  for (let i = 0; i < 40; i++) vehicles.push({ type: i % 2 ? 'tram' : 'bus', vehicle: String(i % 2 ? 100 + i : '0' + (1000 + i)) });
+  const fleet = { vehicles: {}, brands: {} };
+  for (const v of vehicles) fleet.vehicles[`${v.type}:${v.vehicle.replace(/^0+/, '')}`] = {};
+  return {
+    vehicles: okResp({ source: 'live', errors: [], received: 40, vehicles }),
+    parking: okResp({ parkings: [{}] }), incidents: okResp({ incidents: [] }), fleet: okResp(fleet),
+  };
+};
+
+test('health check: all sources fine, fleet numbers match also without leading zeros', () => {
+  const r = evaluate(liveSet());
+  assert.ok(r.ok, JSON.stringify(r.rows));
+  assert.match(r.rows[3].detail, /autobusy: 20\/20 \(100,0%\), tramwaje: 20\/20/);
+  assert.match(report('https://x', r), /wszystko działa[\s\S]*\| Tabor \(\/api\/fleet\) \| OK \|/);
+});
+
+test('health check: HTTP errors, mock data, empty lists and partial failures are problems', () => {
+  const cases = [
+    [(d) => { d.vehicles = { status: 502, body: { error: 'HTTP 403 (forbidden)' }, ms: 1 }; }, /Pojazdy[\s\S]*HTTP 502 \(HTTP 403 \(forbidden\)\)/],
+    [(d) => { d.parking = { status: 0, body: null, error: 'timeout', ms: 1 }; }, /brak odpowiedzi \(timeout\)/],
+    [(d) => { d.vehicles.body.source = 'mock'; }, /źródło "mock"/],
+    [(d) => { d.vehicles.body.vehicles = []; }, /0 pojazdów \(API zwróciło 40/],
+    [(d) => { d.vehicles.body.errors = ['tram: HTTP 500']; }, /część danych niedostępna: tram: HTTP 500/],
+    [(d) => { d.fleet.body.vehicles = {}; }, /pusty zbiór/],
+    [(d) => { d.incidents.body = { error: 'x' }; d.incidents.status = 200; }, /bez listy utrudnień/],
+  ];
+  for (const [spoil, re] of cases) {
+    const d = liveSet(); spoil(d);
+    const r = evaluate(d);
+    assert.equal(r.ok, false, String(re));
+    assert.match(report('https://x', r), re);
+  }
+});
+
+test('health check: low fleet match fails, too few live vehicles of a type are not judged', () => {
+  const d = liveSet();
+  for (const k of Object.keys(d.fleet.body.vehicles).filter((k) => k.startsWith('bus:')).slice(0, 5)) delete d.fleet.body.vehicles[k];
+  const r = evaluate(d);
+  assert.equal(r.ok, false); assert.match(r.rows[3].detail, /autobusy 75,0%/);
+  const night = liveSet(); night.vehicles.body.vehicles = night.vehicles.body.vehicles.filter((v, i) => v.type === 'bus' || i < 6);
+  const n = evaluate(night);
+  assert.ok(n.ok); assert.match(n.rows[3].detail, /tramwaje: za mało pojazdów na żywo \(3\)/);
+});
