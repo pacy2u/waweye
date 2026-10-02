@@ -149,6 +149,20 @@ function findChromium() {
       assert.equal(panel.link, 'https://infoulice.um.warszawa.pl/?page_id=8150'); assert.ok(!panel.linkHidden); assert.match(panel.body, /przyszłego tygodnia/);
       await page.screenshot({ path: `${SHOTS}/pasibus-${label}-incidents.png` });
     });
+    await step(`${label}: vehicles stay clickable while the incidents layer is on`, async () => {
+      await page.evaluate(() => { const { map } = window.__pasibus; map.setView([52.2297, 21.0122], 13, { animate: false }); });
+      await page.waitForTimeout(500);
+      const pts = await page.evaluate(() => { const { map, state } = window.__pasibus; const r = map.getContainer().getBoundingClientRect(); const sz = map.getSize();
+        return [...state.markers.values()].filter((m) => map.getBounds().contains(m.mk.getLatLng())).map((m) => { const p = map.latLngToContainerPoint(m.mk.getLatLng());
+          return { x: r.left + p.x, y: r.top + p.y, cy: p.y, cx: p.x, id: m.v.id, w: sz.x, h: sz.y }; }).filter((p, _, all) => p.cy > 160 && p.cy < p.h - 120 && p.cx > 40 && p.cx < p.w - 80 && all.every((q) => q === p || Math.hypot(q.cx - p.cx, q.cy - p.cy) > 20)).slice(0, 6); });
+      assert.ok(pts.length >= 3);
+      for (const p of pts) {
+        await page.mouse.click(p.x, p.y); await page.waitForTimeout(80);
+        assert.equal(await page.evaluate(() => window.__pasibus.state.selected), p.id, 'vehicle not selectable with incidents on');
+        await page.evaluate(() => window.__pasibus.deselect());
+      }
+      assert.equal(await page.locator('.leaflet-overlay-pane canvas').count(), 1, 'single canvas');
+    });
     await step(`${label}: incident panel is mutually exclusive with vehicle and parking panels`, async () => {
       const hidden = () => page.evaluate(() => ['panel', 'ppanel', 'ipanel'].map((id) => document.getElementById(id).hidden));
       await page.evaluate(() => { const { state, select } = window.__pasibus; select([...state.markers.keys()][0]); });

@@ -35,6 +35,9 @@ przeglądarka (Leaflet, public/app.js)
 | Vercel | `UPSTREAM_SECRET` | taki sam jak `PROXY_SECRET`; po zmianie zmiennych → Redeploy |
 Lokalnie: `pasibus/.env` (w `.gitignore`).
 
+## Pułapka: dwa canvasy Leaflet
+Linie utrudnień muszą używać tego samego renderera canvas co pojazdy (`renderer: canvas`). Drugi canvas leży nad pierwszym i połyka kliknięcia, przez co nie dało się wybrać pojazdu przy włączonych utrudnieniach. Po narysowaniu linii pojazdy są przenoszone na wierzch (`bringToFront`). Pilnuje tego krok e2e „vehicles stay clickable while the incidents layer is on”.
+
 ## Ustalenia o API (ważne, wiele kosztowało debugowania)
 1. **Stary host `api.um.warszawa.pl` + `?apikey=` nie przyjmuje tokenów z nowego portalu** (`Błędny apikey`). Używamy nowego API: `POST https://dane.um.warszawa.pl/api/action/<nazwa>`, token w nagłówku `Authorization` (kod próbuje samego tokenu, a przy 401/403 `Bearer <token>`).
 2. Endpointy: pojazdy `get_ztm_lokalizacja_pojazdow` (treść JSON `{"type":1|2}`), parkingi `get_m_parkingi_wolne_miejsca`, utrudnienia `get_bin_utrudnienia_drogowe` (oba bez treści).

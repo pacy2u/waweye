@@ -286,7 +286,7 @@
       const sel = state.selectedInc === i.id;
       for (const sh of i.shapes) {
         if (sh.type === 'line') {
-          L.polyline(sh.points, { color: sel ? '#FC4C02' : incColor(i), weight: sel ? 8 : 6, opacity: i.status === 'ended' ? 0.5 : 0.85 })
+          L.polyline(sh.points, { renderer: canvas, color: sel ? '#FC4C02' : incColor(i), weight: sel ? 8 : 6, opacity: i.status === 'ended' ? 0.5 : 0.85 })
             .on('click', (e) => { L.DomEvent.stopPropagation(e); selectInc(i.id); }).addTo(group);
         }
         const at = sh.type === 'line' ? sh.points[Math.floor(sh.points.length / 2)] : sh.points[0];
@@ -295,6 +295,9 @@
       }
       group.addTo(incLayer); state.incLayers.set(i.id, group);
     }
+    // One canvas serves vehicles and lines (a second canvas would sit on top and swallow vehicle clicks);
+    // keep vehicles above the lines so they stay clickable.
+    for (const m of state.markers.values()) if (map.hasLayer(m.mk)) m.mk.bringToFront();
     if (state.selectedInc !== null) { const i = state.incidents.find((x) => x.id === state.selectedInc); if (i) fillIncPanel(i); else deselectInc(); }
   }
 
