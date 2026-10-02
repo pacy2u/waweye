@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Komunikat prasowy aplikacji Pasibus: cel, funkcje, źródła danych i plan rozwoju.">
+<link rel="icon" href="public/favicon.svg" type="image/svg+xml">
+<title>Komunikat prasowy Pasibusa</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap">
+<style>
+/* Odpowiednik szkieletu strony Artifact: jasny motyw domyślnie, bez marginesu body. */
+:root { color-scheme: light; }
+body { margin: 0; }
+img { max-width: 100%; }
+/* Układ: grafitowy pasek nagłówka jak w aplikacji, pod nim tekst komunikatu z przyklejoną kolumną „W skrócie”; plan rozwoju rysowany jako linia z przystankami. */
+:root {
+  --bg: #F4F4F6;
+  --surface: #FFFFFF;
+  --fg: #242428;
+  --muted: #5F5F69;
+  --line: #D9D9DF;
+  --accent: #FC4C02;
+  --accent-ink: #C23A00;
+  --band: #242428;
+  --band-fg: #FFFFFF;
+  --band-muted: #B4B4BE;
+  --band-line: #3A3A41;
+  --bus: #2B2B33;
+  --bus-ring: #2B2B33;
+  --tram: #0073E6;
+  --inc-active: #F5A100;
+  --inc-planned: #7A8BA6;
+  --inc-ended: #8A8A92;
+  --free: #00A878;
+  --full: #D93025;
+  --live: #1FA35C;
+
+  --font-display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", system-ui, sans-serif;
+  --font-body: "Barlow", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --gutter: clamp(16px, 4vw, 40px);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #17171A; --surface: #202024; --fg: #EDEDF0; --muted: #A7A7B1; --line: #34343B;
+    --accent-ink: #FF7A3D; --band: #242428; --band-line: #3A3A41; --bus-ring: #A7A7B1; --live: #3DDC84;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #17171A; --surface: #202024; --fg: #EDEDF0; --muted: #A7A7B1; --line: #34343B;
+  --accent-ink: #FF7A3D; --band: #242428; --band-line: #3A3A41; --bus-ring: #A7A7B1; --live: #3DDC84;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg);
+  font: 400 1.0625rem/1.6 var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent-ink); text-underline-offset: 2px; }
+a:focus-visible, .btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+h1, h2, h3 { text-wrap: balance; margin: 0; }
+p { margin: 0; }
+
+.wrap { max-width: 1140px; margin-inline: auto; padding-inline: var(--gutter); }
+
+/* Nagłówek */
+.band { background: var(--band); color: var(--band-fg); border-bottom: 1px solid var(--band-line); }
+.band .wrap { padding-block: clamp(28px, 5vw, 56px) clamp(32px, 5vw, 60px); display: grid; gap: 20px; }
+.topline { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; }
+.brand { display: inline-flex; align-items: center; gap: 10px; font: 700 1.5rem/1 var(--font-display); letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+.brand svg { width: 32px; height: 32px; flex: none; }
+.eyebrow { font: 600 .8rem/1 var(--font-display); letter-spacing: .14em; text-transform: uppercase; color: var(--band-muted); padding: 6px 10px; border: 1px solid var(--band-line); border-radius: 999px; }
+.live { display: inline-flex; align-items: center; gap: 8px; font-size: .85rem; color: var(--band-muted); }
+.live i { width: 8px; height: 8px; border-radius: 50%; background: #3DDC84; animation: pulse 2s infinite; }
+@keyframes pulse { 50% { opacity: .35; } }
+.dateline { font-size: .95rem; color: var(--band-muted); }
+.dateline strong { color: var(--band-fg); font-weight: 600; }
+h1 { font: 700 clamp(2.3rem, 2.8vw + 1.4rem, 3.75rem)/1.02 var(--font-display); max-width: 18ch; letter-spacing: -.005em; }
+h1 em { font-style: normal; color: var(--accent); }
+.lead { font-size: clamp(1.1rem, .5vw + 1rem, 1.3rem); line-height: 1.5; max-width: 62ch; color: #E4E4E9; font-weight: 500; }
+.cta { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; margin-top: 4px; }
+.btn { display: inline-flex; align-items: center; gap: 10px; background: var(--accent); color: #fff; text-decoration: none; font: 700 1.2rem/1 var(--font-body); padding: 14px 20px; border-radius: 10px; }
+.btn:hover { background: #E04300; }
+.btn svg { width: 18px; height: 18px; }
+.cta .url { color: var(--band-muted); font-size: .95rem; }
+
+/* Treść */
+.layout { display: grid; gap: 48px; padding-block: clamp(36px, 5vw, 64px); }
+@media (min-width: 960px) {
+  .layout { grid-template-columns: minmax(0, 1fr) 300px; gap: 64px; align-items: start; }
+  .facts { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 24px); }
+}
+main { min-width: 0; display: grid; gap: 56px; }
+section { display: grid; gap: 18px; min-width: 0; }
+section > p, .intro { max-width: 66ch; }
+.intro { font-size: 1.15rem; line-height: 1.6; }
+h2 { font: 600 clamp(1.7rem, 1vw + 1.3rem, 2.1rem)/1.1 var(--font-display); }
+h2 .n { color: var(--accent-ink); }
+h3 { font: 600 1.15rem/1.3 var(--font-body); }
+.label { font: 600 .8rem/1.2 var(--font-display); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+
+/* Cytat */
+blockquote { margin: 6px 0 0; padding: 4px 0 4px 22px; border-left: 4px solid var(--accent); display: grid; gap: 10px; max-width: 62ch; }
+blockquote p { font: 500 1.3rem/1.45 var(--font-body); }
+blockquote footer { color: var(--muted); font-size: .95rem; }
+.draft-note { font-size: .82rem; color: var(--muted); }
+.todo { font-style: normal; border: 1px dashed var(--muted); border-radius: 4px; padding: 0 .35em; color: var(--muted); white-space: nowrap; }
+
+/* Funkcje */
+.features { display: grid; gap: 0 40px; grid-template-columns: 1fr; }
+@media (min-width: 640px) { .features { grid-template-columns: 1fr 1fr; } }
+.feature { display: grid; gap: 10px; align-content: start; padding-block: 22px; border-top: 2px solid var(--line); min-width: 0; }
+.feature ul { margin: 0; padding-left: 1.1em; display: grid; gap: 6px; }
+.feature li::marker { color: var(--accent); }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: .9rem; color: var(--muted); margin-top: 2px; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.dot { width: 14px; height: 14px; border-radius: 50%; flex: none; }
+.dot.bus { background: var(--bus); box-shadow: 0 0 0 1.5px var(--bus-ring); }
+.dot.tram { background: var(--tram); }
+.dot.sel { background: var(--accent); box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--accent); margin: 0 3px; }
+.dot.dim { background: var(--tram); opacity: .55; }
+.pbadge { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 6px; color: #fff; font: 800 .85rem/1 var(--font-body); }
+.pbadge.free { background: var(--free); }
+.pbadge.full { background: var(--full); }
+.seg { width: 26px; height: 6px; border-radius: 3px; flex: none; }
+.seg.active { background: var(--inc-active); }
+.seg.planned { background: var(--inc-planned); }
+.seg.ended { background: var(--inc-ended); opacity: .6; }
+.coverage { display: flex; flex-wrap: wrap; gap: 8px 28px; margin-top: 2px; }
+.coverage div { display: grid; }
+.coverage b { font: 700 2rem/1 var(--font-display); color: var(--accent-ink); font-variant-numeric: tabular-nums; }
+.coverage span { font-size: .9rem; color: var(--muted); }
+.feature.wide { grid-column: 1 / -1; }
+
+/* Tabela źródeł */
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; min-width: 620px; font-size: .97rem; }
+th, td { text-align: left; vertical-align: top; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+tr:last-child td { border-bottom: 0; }
+th { font: 600 .8rem/1.2 var(--font-display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+td.freq { white-space: nowrap; font-variant-numeric: tabular-nums; font-weight: 600; }
+.note { font-size: .97rem; color: var(--muted); max-width: 66ch; }
+
+/* Plan rozwoju jako linia z przystankami */
+.route { list-style: none; margin: 6px 0 0; padding: 0; display: grid; }
+.stop { position: relative; padding: 0 0 34px 46px; display: grid; gap: 8px; min-width: 0; }
+.stop::before { content: ""; position: absolute; left: 11px; top: 14px; bottom: -14px; width: 4px; background: var(--accent); border-radius: 2px; }
+.stop:last-child { padding-bottom: 0; }
+.stop:last-child::before { display: none; }
+.stop.later::before { background: repeating-linear-gradient(var(--accent) 0 8px, transparent 8px 14px); }
+.stop .pin { position: absolute; left: 0; top: 2px; width: 26px; height: 26px; border-radius: 50%; border: 5px solid var(--accent); background: var(--bg); }
+.stop.done .pin { background: var(--accent); }
+.stop .when { font: 600 .85rem/1.2 var(--font-display); letter-spacing: .12em; text-transform: uppercase; color: var(--accent-ink); }
+.stop .head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; }
+.stop h3 { font: 600 1.45rem/1.15 var(--font-display); }
+.chip { font: 600 .78rem/1 var(--font-body); padding: 5px 9px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.chip.ok { border-color: var(--free); color: var(--free); }
+.stop ul { margin: 0; padding-left: 1.1em; display: grid; gap: 5px; max-width: 64ch; }
+.stop p { max-width: 64ch; }
+.stop li::marker { color: var(--muted); }
+.nots { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 8px; }
+.nots li { font-size: .92rem; padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); }
+.nots li s { text-decoration-color: var(--accent); text-decoration-thickness: 2px; }
+
+/* Kolumna W skrócie */
+.facts { display: grid; gap: 22px; padding: 22px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; min-width: 0; }
+.facts dl { margin: 0; display: grid; gap: 14px; }
+.facts dt { font: 600 .78rem/1.2 var(--font-display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.facts dd { margin: 2px 0 0; font-size: .98rem; line-height: 1.45; font-variant-numeric: tabular-nums; }
+.facts hr { border: 0; border-top: 1px solid var(--line); margin: 0; }
+.contact { display: grid; gap: 4px; font-size: .98rem; }
+
+.page-foot { border-top: 1px solid var(--line); }
+.page-foot .wrap { padding-block: 22px 32px; font-size: .88rem; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px 24px; }
+.page-foot a { color: inherit; }
+
+@media (prefers-reduced-motion: reduce) { .live i { animation: none; } }
+</style>
+</head>
+<body>
+<header class="band">
+  <div class="wrap">
+    <div class="topline">
+      <span class="brand">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#FC4C02"/><rect x="7" y="8" width="18" height="14" rx="3" fill="#fff"/><circle cx="12" cy="24" r="2.5" fill="#fff"/><circle cx="20" cy="24" r="2.5" fill="#fff"/></svg>
+        Pasibus
+      </span>
+      <span class="eyebrow">Komunikat prasowy</span>
+      <span class="live"><i aria-hidden="true"></i>pozycje pojazdów co 10 s</span>
+    </div>
+    <p class="dateline"><strong>Warszawa, 2 października 2026 r.</strong> · Do publikacji od zaraz</p>
+    <h1>Autobusy i tramwaje Warszawy na jednej mapie, <em>na żywo</em></h1>
+    <p class="lead">Darmowa aplikacja webowa pokazuje, gdzie w tej chwili jest każdy warszawski autobus i tramwaj. Na tej samej mapie widać wolne miejsca na parkingach i utrudnienia w ruchu. Pasibus działa w przeglądarce na telefonie i komputerze. Nie trzeba go instalować ani zakładać konta, nie ma reklam i nie zbiera danych o użytkownikach.</p>
+    <div class="cta">
+      <a class="btn" href="https://pasibus.vercel.app">Otwórz Pasibus
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10h11M10 4l6 6-6 6"/></svg>
+      </a>
+      <span class="url">pasibus.vercel.app</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap layout">
+  <main>
+    <p class="intro">Pasibus to nowa aplikacja dla osób, które codziennie jeżdżą warszawską komunikacją miejską. Pozycje wszystkich autobusów i tramwajów odświeżają się na mapie co 10 sekund, a pojazdy przesuwają się płynnie. Po kliknięciu w pojazd widać jego linię i brygadę oraz dane konkretnego egzemplarza: model, rok produkcji, zajezdnię, liczbę miejsc i to, czy ma niską podłogę, klimatyzację i miejsce na wózek. Wszystkie dane pochodzą z oficjalnego portalu otwartych danych m.st. Warszawy.</p>
+
+    <section id="cel" aria-labelledby="h-cel">
+      <h2 id="h-cel">Cel: najszybszy podgląd miasta na żywo</h2>
+      <p>Planery podróży mówią, jak dojechać z punktu A do punktu B. Pasibus odpowiada na pytanie, które pasażer zadaje sobie na przystanku: gdzie jest teraz mój autobus? Otwierasz stronę i od razu widzisz pojazdy, utrudnienia i parkingi na jednej mapie.</p>
+      <p>Pasibus powstał z myślą o codziennych pasażerach. Miłośnicy komunikacji też znajdą tu coś dla siebie: szczegółowe dane o każdym pojeździe, od producenta po malowanie.</p>
+      <blockquote>
+        <p>„Chciałem mieć aplikację, która otwiera się w sekundę i po prostu pokazuje, gdzie jest mój autobus. Bez reklam, bez logowania i bez śledzenia użytkowników.”</p>
+        <footer>– <em class="todo">imię i nazwisko</em>, twórca Pasibusa</footer>
+        <span class="draft-note">Proponowany cytat, do zatwierdzenia przez autora.</span>
+      </blockquote>
+    </section>
+
+    <section id="funkcje" aria-labelledby="h-funkcje">
+      <h2 id="h-funkcje">Co potrafi Pasibus</h2>
+      <div class="features">
+        <article class="feature">
+          <h3>Pojazdy na żywo</h3>
+          <ul>
+            <li>Wszystkie autobusy i tramwaje w Warszawie, odświeżane co 10 sekund.</li>
+            <li>Wyszukiwanie linii (np. „175”) i filtr autobusy/tramwaje.</li>
+            <li>Kliknięty pojazd zostaje wyróżniony, a pozostałe są wyszarzone. Panel pokazuje linię, brygadę i godzinę ostatniej aktualizacji pozycji.</li>
+            <li>Tryb „Śledź”: mapa jedzie razem z wybranym pojazdem.</li>
+            <li>Numery linii pojawiają się po przybliżeniu mapy. Pojazdy, których ostatni sygnał o pozycji jest starszy niż 3 minuty, są przyciemnione.</li>
+          </ul>
+          <div class="legend" aria-label="Oznaczenia pojazdów na mapie">
+            <span><i class="dot bus"></i>autobus</span>
+            <span><i class="dot tram"></i>tramwaj</span>
+            <span><i class="dot sel"></i>wybrany</span>
+            <span><i class="dot dim"></i>dane sprzed &gt;3 min</span>
+          </div>
+        </article>
+
+        <article class="feature">
+          <h3>Karta pojazdu</h3>
+          <p>Model i producent, rok produkcji, numer rejestracyjny, operator, zajezdnia, liczba miejsc, wymiary, rodzaj podłogi, klimatyzacja, napęd, miejsca na wózek inwalidzki i dziecięcy, malowanie.</p>
+          <div class="coverage" aria-label="Pojazdy na trasach, dla których są dane">
+            <div><b>99,5%</b><span>autobusów na trasach</span></div>
+            <div><b>99,6%</b><span>tramwajów na trasach</span></div>
+          </div>
+          <p class="note">Tylu pojazdom aplikacja pokazuje kartę z danymi (pomiar z 2 października 2026 r.).</p>
+        </article>
+
+        <article class="feature">
+          <h3>Parkingi</h3>
+          <p>Po włączeniu warstwy „P” na mapie pojawiają się parkingi z liczbą wolnych miejsc. Panel parkingu pokazuje wolne miejsca standardowe, dla osób z niepełnosprawnościami i dla aut elektrycznych, a także pojemność, godziny otwarcia, cennik i telefon. Dane odświeżają się co minutę.</p>
+          <div class="legend" aria-label="Oznaczenia parkingów">
+            <span><i class="pbadge free">P</i>są wolne miejsca</span>
+            <span><i class="pbadge full">P</i>brak miejsc</span>
+          </div>
+        </article>
+
+        <article class="feature">
+          <h3>Utrudnienia w ruchu</h3>
+          <p>Utrudnienia drogowe są na mapie punktami lub odcinkami ulic, a kolor mówi, w jakim są stanie. Panel podaje opis, daty i link do miejskiego serwisu infoulice.um.warszawa.pl. Dane odświeżają się co minutę.</p>
+          <div class="legend" aria-label="Oznaczenia utrudnień">
+            <span><i class="seg active"></i>trwa</span>
+            <span><i class="seg planned"></i>zaplanowane</span>
+            <span><i class="seg ended"></i>zakończone</span>
+          </div>
+        </article>
+
+        <article class="feature wide">
+          <h3>Wygodnie i oszczędnie</h3>
+          <p>Aplikację zaprojektowano najpierw na telefon. Mapę przybliża się gestem lub przyciskami. Gdy karta z aplikacją jest w tle, Pasibus wstrzymuje odświeżanie, co oszczędza baterię i transfer. Każdą zmianę w aplikacji sprawdzają automatyczne testy, a działanie wersji produkcyjnej jest kontrolowane co dwie godziny.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="dane" aria-labelledby="h-dane">
+      <h2 id="h-dane">Źródła danych</h2>
+      <p>Pasibus nie tworzy własnych danych o ruchu. Pokazuje to, co publikuje miasto, pobierając dane przez oficjalne API portalu <a href="https://dane.um.warszawa.pl">dane.um.warszawa.pl</a>.</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th scope="col">Co widać w aplikacji</th><th scope="col">Zbiór danych</th><th scope="col">Udostępnia</th><th scope="col">Odświeżanie</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Pozycje autobusów i tramwajów</td><td><a href="https://dane.um.warszawa.pl/pl/catalogue/f319f602-7292-4e8c-b3d1-f5898aa9a638">Lokalizacja pojazdów komunikacji miejskiej</a></td><td>m.st. Warszawa (dane ZTM)</td><td class="freq">co 10 s</td></tr>
+            <tr><td>Karta pojazdu</td><td><a href="https://dane.um.warszawa.pl/pl/catalogue/a8295279-8bd5-4fec-8352-d7a7b96dc129">Pojazdy transportu publicznego</a></td><td>m.st. Warszawa</td><td class="freq">co godzinę</td></tr>
+            <tr><td>Parkingi</td><td>Wolne miejsca parkingowe</td><td>m.st. Warszawa</td><td class="freq">co minutę</td></tr>
+            <tr><td>Utrudnienia</td><td>Utrudnienia drogowe (serwis infoulice)</td><td>m.st. Warszawa</td><td class="freq">co minutę</td></tr>
+            <tr><td>Podkład mapy</td><td><a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a></td><td>współtwórcy OpenStreetMap (licencja ODbL)</td><td class="freq">–</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">Odpowiedzi API są przez kilka sekund przechowywane w pamięci podręcznej serwera, więc rosnąca liczba użytkowników nie zwiększa obciążenia miejskiego systemu. Miejski zbiór pozycji pojazdów obejmuje autobusy i tramwaje, ale nie metro. Rozkłady jazdy, trasy i przystanki, które pojawią się w kolejnych wersjach, również będą pochodzić wyłącznie z oficjalnych zbiorów miasta.</p>
+    </section>
+
+    <section id="plan" aria-labelledby="h-plan">
+      <h2 id="h-plan">Co dalej: plan rozwoju</h2>
+      <p>Rozwój Pasibusa zaplanowano w fazach. Terminy są orientacyjne.</p>
+      <ol class="route">
+        <li class="stop done">
+          <span class="pin" aria-hidden="true"></span>
+          <span class="when">Październik 2026</span>
+          <div class="head"><h3>Fundamenty</h3><span class="chip ok">w dużej części gotowe</span></div>
+          <p>Automatyczne testy przy każdej zmianie, automatyczne wdrażanie i monitoring wersji produkcyjnej z powiadomieniem o awarii. Dzięki temu problem z danymi zostaje wykryty, zanim zgłosi go użytkownik.</p>
+        </li>
+        <li class="stop">
+          <span class="pin" aria-hidden="true"></span>
+          <span class="when">Listopad 2026</span>
+          <div class="head"><h3>Trasy i przystanki</h3></div>
+          <ul>
+            <li>Po kliknięciu pojazdu cała trasa jego linii z przystankami.</li>
+            <li>Warstwa przystanków z listą linii, które się na nich zatrzymują.</li>
+            <li>Linki do wybranej linii lub pojazdu, które można zapisać w zakładkach albo wysłać znajomemu.</li>
+            <li>Linie metra M1 i M2 ze stacjami na mapie.</li>
+          </ul>
+        </li>
+        <li class="stop">
+          <span class="pin" aria-hidden="true"></span>
+          <span class="when">Grudzień 2026 – styczeń 2027</span>
+          <div class="head"><h3>Dla codziennego pasażera</h3></div>
+          <ul>
+            <li>Instalacja na ekranie głównym telefonu prosto ze strony, bez sklepu z aplikacjami.</li>
+            <li>Ulubione linie i przystanki, zapisywane wyłącznie na urządzeniu użytkownika.</li>
+            <li>Przycisk „Pokaż mnie” i najbliższe przystanki.</li>
+            <li>Odjazdy z przystanku: rozkład połączony z pojazdami na żywo, które zbliżają się do przystanku.</li>
+            <li>Szacowanie opóźnień pojazdów.</li>
+            <li>Filtr dostępności: pojazdy niskopodłogowe, klimatyzowane, z miejscem na wózek.</li>
+            <li>Czytelniejsza mapa utrudnień i lepsza obsługa czytników ekranu, klawiatury oraz Safari na iPhone'ach.</li>
+          </ul>
+        </li>
+        <li class="stop later">
+          <span class="pin" aria-hidden="true"></span>
+          <span class="when">I–II kwartał 2027</span>
+          <div class="head"><h3>Kontekst miasta i skala</h3></div>
+          <ul>
+            <li>Informacja, czy utrudnienie dotyczy linii, którą jedziesz.</li>
+            <li>Rowery miejskie Veturilo na mapie.</li>
+            <li>Powiadomienia o utrudnieniach na ulubionych liniach.</li>
+            <li>Opcjonalny ciemny motyw mapy.</li>
+            <li>Lżejsze dane i przygotowanie na większy ruch.</li>
+            <li>Później, z niższym priorytetem: historia i punktualność linii.</li>
+          </ul>
+        </li>
+      </ol>
+      <p class="note">Zakres funkcji opartych na rozkładach zależy od danych publikowanych przez miasto. Na przykład szacowanie opóźnień wymaga rozkładów z podziałem na brygady, a jeśli miasto nie udostępni dokładnego przebiegu tras, trasa zostanie narysowana przez kolejne przystanki.</p>
+      <p>Pasibus ma pozostać szybkim, darmowym podglądem miasta na żywo. Dlatego w planach nie ma:</p>
+      <ul class="nots">
+        <li><s>planera podróży</s></li>
+        <li><s>osobnej aplikacji natywnej</s></li>
+        <li><s>kont użytkowników</s></li>
+        <li><s>reklam</s></li>
+        <li><s>analityki zachowań</s></li>
+      </ul>
+    </section>
+
+    <section id="o-pasibusie" aria-labelledby="h-o">
+      <h2 id="h-o">O Pasibusie</h2>
+      <p>Pasibus to niekomercyjna aplikacja webowa, która pokazuje warszawską komunikację miejską w czasie rzeczywistym na podstawie otwartych danych m.st. Warszawy. Wersja produkcyjna powstała w dwa dni. Projekt nie ma budżetu: działa w darmowych planach usług chmurowych (Vercel, Cloudflare), a mapę rysuje biblioteka open source Leaflet na podkładzie OpenStreetMap. Klucz do miejskiego API jest przechowywany wyłącznie po stronie serwera.</p>
+    </section>
+  </main>
+
+  <aside class="facts" aria-labelledby="h-skrot">
+    <h2 id="h-skrot" class="label">W skrócie</h2>
+    <dl>
+      <div><dt>Co to jest</dt><dd>Mapa komunikacji miejskiej Warszawy na żywo</dd></div>
+      <div><dt>Dla kogo</dt><dd>Codzienni pasażerowie autobusów i tramwajów</dd></div>
+      <div><dt>Odświeżanie</dt><dd>Pojazdy co 10 s, parkingi i utrudnienia co minutę</dd></div>
+      <div><dt>Karta pojazdu</dt><dd>99,5% autobusów i 99,6% tramwajów</dd></div>
+      <div><dt>Cena</dt><dd>Bezpłatna, bez reklam i bez konta</dd></div>
+      <div><dt>Prywatność</dt><dd>Bez analityki i śledzenia użytkowników</dd></div>
+      <div><dt>Gdzie działa</dt><dd>W przeglądarce na telefonie i komputerze</dd></div>
+      <div><dt>Dane</dt><dd>Otwarte dane m.st. Warszawy, mapa OpenStreetMap</dd></div>
+      <div><dt>Adres</dt><dd><a href="https://pasibus.vercel.app">pasibus.vercel.app</a></dd></div>
+    </dl>
+    <hr>
+    <div class="contact">
+      <h2 class="label">Kontakt dla mediów</h2>
+      <span><em class="todo">imię i nazwisko</em></span>
+      <span><em class="todo">e-mail</em></span>
+      <span><em class="todo">telefon</em></span>
+    </div>
+  </aside>
+</div>
+
+<footer class="page-foot">
+  <div class="wrap">
+    <span>Dane: m.st. Warszawa, <a href="https://dane.um.warszawa.pl">dane.um.warszawa.pl</a></span>
+    <span>Mapa: © <a href="https://www.openstreetmap.org/copyright">współtwórcy OpenStreetMap</a></span>
+    <span>Stan na 2 października 2026 r.</span>
+  </div>
+</footer>
+</body>
+</html>
