@@ -55,6 +55,7 @@ Lokalnie: `pasibus/.env` (w `.gitignore`).
 - Pasek statusu „0 pojazdów” bywa po prostu efektem wyłączonych przycisków Autobusy/Tramwaje (nie błąd).
 
 ## Odłożone / pomysły (kolejność wg wartości)
+Pełna analiza i plan rozwoju w fazach: `ROADMAPA.md`.
 1. **Trasa wybranej linii** (pierwotny wymóg: zaznaczenie pojazdu pokazuje całą planowaną trasę linii) – zaparkowane. Potrzebny zbiór z rozkładami/przebiegiem linii z `dane.um.warszawa.pl`; poproś użytkownika o sekcję „Parametry API / Przykłady wywołań” albo odczytaj stronę, gdy domena jest dozwolona w sesji.
 2. **Metro** – brak w zbiorze pojazdów; opcje: statyczne linie M1/M2 i stacje albo osobny zbiór na żywo (nie znaleziono).
 3. Drobne: w panelu utrudnień brak daty końca pokazuje „?” (lepiej „do odwołania”); opcjonalny filtr starych utrudnień; grupowanie gęstych znaczników/etykiet; ewentualnie ukrycie zakończonych utrudnień.
