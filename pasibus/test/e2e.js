@@ -50,11 +50,23 @@ function findChromium() {
       await page.click('.leaflet-control-zoom-in'); await page.waitForTimeout(400);
     });
     await step(`${label}: click selects vehicle, highlights it, dims others`, async () => {
-      await page.evaluate(() => { const { map, state } = window.__pasibus; const m = [...state.markers.values()][5]; map.setView(m.mk.getLatLng(), 16, { animate: false }); });
-      await page.waitForTimeout(600);
-      const pt = await page.evaluate(() => { const { map, state } = window.__pasibus; const m = [...state.markers.values()].filter((x) => map.getBounds().contains(x.mk.getLatLng()))[0];
-        const p = map.latLngToContainerPoint(m.mk.getLatLng()); const r = map.getContainer().getBoundingClientRect(); return { x: r.left + p.x, y: r.top + p.y, id: m.v.id }; });
-      await page.mouse.click(pt.x, pt.y); await page.waitForTimeout(300);
+      // Freeze the data while clicking (see "vehicles stay clickable…" below): at zoom 16 a poll moves mock vehicles by hundreds of pixels.
+      await page.evaluate(() => Object.defineProperty(document, 'hidden', { configurable: true, get: () => true }));
+      let pt;
+      try {
+        await page.waitForTimeout(200);
+        await page.waitForFunction(() => [...window.__pasibus.state.markers.values()].every((m) => !m.to));
+        await page.evaluate(() => { const { map, state } = window.__pasibus; const m = [...state.markers.values()][5]; map.setView(m.mk.getLatLng(), 16, { animate: false }); });
+        await page.waitForTimeout(300);
+        // A vehicle on its own and not under the top bar, the status or the buttons.
+        pt = await page.evaluate(() => { const { map, state } = window.__pasibus; const r = map.getContainer().getBoundingClientRect(), cv = document.querySelector('.leaflet-overlay-pane canvas');
+          const all = [...state.markers.values()].filter((x) => map.hasLayer(x.mk)).map((x) => { const p = map.latLngToContainerPoint(x.mk.getLatLng()); return { x: r.left + p.x, y: r.top + p.y, id: x.v.id }; });
+          return all.find((p) => document.elementFromPoint(p.x, p.y) === cv && all.every((q) => q === p || Math.hypot(q.x - p.x, q.y - p.y) > 20)); });
+        assert.ok(pt, 'no clickable vehicle in view');
+        await page.mouse.click(pt.x, pt.y); await page.waitForTimeout(300);
+      } finally {
+        await page.evaluate(() => { delete document.hidden; });
+      }
       const s = await S();
       assert.equal(s.sel, pt.id); assert.ok(s.panel);
       assert.ok(await page.locator('.hl').count() === 1);
@@ -106,6 +118,94 @@ function findChromium() {
     await step(`${label}: labels at high zoom`, async () => {
       await page.evaluate(() => { const { map, state } = window.__pasibus; map.setView([...state.markers.values()][3].mk.getLatLng(), 16, { animate: false }); });
       await page.waitForTimeout(500); assert.ok((await S()).labels > 0);
+    });
+    // ---- My location (Google Maps style button) ----
+    const ME = { latitude: 52.2318, longitude: 21.0060, accuracy: 30 }; // Palace of Culture
+    const L_ = () => page.evaluate(() => { const { me, map } = window.__pasibus; return { cls: document.getElementById('locate').className, centered: me.centered,
+      flying: me.flying, z: map.getZoom(), off: me.pos ? map.latLngToContainerPoint(me.pos).distanceTo(map.getSize().divideBy(2)) : null, pos: me.pos && [me.pos.lat, me.pos.lng], dots: document.querySelectorAll('.me').length,
+      r: me.circle && me.circle.getRadius() }; });
+    // Leaflet pans by whole pixels, so "centred" means within a pixel or so of the middle (about 3 m at zoom 15).
+    const settled = () => page.waitForFunction(() => { const { me, map } = window.__pasibus; return me.pos && !me.flying && map.latLngToContainerPoint(me.pos).distanceTo(map.getSize().divideBy(2)) < 1.5; });
+    const moveTo = async (g) => { await ctx.setGeolocation(g); await page.waitForFunction((g) => { const p = window.__pasibus.me.pos; return p && Math.abs(p.lat - g.latitude) < 1e-7 && Math.abs(p.lng - g.longitude) < 1e-7; }, g); };
+    const drag = async () => {
+      const c = { x: ctxOpts.viewport.width / 2, y: ctxOpts.viewport.height / 2 };
+      await page.mouse.move(c.x, c.y); await page.mouse.down(); await page.mouse.move(c.x + 120, c.y + 60, { steps: 6 }); await page.mouse.up(); await page.waitForTimeout(300);
+    };
+    await step(`${label}: locate button finds the user, zooms in on them and shows the blue dot`, async () => {
+      await page.evaluate(() => { window.__pasibus.map.setView([52.2297, 21.0122], 12, { animate: false }); });
+      let s = await L_(); assert.equal(s.cls, 'locate'); assert.equal(s.dots, 0);
+      assert.ok(await page.isVisible('#locate'));
+      await ctx.grantPermissions(['geolocation']); await ctx.setGeolocation(ME);
+      await page.click('#locate'); await settled();
+      s = await L_();
+      assert.ok(s.centered); assert.equal(s.cls, 'locate on'); assert.equal(s.z, 16); assert.ok(s.off < 1.5, 'centre off by px ' + s.off);
+      assert.equal(s.dots, 1); assert.equal(s.r, 30, 'accuracy circle in metres');
+      assert.equal(await page.locator('.leaflet-overlay-pane canvas').count(), 1, 'accuracy circle shares the vehicles canvas');
+      await page.screenshot({ path: `${SHOTS}/pasibus-${label}-location.png` });
+    });
+    await step(`${label}: map follows the user while centred; dragging stops it; the button centres again`, async () => {
+      await moveTo({ ...ME, latitude: 52.2330, longitude: 21.0100 }); await settled();
+      await drag();
+      let s = await L_(); assert.ok(!s.centered); assert.equal(s.cls, 'locate found'); assert.equal(s.dots, 1);
+      await moveTo({ ...ME, latitude: 52.2340, longitude: 21.0110 }); await page.waitForTimeout(400);
+      s = await L_(); assert.ok(s.off > 50, 'map must not follow after a drag, off px ' + s.off);
+      await page.click('#locate'); await settled();
+      s = await L_(); assert.ok(s.centered); assert.equal(s.cls, 'locate on');
+    });
+    await step(`${label}: zooming while centred keeps the user in the middle`, async () => {
+      const z0 = (await L_()).z;
+      await page.mouse.move(ctxOpts.viewport.width / 2 + 100, ctxOpts.viewport.height / 2 + 120); await page.mouse.wheel(0, 300);
+      await page.waitForFunction((z) => window.__pasibus.map.getZoom() < z, z0); await page.waitForTimeout(400);
+      const s = await L_(); assert.ok(s.centered); assert.ok(s.off < 1.5, 'centre off by px ' + s.off);
+    });
+    await step(`${label}: compass turns the heading beam, the short way round`, async () => {
+      const turn = (alpha) => page.evaluate((alpha) => {
+        window.dispatchEvent(new DeviceOrientationEvent('ondeviceorientationabsolute' in window ? 'deviceorientationabsolute' : 'deviceorientation', { alpha, beta: 0, gamma: 0, absolute: true }));
+        return new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r({ on: !!document.querySelector('.me.heading'), t: document.querySelector('.me-beam').style.transform }))));
+      }, alpha);
+      assert.ok(!(await page.evaluate(() => !!document.querySelector('.me.heading'))), 'no beam without a heading');
+      assert.deepEqual(await turn(270), { on: true, t: 'rotate(90deg)' }); // alpha counts counter-clockwise: 270 = facing east
+      assert.deepEqual(await turn(100), { on: true, t: 'rotate(260deg)' });
+      assert.deepEqual(await turn(0), { on: true, t: 'rotate(360deg)' }, '260° -> 0° turns +100°, not -260°');
+      assert.ok(await page.isVisible('.me-beam'));
+    });
+    await step(`${label}: vehicles under the location dot and accuracy circle stay clickable`, async () => {
+      await page.evaluate(() => Object.defineProperty(document, 'hidden', { configurable: true, get: () => true })); // freeze vehicles, as above
+      try {
+        await page.waitForTimeout(200);
+        await page.waitForFunction(() => [...window.__pasibus.state.markers.values()].every((m) => !m.to));
+        const v = await page.evaluate(() => { const { map, state } = window.__pasibus; const shown = [...state.markers.values()].filter((x) => map.hasLayer(x.mk));
+          const px = (x) => map.latLngToContainerPoint(x.mk.getLatLng()); // pixel distances do not depend on where the map is centred
+          const m = shown.find((x) => shown.every((o) => o === x || px(o).distanceTo(px(x)) > 24)); const p = m.mk.getLatLng(); return { lat: p.lat, lng: p.lng, id: m.v.id }; });
+        await moveTo({ latitude: v.lat, longitude: v.lng, accuracy: 300 }); await settled(); await page.waitForTimeout(300);
+        assert.equal((await L_()).r, 300);
+        const pt = await page.evaluate((id) => { const { map, state } = window.__pasibus; const p = map.latLngToContainerPoint(state.markers.get(id).mk.getLatLng()); const r = map.getContainer().getBoundingClientRect(); return { x: r.left + p.x, y: r.top + p.y }; }, v.id);
+        await page.mouse.click(pt.x, pt.y); await page.waitForTimeout(100);
+        assert.equal(await page.evaluate(() => window.__pasibus.state.selected), v.id, 'vehicle under the blue dot not selectable');
+        assert.ok(await page.evaluate(() => getComputedStyle(document.querySelector('.me-dot')).pointerEvents === 'none'));
+        await page.evaluate(() => window.__pasibus.deselect());
+      } finally {
+        await page.evaluate(() => { delete document.hidden; });
+      }
+    });
+    await step(`${label}: locate button rises above an open panel instead of hiding under it`, async () => {
+      const rects = () => page.evaluate(() => { const b = document.getElementById('locate').getBoundingClientRect(), p = document.getElementById('panel').getBoundingClientRect();
+        return { overlap: b.left < p.right && b.right > p.left && b.top < p.bottom && b.bottom > p.top, lifted: document.getElementById('locate').style.bottom !== '' }; });
+      await page.evaluate(() => { const { state, select } = window.__pasibus; select([...state.markers.keys()][0]); });
+      await page.waitForFunction(() => document.querySelectorAll('#p-fleet dt').length > 3); await page.waitForTimeout(400);
+      let r = await rects(); assert.ok(!r.overlap, 'button covered by the panel'); assert.equal(r.lifted, label === 'mobile');
+      await page.click('#close'); await page.waitForTimeout(400);
+      r = await rects(); assert.ok(!r.lifted, 'button back in the corner');
+    });
+    await step(`${label}: following a vehicle and following the user exclude each other`, async () => {
+      await page.evaluate(() => { const { state, select } = window.__pasibus; select([...state.markers.keys()][0]); });
+      await page.click('#follow');
+      let s = await L_(); assert.ok(!s.centered); assert.equal(s.cls, 'locate found');
+      await page.click('#locate'); await settled();
+      s = await L_(); assert.ok(s.centered);
+      assert.ok(!(await page.evaluate(() => window.__pasibus.state.follow))); assert.ok(!(await page.getAttribute('#follow', 'class')).includes('on'));
+      await page.click('#close');
+      await drag(); assert.ok(!(await L_()).centered); // leave the map free for the next steps
     });
     await step(`${label}: parking button shows parkings, panel has free/total places`, async () => {
       await page.evaluate(() => { window.__pasibus.map.setView([52.2297, 21.0122], 12, { animate: false }); });
@@ -250,6 +350,42 @@ function findChromium() {
     await pg.waitForFunction(() => /utrudnienia: brak danych/.test(document.getElementById('status-text').textContent));
     assert.ok(await pg.evaluate(() => window.__pasibus.state.markers.size > 50));
   });
+
+  // My location: refused permission, a position outside Warsaw, permission given on an earlier visit.
+  const lerrors = [];
+  const lctx = await browser.newContext();
+  const lp = await lctx.newPage();
+  lp.on('pageerror', (e) => lerrors.push(e.message));
+  await lp.goto(url);
+  await step('location: refused permission shows a message and a crossed-out button', async () => {
+    await lp.waitForFunction(() => window.__pasibus.state.markers.size > 50);
+    // As if the user had clicked "Block" (Playwright has no API for refusing a permission prompt).
+    const cdp = await lctx.newCDPSession(lp), { targetInfo } = await cdp.send('Target.getTargetInfo');
+    await cdp.send('Browser.setPermission', { permission: { name: 'geolocation' }, setting: 'denied', origin: new URL(url).origin, browserContextId: targetInfo.browserContextId });
+    await lp.click('#locate');
+    await lp.waitForSelector('#toast:not([hidden])');
+    assert.match(await lp.textContent('#toast'), /Brak dostępu do lokalizacji/);
+    assert.equal(await lp.getAttribute('#locate', 'class'), 'locate off');
+    assert.equal(await lp.locator('.me').count(), 0);
+  });
+  await step('location outside Warsaw: the map goes there and says vehicles are only in Warsaw', async () => {
+    await lctx.grantPermissions(['geolocation'], { origin: new URL(url).origin }); await lctx.setGeolocation({ latitude: 50.0614, longitude: 19.9366, accuracy: 20 }); // Kraków
+    await lp.click('#locate');
+    await lp.waitForFunction(() => { const { me, map } = window.__pasibus; return me.centered && !me.flying && map.distance(map.getCenter(), me.pos) < 2; });
+    assert.match(await lp.textContent('#toast'), /poza Warszawą/);
+    assert.equal(await lp.getAttribute('#locate', 'class'), 'locate on');
+  });
+  const gctx = await browser.newContext({ permissions: ['geolocation'], geolocation: { latitude: 52.2318, longitude: 21.0060, accuracy: 30 } });
+  const gp = await gctx.newPage();
+  gp.on('pageerror', (e) => lerrors.push(e.message));
+  await gp.goto(url);
+  await step('location permission given earlier: the dot appears on load and the map stays put', async () => {
+    await gp.waitForSelector('.me');
+    const s = await gp.evaluate(() => { const { map, me } = window.__pasibus; const c = map.getCenter(); return { z: map.getZoom(), lat: c.lat, lng: c.lng, cls: document.getElementById('locate').className, centered: me.centered }; });
+    assert.equal(s.z, 12); assert.ok(!s.centered); assert.equal(s.cls, 'locate found');
+    assert.ok(Math.abs(s.lat - 52.2297) < 1e-6 && Math.abs(s.lng - 21.0122) < 1e-6, 'map moved on load');
+  });
+  await step('location: no JS errors', async () => assert.deepEqual(lerrors, []));
   await browser.close(); server.close(); bad.close(); half.close();
   console.log(`\n${results.length} checks passed`);
 })().catch((e) => { console.error('FAIL', e); process.exit(1); });

@@ -24,7 +24,7 @@ html, body { margin: 0; height: 100%; background: var(--charcoal); color: var(--
 @media (max-width: 699px) { .leaflet-top.leaflet-right { margin-top: 150px; } }
 #status { position: fixed; left: 10px; bottom: max(10px, env(safe-area-inset-bottom)); z-index: 1000;
   display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: var(--panel);
-  border-radius: 999px; font-size: 12px; color: var(--muted); }
+  border-radius: 999px; font-size: 12px; color: var(--muted); max-width: calc(100% - 80px); }
 #dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
 #status.ok #dot { background: #3ddc84; animation: pulse 2s infinite; }
 #status.loading #dot { background: var(--orange); animation: pulse 1s infinite; }
@@ -97,3 +97,28 @@ html, body { margin: 0; height: 100%; background: var(--charcoal); color: var(--
 @media (min-width: 700px) { #ipanel { left: 10px; right: auto; } }
 /* Landscape phones: keep most of the map visible. */
 @media (max-height: 480px) { #panel, #ppanel, #ipanel { max-height: 40vh; } }
+
+/* "Show my location" button and the position dot, after Google Maps. */
+.locate { position: fixed; right: 10px; bottom: calc(max(10px, env(safe-area-inset-bottom)) + 24px); z-index: 1000;
+  width: 44px; height: 44px; padding: 10px; border: 0; border-radius: 50%; background: #fff; color: #5F6368; cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0,0,0,.35); transition: bottom .2s; -webkit-tap-highlight-color: transparent; }
+.locate svg { display: block; width: 24px; height: 24px; }
+.locate .loc-dot, .locate .loc-off { display: none; }
+.locate.found .loc-dot, .locate.on .loc-dot { display: inline; }
+.locate.on, .locate.busy { color: #1A73E8; }
+.locate.busy svg { animation: pulse 1s infinite; }
+.locate.off .loc-off { display: inline; }
+.locate:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
+.me { position: relative; width: 22px; height: 22px; }
+.me-dot { position: absolute; inset: 2px; border-radius: 50%; background: #1A73E8; border: 3px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.45); }
+.me-pulse { position: absolute; inset: 0; border-radius: 50%; background: rgba(26,115,232,.4); animation: me-pulse 2s ease-out infinite; }
+@keyframes me-pulse { 0% { transform: scale(1); opacity: .9; } 100% { transform: scale(3); opacity: 0; } }
+.me-beam { display: none; position: absolute; left: -21px; bottom: 11px; width: 64px; height: 58px; transform-origin: 50% 100%;
+  background: radial-gradient(circle 58px at 50% 100%, rgba(26,115,232,.75), rgba(26,115,232,0)); clip-path: polygon(50% 100%, 0 0, 100% 0);
+  transition: transform .2s linear; }
+.me.heading .me-beam { display: block; }
+.me.lost .me-dot { background: #9AA0A6; } .me.lost .me-pulse { display: none; }
+#toast { position: fixed; left: 50%; bottom: calc(max(10px, env(safe-area-inset-bottom)) + 80px); transform: translateX(-50%); z-index: 1001;
+  width: max-content; max-width: calc(100% - 20px); padding: 10px 14px; background: var(--panel); border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.4); font-size: 13px; }
+#toast[hidden] { display: none; }
