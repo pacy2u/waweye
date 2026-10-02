@@ -90,15 +90,26 @@ test('upstream relay: no API key on Vercel side, secret header sent', async () =
 });
 
 test('worker: rejects bad secret/type, relays with key', async () => {
-  const worker = (await import('../worker/index.js')).default;
+  const { handle } = await import('../worker/index.js');
   const env = { PROXY_SECRET: 's3', WARSAW_API_KEY: 'KEY' };
   const req = (q, secret) => new Request('https://w.dev/' + q, { headers: secret ? { 'x-proxy-secret': secret } : {} });
-  assert.equal((await worker.fetch(req('?type=1'), env)).status, 403);
-  assert.equal((await worker.fetch(req('?type=1', 'wrong'), env)).status, 403);
-  assert.equal((await worker.fetch(req('?type=9', 's3'), env)).status, 400);
+  assert.equal((await handle(req('?type=1'), env)).status, 403);
+  assert.equal((await handle(req('?type=1', 'wrong'), env)).status, 403);
+  assert.equal((await handle(req('?type=9', 's3'), env)).status, 400);
+  assert.equal((await handle(req('?type=1', 's3'), { PROXY_SECRET: 's3' })).status, 500);
   let called;
-  const ok = await worker.fetch(req('?type=2', 's3'), env, async (u) => { called = u; return new Response('{"result":[]}', { status: 200 }); });
+  const ok = await handle(req('?type=2', 's3'), env, async (u) => { called = u; return new Response('{"result":[]}', { status: 200 }); });
   assert.equal(ok.status, 200); assert.match(called, /apikey=KEY&type=2/);
-  const bad = await worker.fetch(req('?type=1', 's3'), env, async () => { throw new Error('boom'); });
+  const bad = await handle(req('?type=1', 's3'), env, async () => { throw new Error('boom'); });
   assert.equal(bad.status, 502);
+});
+
+test('worker: default export works the way Cloudflare calls it (request, env, ctx)', async () => {
+  const worker = (await import('../worker/index.js')).default;
+  const realFetch = globalThis.fetch; let called;
+  globalThis.fetch = async (u) => { called = u; return new Response('{"result":[]}'); };
+  try {
+    const res = await worker.fetch(new Request('https://w.dev/?type=1', { headers: { 'x-proxy-secret': 's3' } }), { PROXY_SECRET: 's3', WARSAW_API_KEY: 'KEY' }, { waitUntil() {} });
+    assert.equal(res.status, 200); assert.match(called, /apikey=KEY/);
+  } finally { globalThis.fetch = realFetch; }
 });
