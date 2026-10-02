@@ -42,4 +42,17 @@ function mockParkings() {
   }));
 }
 
-module.exports = { mockVehicles, mockParkings };
+// Warsaw-local "YYYY-MM-DD HH:MM:SS" offset by `days` from now (good enough for mock data).
+const wl = (days) => new Date(Date.now() + days * 86400e3 + 2 * 3600e3).toISOString().slice(0, 19).replace('T', ' ');
+function mockIncidents() {
+  const pt = (lat, lng) => [[{ geomType: 0, latlngs: [{ lat, lng }] }]];
+  return [
+    { start_date: wl(-1), end_date: wl(2), name: 'Wymienią nawierzchnię na skrzyżowaniu', id: 8144, content: ['Skrzyżowanie będzie zamknięte.', 'Ruch wróci w piątek.'], geo: pt(52.2321, 21.0151) },
+    { start_date: wl(-3), end_date: wl(5), name: 'Remont ulicy Marszałkowskiej', id: 8146, content: ['Zwężenie jezdni na odcinku.'],
+      geo: [[{ geomType: 1, latlngs: [{ lat: 52.2260, lng: 21.0120 }, { lat: 52.2300, lng: 21.0160 }, { lat: 52.2350, lng: 21.0200 }] }]] },
+    { start_date: wl(3), end_date: wl(6), name: 'Planowane zamknięcie ul. Targowej', id: 8150, content: ['Prace od przyszłego tygodnia.'], geo: pt(52.2500, 21.0400) },
+    { start_date: wl(-9), end_date: wl(-1), name: 'Zakończone prace na Powiślu', id: 8101, content: ['Prace zakończone.'], geo: pt(52.2330, 21.0300) },
+  ];
+}
+
+module.exports = { mockVehicles, mockParkings, mockIncidents };

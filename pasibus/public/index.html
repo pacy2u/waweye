@@ -20,6 +20,9 @@
     <button id="t-park" class="chip" aria-pressed="false" title="Wolne miejsca parkingowe">
       <svg class="pico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="5" fill="currentColor"/><path d="M9 18V6h4.2a3.8 3.8 0 0 1 0 7.6H9" fill="none" stroke="var(--picon-bg,#242428)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Parking
     </button>
+    <button id="t-inc" class="chip" aria-pressed="false" title="Utrudnienia w ruchu drogowym">
+      <svg class="pico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 22.5 20.5h-21z" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 9v5.5M12 17.2v.3" stroke="var(--picon-bg,#242428)" stroke-width="2.2" stroke-linecap="round"/></svg>Utrudnienia
+    </button>
   </div>
 </header>
 
@@ -43,6 +46,17 @@
   </div>
   <div class="p-free"><span id="pp-free" class="p-num"></span><span class="p-of" id="pp-of"></span></div>
   <dl id="pp-rows" class="p-rows"></dl>
+</aside>
+
+<aside id="ipanel" hidden>
+  <button id="iclose" aria-label="Zamknij utrudnienie">×</button>
+  <div class="p-head">
+    <div class="i-badge" id="ip-badge">!</div>
+    <div class="meta"><div id="ip-name" class="p-name"></div><div id="ip-when" class="p-addr"></div></div>
+  </div>
+  <div id="ip-status" class="i-status"></div>
+  <div id="ip-body" class="i-body"></div>
+  <a id="ip-link" class="i-link" target="_blank" rel="noopener noreferrer" hidden>Więcej na infoulice.um.warszawa.pl</a>
 </aside>
 
 <script src="vendor/leaflet.js"></script>

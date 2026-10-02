@@ -2,6 +2,7 @@
 // Warsaw Open Data: "Lokalizacja pojazdów komunikacji miejskiej"
 // New open-data portal API (dane.um.warszawa.pl): POST JSON {"type": 1|2}, token in the Authorization header.
 const ENDPOINT = 'https://dane.um.warszawa.pl/api/action/get_ztm_lokalizacja_pojazdow';
+const INCIDENTS_ENDPOINT = 'https://dane.um.warszawa.pl/api/action/get_bin_utrudnienia_drogowe';
 const PARKING_ENDPOINT = 'https://dane.um.warszawa.pl/api/action/get_m_parkingi_wolne_miejsca';
 const TYPES = { 1: 'bus', 2: 'tram' };
 const MAX_AGE_MS = 5 * 60 * 1000;
@@ -162,6 +163,48 @@ async function fetchParkings({ apiKey, fetchImpl = fetch, upstream }) {
   return normalizeParkings(raw);
 }
 
+
+// ---- Road incidents (dataset "Utrudnienia w ruchu drogowym") ----
+// Reply is a bare list (per the docs); tolerate it being wrapped in an object too.
+const extractIncidents = (b) => {
+  if (Array.isArray(b)) return b;
+  if (!b || typeof b !== 'object') return null;
+  for (const c of [b.result, b.Incidents, b.incidents]) if (Array.isArray(c)) return c;
+  return Object.values(b).find((v) => Array.isArray(v)) || null;
+};
+
+function normalizeIncidents(raw, now = Date.now()) {
+  const out = [];
+  for (const r of raw) {
+    // geo is a list of lists of {geomType: 0 point | 1 line, latlngs: [{lat, lng}]}
+    const shapes = [];
+    for (const g of [].concat(r.geo || []).flat(2)) {
+      const pts = (Array.isArray(g && g.latlngs) ? g.latlngs : [])
+        .map((p) => [Number(p.lat), Number(p.lng)])
+        .filter(([la, lo]) => Number.isFinite(la) && Number.isFinite(lo) && la >= BBOX.minLat && la <= BBOX.maxLat && lo >= BBOX.minLon && lo <= BBOX.maxLon);
+      if (!pts.length) continue;
+      shapes.push(Number(g.geomType) === 1 && pts.length > 1 ? { type: 'line', points: pts } : { type: 'point', points: [pts[0]] });
+    }
+    if (!shapes.length) continue;
+    const start = parseWarsawTime(r.start_date), end = parseWarsawTime(r.end_date);
+    const status = end !== null && end < now ? 'ended' : start !== null && start > now ? 'planned' : 'active';
+    out.push({
+      id: Number(r.id) || String(r.id),
+      name: String(r.name || 'Utrudnienie').trim(),
+      start, end, status,
+      content: (Array.isArray(r.content) ? r.content : [r.content]).filter((x) => typeof x === 'string' && x.trim()).map((x) => x.trim()),
+      shapes,
+    });
+  }
+  return out;
+}
+
+async function fetchIncidents({ apiKey, fetchImpl = fetch, upstream }) {
+  if (!apiKey && !upstream) throw new Error('Missing WARSAW_API_KEY');
+  const raw = await requestList({ endpoint: INCIDENTS_ENDPOINT, relayQuery: 'resource=incidents', extract: extractIncidents, apiKey, fetchImpl, upstream });
+  return normalizeIncidents(raw);
+}
+
 async function fetchVehicles({ apiKey, types = [1, 2], fetchImpl = fetch, upstream }) {
   if (!apiKey && !upstream) throw new Error('Missing WARSAW_API_KEY');
   const settled = await Promise.allSettled(types.map((t) => fetchType(t, apiKey, fetchImpl, upstream)));
@@ -175,4 +218,4 @@ async function fetchVehicles({ apiKey, types = [1, 2], fetchImpl = fetch, upstre
   return { vehicles, errors, received };
 }
 
-module.exports = { fetchVehicles, fetchParkings, normalize, normalizeParkings, TYPES };
+module.exports = { fetchVehicles, fetchParkings, fetchIncidents, normalize, normalizeParkings, normalizeIncidents, TYPES };

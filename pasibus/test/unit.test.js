@@ -1,8 +1,8 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { normalize, fetchVehicles, fetchParkings, normalizeParkings } = require('../lib/warsaw');
-const { vehiclesHandler, parkingHandler } = require('../lib/handler');
+const { normalize, fetchVehicles, fetchParkings, normalizeParkings, fetchIncidents, normalizeIncidents } = require('../lib/warsaw');
+const { vehiclesHandler, parkingHandler, incidentsHandler } = require('../lib/handler');
 
 const NOW = Date.parse('2026-10-01T12:00:30+02:00');
 const row = (o = {}) => ({ Lines: '175', Lon: 21.0, Lat: 52.2, VehicleNumber: '1234', Brigade: '3', Time: '2026-10-01 12:00:00', ...o });
@@ -257,4 +257,73 @@ test('vehicles: reports how many raw records the API returned, even when all are
   const stale = async () => ({ ok: true, json: async () => [row({ Time: '2020-01-01 10:00:00' }), row({ VehicleNumber: '2', Time: '2020-01-01 10:00:00' })] });
   const r = await fetchVehicles({ apiKey: 'k', types: [1], fetchImpl: stale });
   assert.equal(r.vehicles.length, 0); assert.equal(r.received, 2);
+});
+
+// Records copied from the dataset documentation ("Utrudnienia w ruchu drogowym").
+const DOC_INCIDENTS = [
+  { start_date: '2025-10-27 08:15:00', end_date: '2025-10-31 04:30:00', name: 'Wymienią nawierzchnię na bielańskim skrzyżowaniu', id: 8144,
+    content: ['W środę rano drogowcy rozpoczną wymianę nawierzchni.', 'Ruch wróci w piątek.'],
+    geo: [[{ geomType: 0, latlngs: [{ lat: 52.2821269608705, lng: 20.9699285030365 }] }]] },
+  { start_date: '2025-10-24 14:17:10', end_date: '2025-10-31 12:15:30', name: 'Remont ulicy Sęczkowej', id: 8146, content: ['Ulica zamknięta.'],
+    geo: [[{ geomType: 1, latlngs: [{ lat: 52.2196333738311, lng: 21.1044466495514 }, { lat: 52.2209446428302, lng: 21.1036688089371 }] }]] },
+];
+
+test('incidents: point and line from the documented examples', () => {
+  const out = normalizeIncidents(DOC_INCIDENTS, Date.parse('2025-10-29T12:00:00+01:00'));
+  assert.equal(out.length, 2);
+  assert.deepEqual(out[0].shapes, [{ type: 'point', points: [[52.2821269608705, 20.9699285030365]] }]);
+  assert.equal(out[1].shapes[0].type, 'line'); assert.equal(out[1].shapes[0].points.length, 2);
+  assert.equal(out[0].id, 8144); assert.equal(out[0].content.length, 2);
+  assert.equal(out[0].start, Date.parse('2025-10-27T08:15:00+01:00')); // 27 Oct 2025 is CET (summer time ended 26 Oct)
+});
+
+test('incidents: status active / planned / ended, and bad geometry is skipped', () => {
+  const now = Date.parse('2025-10-29T12:00:00+01:00');
+  const mk = (s, e) => ({ ...DOC_INCIDENTS[0], start_date: s, end_date: e });
+  const out = normalizeIncidents([mk('2025-10-27 08:00:00', '2025-10-31 04:00:00'), mk('2025-11-02 08:00:00', '2025-11-03 04:00:00'), mk('2025-10-20 08:00:00', '2025-10-21 04:00:00'),
+    { ...DOC_INCIDENTS[0], geo: [] }, { ...DOC_INCIDENTS[0], geo: [[{ geomType: 0, latlngs: [{ lat: 'x', lng: 1 }] }]] }, { ...DOC_INCIDENTS[0], geo: null }], now);
+  assert.deepEqual(out.map((i) => i.status), ['active', 'planned', 'ended']);
+});
+
+test('incidents: a one-point "line" degrades to a point; geo may be nested or flat', () => {
+  const one = { ...DOC_INCIDENTS[1], geo: [[{ geomType: 1, latlngs: [{ lat: 52.2, lng: 21 }] }]] };
+  const flat = { ...DOC_INCIDENTS[0], geo: [{ geomType: 0, latlngs: [{ lat: 52.2, lng: 21 }] }] };
+  const out = normalizeIncidents([one, flat]);
+  assert.equal(out[0].shapes[0].type, 'point'); assert.equal(out.length, 2);
+});
+
+test('incidents: direct POST without body; relay uses resource=incidents; accepts wrapped replies', async () => {
+  let seen;
+  const f = (reply) => async (url, opts) => { seen = { url, opts }; return { ok: true, json: async () => reply }; };
+  for (const reply of [DOC_INCIDENTS, { result: DOC_INCIDENTS }, { Status: 1, items: DOC_INCIDENTS }]) {
+    const out = await fetchIncidents({ apiKey: 'TOK', fetchImpl: f(reply) });
+    assert.equal(out.length, 2);
+    assert.equal(seen.url, 'https://dane.um.warszawa.pl/api/action/get_bin_utrudnienia_drogowe');
+    assert.equal(seen.opts.method, 'POST'); assert.equal(seen.opts.headers.Authorization, 'TOK'); assert.equal(seen.opts.body, undefined);
+  }
+  await fetchIncidents({ fetchImpl: f(DOC_INCIDENTS), upstream: { url: 'https://w.dev', secret: 's' } });
+  assert.equal(seen.url, 'https://w.dev?resource=incidents');
+  await assert.rejects(fetchIncidents({ apiKey: 'k', fetchImpl: f({ foo: 1 }) }), /Unexpected API response/);
+});
+
+test('incidents handler: mock mode returns all three statuses; errors give 502', async () => {
+  const call = (opts) => new Promise((resolve) => {
+    const res = { headers: {}, statusCode: 200, setHeader(k, v) { this.headers[k] = v; }, end(b) { resolve({ status: this.statusCode, body: JSON.parse(b), headers: this.headers }); } };
+    incidentsHandler({ url: '/api/incidents' }, res, opts);
+  });
+  const ok = await call({ env: { MOCK: '1' } });
+  assert.equal(ok.status, 200); assert.deepEqual([...new Set(ok.body.incidents.map((i) => i.status))].sort(), ['active', 'ended', 'planned']);
+  assert.match(ok.headers['Cache-Control'], /s-maxage=60/);
+  assert.equal((await call({ env: {} })).status, 502);
+});
+
+test('worker: incidents resource, and prototype keys are not treated as resources', async () => {
+  const { handle } = await import('../worker/index.js');
+  const env = { PROXY_SECRET: 's', WARSAW_API_KEY: 'TOK' };
+  let seen;
+  const f = async (u, init) => { seen = { u, init }; return new Response('[]', { status: 200 }); };
+  const ok = await handle(new Request('https://w.dev/?resource=incidents', { headers: { 'x-proxy-secret': 's' } }), env, f);
+  assert.equal(ok.status, 200); assert.equal(seen.u, 'https://dane.um.warszawa.pl/api/action/get_bin_utrudnienia_drogowe'); assert.equal(seen.init.body, undefined);
+  const bad = await handle(new Request('https://w.dev/?resource=constructor', { headers: { 'x-proxy-secret': 's' } }), env, f);
+  assert.equal(bad.status, 400);
 });
