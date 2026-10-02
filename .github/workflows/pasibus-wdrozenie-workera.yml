@@ -1,0 +1,52 @@
+name: Pasibus – wdrożenie Workera Cloudflare
+
+# Deploys pasibus/worker to Cloudflare after a merge to main (or on demand: Actions -> Run workflow),
+# so the Worker code no longer has to be pasted into the Cloudflare editor by hand.
+# Needs repository secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID (see pasibus/README.md).
+# The Worker's own secrets (WARSAW_API_KEY, PROXY_SECRET) stay in Cloudflare and are not touched.
+on:
+  push:
+    branches: [main]
+    paths: ['pasibus/worker/**']
+  workflow_dispatch:
+
+concurrency:
+  group: pasibus-worker
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  wdrozenie:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      HAS_CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
+    steps:
+      - name: Brak sekretów Cloudflare
+        if: env.HAS_CF_TOKEN != 'true'
+        run: |
+          msg="Worker NIE został wdrożony: brak sekretów CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID w repozytorium. Dodaj je (pasibus/README.md) albo wklej pasibus/worker/index.js ręcznie w Cloudflare."
+          echo "::warning::$msg"
+          echo "$msg" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/checkout@v4
+        if: env.HAS_CF_TOKEN == 'true'
+      - uses: actions/setup-node@v4
+        if: env.HAS_CF_TOKEN == 'true'
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: pasibus/package-lock.json
+      - name: Testy jednostkowe (w tym Workera)
+        if: env.HAS_CF_TOKEN == 'true'
+        working-directory: pasibus
+        run: npm ci && npm test
+      - name: Wdrożenie (wrangler deploy)
+        if: env.HAS_CF_TOKEN == 'true'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: pasibus/worker
+          wranglerVersion: '4.147.0' # validated with --dry-run on 2026-10-02

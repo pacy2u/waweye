@@ -13,7 +13,7 @@ Parkingi: `POST https://dane.um.warszawa.pl/api/action/get_m_parkingi_wolne_miej
 ```bash
 cd pasibus
 npm install
-cp .env.example .env      # wpisz WARSAW_API_KEY
+echo 'WARSAW_API_KEY=<token>' > .env   # token z https://dane.um.warszawa.pl/key-api
 npm start                 # http://localhost:3000
 MOCK=1 npm start          # dane symulowane, bez klucza
 ```
@@ -22,7 +22,12 @@ MOCK=1 npm start          # dane symulowane, bez klucza
 ```bash
 npm test          # jednostkowe: normalizacja, błędy API, handler
 npm run test:e2e  # przeglądarka (Chromium, desktop + mobile) na danych symulowanych
+node scripts/check-production.js   # kontrola produkcji: pojazdy, parkingi, utrudnienia, tabor
 ```
+W GitHub Actions (`.github/workflows/`):
+- **Pasibus – testy**: oba zestawy testów przy każdym PR i po zmianie na `main` (zmiany samych plików `.md` nie zużywają minut).
+- **Pasibus – monitoring produkcji**: co 2 godziny `scripts/check-production.js` sprawdza https://pasibus.vercel.app (także to, czy pojazdy na żywo znajdują się w zbiorze taboru). Przy awarii zakłada jedno zgłoszenie (issue) „[monitoring] pasibus.vercel.app nie działa poprawnie”, a GitHub wysyła e-mail. Po pierwszej udanej kontroli zgłoszenie zamyka się samo. Ręcznie: Actions → Pasibus – monitoring produkcji → Run workflow.
+- Repo jest prywatne, więc obowiązuje darmowa pula minut Actions (2000 min/mies. na koncie GitHub Free). Monitoring zużywa ok. 360 min/mies., testy kilka minut na PR. Po wyczerpaniu puli zadania się zatrzymują, nie generując kosztów (przy domyślnym limicie wydatków 0 USD).
 
 ## Wdrożenie na Vercel
 1. Vercel → **Add New → Project** → importuj repo `pacy2u/tst`.
@@ -42,8 +47,19 @@ Stary host `api.um.warszawa.pl` nie przyjmował połączeń z adresów Vercel/AW
 
 (Alternatywa z CLI: `cd worker && npx wrangler deploy`, potem `npx wrangler secret put WARSAW_API_KEY` i `PROXY_SECRET`.)
 
+### Automatyczne wdrażanie Workera (bez wklejania kodu)
+Workflow **Pasibus – wdrożenie Workera Cloudflare** wdraża `worker/` po każdym merge'u zmian w tym folderze do `main`. Jednorazowa konfiguracja w przeglądarce:
+1. Cloudflare → **My Profile → API Tokens → Create Token** → szablon **Edit Cloudflare Workers** → Create. Skopiuj token.
+2. Cloudflare → **Workers & Pages**: skopiuj **Account ID** (prawa kolumna).
+3. GitHub → repo `pacy2u/tst` → **Settings → Secrets and variables → Actions → New repository secret**: `CLOUDFLARE_API_TOKEN` i `CLOUDFLARE_ACCOUNT_ID`.
+4. **Actions → Pasibus – wdrożenie Workera Cloudflare → Run workflow**, żeby od razu wgrać aktualny kod.
+
+Wdrożenie nie zmienia sekretów Workera (`WARSAW_API_KEY`, `PROXY_SECRET`), a `keep_vars = true` w `wrangler.toml` zachowuje zmienne ustawione w panelu. Bez sekretów workflow kończy się ostrzeżeniem i trzeba wkleić kod ręcznie jak wyżej.
+
 ## Struktura
 - `public/` – front (Leaflet, `app.js`, `style.css`)
 - `worker/` – opcjonalny pośrednik Cloudflare
-- `api/vehicles.js` – funkcja Vercel; `lib/` – logika API, mock, handler
+- `api/*.js` – funkcje Vercel; `lib/` – logika API, mock, handler
 - `dev-server.js` – serwer lokalny
+- `scripts/check-production.js` – kontrola produkcji (monitoring)
+- `ROADMAPA.md` – analiza produktu i plan rozwoju; `CONTEXT.md` – notatki dla kolejnych sesji

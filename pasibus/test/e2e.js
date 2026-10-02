@@ -7,6 +7,7 @@ const { createServer } = require('../dev-server');
 
 const SHOTS = process.env.SHOTS || '/tmp';
 function findChromium() {
+  if (process.env.CHROME_PATH) return process.env.CHROME_PATH; // e.g. Google Chrome preinstalled on GitHub runners
   const base = process.env.PLAYWRIGHT_BROWSERS_PATH || '/opt/pw-browsers';
   if (fs.existsSync(base + '/chromium')) return base + '/chromium';
   const d = fs.existsSync(base) && fs.readdirSync(base).find((x) => x.startsWith('chromium'));
@@ -174,6 +175,19 @@ function findChromium() {
         shown: [...window.__pasibus.state.markers.values()].filter((m) => window.__pasibus.map.hasLayer(m.mk)).length }));
       assert.ok(r.shown > 50); assert.ok(r.text.startsWith(`${r.shown} pojazdów`), r.text + ' vs ' + r.shown);
       await page.click('#t-inc'); await page.unroute('**/api/incidents');
+    });
+    await step(`${label}: hidden tab does not poll, showing it again polls at once`, async () => {
+      const urls = [], onReq = (r) => { if (r.url().includes('/api/')) urls.push(r.url()); };
+      await page.evaluate(() => Object.defineProperty(document, 'hidden', { configurable: true, get: () => true }));
+      await page.waitForTimeout(100); // let any request issued before hiding be reported first
+      page.on('request', onReq);
+      await page.evaluate(() => window.__pasibus.poll());
+      await page.waitForTimeout(300);
+      page.off('request', onReq);
+      assert.deepEqual(urls, []);
+      const shown = page.waitForRequest((r) => r.url().includes('/api/vehicles'), { timeout: 3000 });
+      await page.evaluate(() => { delete document.hidden; document.dispatchEvent(new Event('visibilitychange')); });
+      await shown;
     });
     await step(`${label}: no horizontal overflow`, async () => {
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
