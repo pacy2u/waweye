@@ -1,5 +1,5 @@
 {
   "outputDirectory": "public",
   "regions": ["fra1"],
-  "functions": { "api/vehicles.js": { "maxDuration": 30 } }
+  "functions": { "api/vehicles.js": { "maxDuration": 60 } }
 }

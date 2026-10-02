@@ -27,7 +27,7 @@ function normalize(raw, type, now = Date.now()) {
   return out;
 }
 
-const TIMEOUT_MS = 12000;
+const TIMEOUT_MS = 25000;
 
 // Node's fetch only says "fetch failed"; the real reason (ECONNRESET, ENOTFOUND, cert...) is in err.cause.
 function describe(err) {
@@ -57,7 +57,9 @@ async function fetchOnce(url, fetchImpl, init) {
   }
   const body = await res.json();
   if (!Array.isArray(body.result)) {
-    throw new Error(errorText(body) || 'Unexpected API response');
+    // Show the shape of what we got (keys + a short preview, never headers/tokens) so odd replies can be diagnosed.
+    const preview = JSON.stringify(body).slice(0, 160);
+    throw new Error(errorText(body) || `Unexpected API response: ${preview}`);
   }
   return body.result;
 }
@@ -78,8 +80,8 @@ async function fetchType(type, apiKey, fetchImpl, upstream) {
       try {
         raw = await fetchOnce(a.url, fetchImpl, a.init);
       } catch (e) {
-        // The API is occasionally slow; one retry for network errors/timeouts/5xx (not for 4xx/auth errors).
-        if (/^HTTP 4/.test(e.message) || /token|klucz|apikey|autoryz|unauthor|forbidden/i.test(e.message)) throw e;
+        // One retry for quick network errors/5xx; not for timeouts (already waited long), 4xx or auth errors.
+        if (/timeout|aborted/i.test(e.message) || /^HTTP 4/.test(e.message) || /token|klucz|apikey|autoryz|unauthor|forbidden/i.test(e.message)) throw e;
         raw = await fetchOnce(a.url, fetchImpl, a.init);
       }
       return normalize(raw, type);
