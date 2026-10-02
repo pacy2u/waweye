@@ -92,6 +92,34 @@ function findChromium() {
       await page.evaluate(() => { const { map, state } = window.__pasibus; map.setView([...state.markers.values()][3].mk.getLatLng(), 16, { animate: false }); });
       await page.waitForTimeout(500); assert.ok((await S()).labels > 0);
     });
+    await step(`${label}: parking button shows parkings, panel has free/total places`, async () => {
+      await page.evaluate(() => { window.__pasibus.map.setView([52.2297, 21.0122], 12, { animate: false }); });
+      assert.equal(await page.locator('.pk').count(), 0);
+      await page.click('#t-park'); await page.waitForSelector('.pk'); await page.waitForTimeout(300);
+      assert.equal(await page.getAttribute('#t-park', 'aria-pressed'), 'true');
+      assert.ok(await page.locator('#t-park svg.pico').count() === 1, 'parking icon');
+      assert.ok((await page.locator('.pk').count()) >= 5);
+      await page.evaluate(() => window.__pasibus.selectPark(window.__pasibus.state.parkings.find((p) => p.name.includes('Stadion')).id));
+      const panel = await page.evaluate(() => ({ hidden: document.getElementById('ppanel').hidden, name: document.getElementById('pp-name').textContent,
+        free: document.getElementById('pp-free').textContent, of: document.getElementById('pp-of').textContent, rows: document.getElementById('pp-rows').textContent }));
+      assert.ok(!panel.hidden); assert.match(panel.name, /Stadion/);
+      assert.equal(panel.free, '234'); assert.match(panel.of, /wolnych miejsc z 506/); // free 233+0+1, capacity 500+2+4
+      assert.match(panel.rows, /Standardowe233 wolnych z 500/); assert.match(panel.rows, /Cennik/);
+      await page.screenshot({ path: `${SHOTS}/pasibus-${label}-parking.png` });
+    });
+    await step(`${label}: parking and vehicle panels are mutually exclusive`, async () => {
+      await page.evaluate(() => { const { state, select } = window.__pasibus; select([...state.markers.keys()][0]); });
+      let s = await page.evaluate(() => ({ p: document.getElementById('ppanel').hidden, v: document.getElementById('panel').hidden }));
+      assert.ok(s.p && !s.v);
+      await page.evaluate(() => { const { state, selectPark } = window.__pasibus; selectPark(state.parkings[0].id); });
+      s = await page.evaluate(() => ({ p: document.getElementById('ppanel').hidden, v: document.getElementById('panel').hidden }));
+      assert.ok(!s.p && s.v);
+    });
+    await step(`${label}: parking button off hides markers and panel`, async () => {
+      await page.click('#t-park'); await page.waitForTimeout(200);
+      assert.equal(await page.locator('.pk').count(), 0);
+      assert.ok(await page.evaluate(() => document.getElementById('ppanel').hidden));
+    });
     await step(`${label}: no horizontal overflow`, async () => {
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
     });
@@ -109,6 +137,18 @@ function findChromium() {
     await page.waitForFunction(() => document.getElementById('status').className === 'err');
     assert.match(await page.textContent('#status-text'), /Brak danych/);
   });
-  await browser.close(); server.close(); bad.close();
+  const half = createServer({ env: { MOCK: '1' } });
+  half.on('request', () => {});
+  await new Promise((r) => half.listen(0, r));
+  const pg = await (await browser.newContext()).newPage();
+  await pg.route('**/api/parking', (route) => route.fulfill({ status: 502, contentType: 'application/json', body: '{"error":"HTTP 403 (forbidden)"}' }));
+  await pg.goto(`http://localhost:${half.address().port}/`);
+  await step('parking API failure is reported, vehicles stay visible', async () => {
+    await pg.waitForFunction(() => window.__pasibus.state.markers.size > 50);
+    await pg.click('#t-park');
+    await pg.waitForFunction(() => /parkingi: brak danych/.test(document.getElementById('status-text').textContent));
+    assert.ok(await pg.evaluate(() => window.__pasibus.state.markers.size > 50));
+  });
+  await browser.close(); server.close(); bad.close(); half.close();
   console.log(`\n${results.length} checks passed`);
 })().catch((e) => { console.error('FAIL', e); process.exit(1); });

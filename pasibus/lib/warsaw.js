@@ -2,6 +2,7 @@
 // Warsaw Open Data: "Lokalizacja pojazdów komunikacji miejskiej"
 // New open-data portal API (dane.um.warszawa.pl): POST JSON {"type": 1|2}, token in the Authorization header.
 const ENDPOINT = 'https://dane.um.warszawa.pl/api/action/get_ztm_lokalizacja_pojazdow';
+const PARKING_ENDPOINT = 'https://dane.um.warszawa.pl/api/action/get_m_parkingi_wolne_miejsca';
 const TYPES = { 1: 'bus', 2: 'tram' };
 const MAX_AGE_MS = 5 * 60 * 1000;
 const BBOX = { minLat: 51.9, maxLat: 52.6, minLon: 20.5, maxLon: 21.6 };
@@ -55,7 +56,17 @@ function errorText(b) {
   return (typeof e === 'string' ? e : e && (e.message || JSON.stringify(e))) || b.message || b.detail || (typeof b.result === 'string' ? b.result : '');
 }
 
-async function fetchOnce(url, fetchImpl, init) {
+// Pull the list out of the reply. Vehicles: bare array (new API) or {result: [...]}.
+// Parkings: the docs show {"Parkings": [...]}; also accept a bare array or the list under result.
+const extractVehicles = (b) => (Array.isArray(b) ? b : Array.isArray(b && b.result) ? b.result : null);
+const extractParkings = (b) => {
+  if (Array.isArray(b)) return b;
+  if (!b || typeof b !== 'object') return null;
+  for (const c of [b.Parkings, b.parkings, b.result && b.result.Parkings, b.result]) if (Array.isArray(c)) return c;
+  return null;
+};
+
+async function fetchOnce(url, fetchImpl, init, extract) {
   let res;
   try {
     res = await fetchImpl(url, { signal: AbortSignal.timeout(TIMEOUT_MS), ...init });
@@ -69,43 +80,84 @@ async function fetchOnce(url, fetchImpl, init) {
     throw new Error(`HTTP ${res.status}${why ? ` (${why})` : ''}`);
   }
   const body = await res.json();
-  // The new API returns a bare array; the old one wrapped it as {result: [...]}. Accept both.
-  if (Array.isArray(body)) return body;
-  if (!Array.isArray(body.result)) {
-    // Show the shape of what we got (keys + a short preview, never headers/tokens) so odd replies can be diagnosed.
-    const preview = JSON.stringify(body).slice(0, 160);
-    throw new Error(errorText(body) || `Unexpected API response: ${preview}`);
+  const list = extract(body);
+  if (!list) {
+    // Show the shape of what we got (a short preview, never headers/tokens) so odd replies can be diagnosed.
+    throw new Error(errorText(body) || `Unexpected API response: ${JSON.stringify(body).slice(0, 160)}`);
   }
-  return body.result;
+  return list;
 }
 
-async function fetchType(type, apiKey, fetchImpl, upstream) {
-  // Relay mode (Cloudflare Worker): GET with a shared secret; the Warsaw token lives in the Worker.
-  // Direct mode: POST to the Warsaw API. Token format in the docs is ambiguous ("token uzytkownika"),
-  // so try the raw token first and "Bearer <token>" if the API answers 401/403.
+// Relay mode (Cloudflare Worker): GET with a shared secret; the Warsaw token lives in the Worker.
+// Direct mode: POST to the Warsaw API. Token format in the docs is ambiguous ("token uzytkownika"),
+// so try the raw token first and "Bearer <token>" if the API answers 401/403.
+async function requestList({ endpoint, jsonBody, relayQuery, extract, apiKey, fetchImpl, upstream }) {
   const attempts = upstream
-    ? [{ url: `${upstream.url}${upstream.url.includes('?') ? '&' : '?'}type=${type}`, init: { headers: { 'x-proxy-secret': upstream.secret } } }]
+    ? [{ url: `${upstream.url}${upstream.url.includes('?') ? '&' : '?'}${relayQuery}`, init: { headers: { 'x-proxy-secret': upstream.secret } } }]
     : [apiKey, `Bearer ${apiKey}`].map((auth) => ({
-        url: ENDPOINT,
-        init: { method: 'POST', headers: { Authorization: auth, 'Content-Type': 'application/json' }, body: JSON.stringify({ type }) },
+        url: endpoint,
+        init: { method: 'POST', headers: { Authorization: auth, ...(jsonBody ? { 'Content-Type': 'application/json' } : {}) }, ...(jsonBody ? { body: JSON.stringify(jsonBody) } : {}) },
       }));
-  let raw, lastErr;
+  let lastErr;
   for (const a of attempts) {
     try {
       try {
-        raw = await fetchOnce(a.url, fetchImpl, a.init);
+        return await fetchOnce(a.url, fetchImpl, a.init, extract);
       } catch (e) {
         // One retry for quick network errors/5xx; not for timeouts (already waited long), 4xx or auth errors.
         if (/timeout|aborted/i.test(e.message) || /^HTTP 4/.test(e.message) || /token|klucz|apikey|autoryz|unauthor|forbidden/i.test(e.message)) throw e;
-        raw = await fetchOnce(a.url, fetchImpl, a.init);
+        return await fetchOnce(a.url, fetchImpl, a.init, extract);
       }
-      return normalize(raw, type);
     } catch (e) {
       lastErr = e;
       if (!/^HTTP (401|403)|token|unauthor|forbidden/i.test(e.message)) break;
     }
   }
   throw lastErr;
+}
+
+async function fetchType(type, apiKey, fetchImpl, upstream) {
+  const raw = await requestList({ endpoint: ENDPOINT, jsonBody: { type }, relayQuery: `type=${type}`, extract: extractVehicles, apiKey, fetchImpl, upstream });
+  return normalize(raw, type);
+}
+
+// ---- Parkings (dataset "Wolne miejsca parkingowe") ----
+const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+function normalizeParkings(raw) {
+  const out = [];
+  for (const r of raw) {
+    const lat = Number(r.latitude), lon = Number(r.longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+    if (lat < BBOX.minLat || lat > BBOX.maxLat || lon < BBOX.minLon || lon > BBOX.maxLon) continue;
+    const cap = { standard: 0, disabled: 0, electric: 0 };
+    for (const l of Array.isArray(r.total_places) ? r.total_places : []) {
+      cap.standard += num(l.standard); cap.disabled += num(l.disabled); cap.electric += num(l.electric);
+    }
+    const f = r.free_places_total || {};
+    const car = (Array.isArray(r.tariffs) ? r.tariffs : []).find((t) => /osobow|car/i.test(t.VehicleType || ''));
+    out.push({
+      id: `p-${lat.toFixed(5)}-${lon.toFixed(5)}`,
+      name: String(r.name || r.start_date || 'Parking').trim(),
+      address: String(r.adress || r.address || '').trim(),
+      lat, lon,
+      category: r.parkingCategory || '',
+      manager: r.manager || '',
+      free: { standard: num(f.public), disabled: num(f.disabled), electric: num(f.electric) },
+      capacity: cap,
+      hours: Array.isArray(r.opening_hours) && r.opening_hours[0] ? r.opening_hours[0] : null,
+      payment: r.acceptedPaymentMethod || '',
+      security: r.additionalSecurity || '',
+      phone: r.operatorTelephone || r.managerTelephone || '',
+      carTariff: car && Array.isArray(car.Prices) ? car.Prices.map((p) => ({ hours: num(p.StayLength), price: num(p.StayPrice) })) : [],
+    });
+  }
+  return out;
+}
+
+async function fetchParkings({ apiKey, fetchImpl = fetch, upstream }) {
+  if (!apiKey && !upstream) throw new Error('Missing WARSAW_API_KEY');
+  const raw = await requestList({ endpoint: PARKING_ENDPOINT, relayQuery: 'resource=parking', extract: extractParkings, apiKey, fetchImpl, upstream });
+  return normalizeParkings(raw);
 }
 
 async function fetchVehicles({ apiKey, types = [1, 2], fetchImpl = fetch, upstream }) {
@@ -120,4 +172,4 @@ async function fetchVehicles({ apiKey, types = [1, 2], fetchImpl = fetch, upstre
   return { vehicles, errors };
 }
 
-module.exports = { fetchVehicles, normalize, TYPES };
+module.exports = { fetchVehicles, fetchParkings, normalize, normalizeParkings, TYPES };

@@ -17,6 +17,9 @@
   <div class="chips" role="group" aria-label="Typ pojazdu">
     <button id="t-bus" class="chip on" aria-pressed="true">Autobusy</button>
     <button id="t-tram" class="chip on" aria-pressed="true">Tramwaje</button>
+    <button id="t-park" class="chip" aria-pressed="false" title="Wolne miejsca parkingowe">
+      <svg class="pico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="5" fill="currentColor"/><path d="M9 18V6h4.2a3.8 3.8 0 0 1 0 7.6H9" fill="none" stroke="var(--picon-bg,#242428)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Parking
+    </button>
   </div>
 </header>
 
@@ -30,6 +33,16 @@
     <div id="p-details"></div>
   </div>
   <button id="follow" class="chip">Śledź</button>
+</aside>
+
+<aside id="ppanel" hidden>
+  <button id="pclose" aria-label="Zamknij parking">×</button>
+  <div class="p-head">
+    <div class="p-badge" id="pp-badge">P</div>
+    <div class="meta"><div id="pp-name" class="p-name"></div><div id="pp-addr" class="p-addr"></div></div>
+  </div>
+  <div class="p-free"><span id="pp-free" class="p-num"></span><span class="p-of" id="pp-of"></span></div>
+  <dl id="pp-rows" class="p-rows"></dl>
 </aside>
 
 <script src="vendor/leaflet.js"></script>
