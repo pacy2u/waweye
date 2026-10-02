@@ -55,4 +55,27 @@ function mockIncidents() {
   ];
 }
 
-module.exports = { mockVehicles, mockParkings, mockIncidents };
+// Fleet records for the mock vehicles (fleet numbers 1000..1119), in the shape of the "Pojazdy transportu publicznego" API.
+function mockFleet() {
+  const busy = [], tramwaje = [];
+  for (let i = 0; i < 120; i++) {
+    const tram = i % 4 === 0;
+    (tram ? tramwaje : busy).push({
+      nazwaSkroconaOperatora: tram ? 'TW' : 'MZA', nazwaOperatora: tram ? 'Tramwaje Warszawskie Sp. z o.o.' : 'Miejskie Zakłady Autobusowe Sp. z o.o.',
+      schematMalowania: 'ZTM', kolorPojazdu: 'RAL 1003+3020', kolorTapicerki: 'czerwony ZTM-Pocztówka', rokProdukcji: 2008 + (i % 15),
+      numerTaborowy: String(1000 + i), trakcja: tram ? 'Tram' : 'Bus', idMarki: tram ? 85 : 1, nazwaZajezdni: tram ? 'R-5 "Annopol"' : 'Redutowa',
+      ...(tram ? {} : { numerRejestracyjny: 'WZ ' + (1000 + i) + 'M' }),
+    });
+  }
+  return {
+    busy, tramwaje, metro: [], kolej: [], markiMetro: [], markiKolej: [],
+    markiBus: [{ idMarki: 1, marka: 'Solaris', typ: 'Urbino', wersja: '12', wariant: 'IV', producent: 'Solaris Bus & Coach S.A.', dlugosc: 11947, szerokosc: 2550,
+      katWielkosci: 'MAXI (12m)', liczMiejscSiedzacychTab: 30, liczMiejscStojacychTab: 74, liczMiejscTab: 104, liczMiejscWozekInwalid: 1, liczMiejscWozekDziec: 1,
+      podloga: 'LE', klimatyzacja: true, rodzajZasilania: 'Spalinowy', zasilanie: 'ON', platnosc: 'karta płatnicza + blik' }],
+    markiTramwaje: [{ idMarki: 85, marka: 'Konstal', typ: '105N', wersja: null, wariant: 'i', producent: 'Konstal', dlugosc: 13500, szerokosc: 2400,
+      katWielkosci: '15m', liczMiejscSiedzacychTab: 18, liczMiejscStojacychTab: 107, liczMiejscTab: 125, liczMiejscWozekInwalid: 0, liczMiejscWozekDziec: 1,
+      podloga: 'HF', klimatyzacja: false, platnosc: 'karta płatnicza + blik' }],
+  };
+}
+
+module.exports = { mockFleet, mockVehicles, mockParkings, mockIncidents };

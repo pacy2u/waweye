@@ -58,6 +58,15 @@ function findChromium() {
       assert.equal(fills.sel, '#FC4C02'); assert.ok(fills.other < 1);
       await page.screenshot({ path: `${SHOTS}/pasibus-${label}-selected.png` });
     });
+    await step(`${label}: vehicle panel shows fleet details from the public-transport-vehicles dataset`, async () => {
+      await page.waitForFunction(() => document.querySelectorAll('#p-fleet dt').length > 3);
+      const txt = await page.textContent('#p-fleet');
+      for (const t of ['Model', 'Rok produkcji', 'Operator', 'Zajezdnia', 'Miejsca', 'Klimatyzacja']) assert.ok(txt.includes(t), 'missing ' + t + ': ' + txt);
+      const m = await page.evaluate(() => { const { state } = window.__pasibus; return state.markers.get(state.selected).v.type; });
+      assert.match(txt, m === 'bus' ? /Solaris Urbino 12 IV/ : /Konstal 105N i/);
+      assert.ok(await page.isVisible('#p-fleet'));
+      await page.screenshot({ path: `${SHOTS}/pasibus-${label}-fleet.png` });
+    });
     await step(`${label}: selection survives refresh`, async () => {
       const id = (await S()).sel; const t0 = await page.evaluate(() => window.__pasibus.state.lastOk); await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange'))); await page.evaluate(() => { Object.defineProperty(document, 'hidden', { value: false, configurable: true }); document.dispatchEvent(new Event('visibilitychange')); }); await page.waitForFunction((t) => window.__pasibus.state.lastOk > t, t0);
       await page.waitForTimeout(100); assert.equal((await S()).sel, id);

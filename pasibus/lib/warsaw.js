@@ -3,6 +3,7 @@
 // New open-data portal API (dane.um.warszawa.pl): POST JSON {"type": 1|2}, token in the Authorization header.
 const ENDPOINT = 'https://dane.um.warszawa.pl/api/action/get_ztm_lokalizacja_pojazdow';
 const INCIDENTS_ENDPOINT = 'https://dane.um.warszawa.pl/api/action/get_bin_utrudnienia_drogowe';
+const FLEET_ENDPOINT = 'https://dane.um.warszawa.pl/api/action/get_ztm_pojazdy';
 const PARKING_ENDPOINT = 'https://dane.um.warszawa.pl/api/action/get_m_parkingi_wolne_miejsca';
 const TYPES = { 1: 'bus', 2: 'tram' };
 const MAX_AGE_MS = 5 * 60 * 1000;
@@ -205,6 +206,49 @@ async function fetchIncidents({ apiKey, fetchImpl = fetch, upstream }) {
   return normalizeIncidents(raw);
 }
 
+// ---- Fleet details (dataset "Pojazdy transportu publicznego") ----
+// Reply: {busy, tramwaje, metro, kolej, markiBus, markiTramwaje, ...}. Vehicles reference a brand by idMarki.
+// We keep buses and trams only and key everything by "<bus|tram>:<fleet number>" / "<bus|tram>:<brand id>".
+const extractFleet = (b) => {
+  const o = b && !Array.isArray(b) && typeof b === 'object' && b.result && typeof b.result === 'object' && !Array.isArray(b.result) ? b.result : b;
+  return o && typeof o === 'object' && (Array.isArray(o.busy) || Array.isArray(o.tramwaje)) ? o : null;
+};
+const str = (v) => (v == null ? '' : String(v).trim());
+const optNum = (v) => (v != null && v !== '' && Number.isFinite(Number(v)) ? Number(v) : null);
+
+function normalizeFleet(raw) {
+  const vehicles = {}, brands = {};
+  for (const [type, vKey, bKey] of [['bus', 'busy', 'markiBus'], ['tram', 'tramwaje', 'markiTramwaje']]) {
+    for (const r of Array.isArray(raw[vKey]) ? raw[vKey] : []) {
+      const number = str(r.numerTaborowy);
+      if (!number) continue;
+      vehicles[`${type}:${number}`] = {
+        operator: str(r.nazwaOperatora), operatorShort: str(r.nazwaSkroconaOperatora), depot: str(r.nazwaZajezdni),
+        year: optNum(r.rokProdukcji), plate: str(r.numerRejestracyjny), brand: optNum(r.idMarki),
+        paint: str(r.schematMalowania), color: str(r.kolorPojazdu), upholstery: str(r.kolorTapicerki),
+      };
+    }
+    for (const r of Array.isArray(raw[bKey]) ? raw[bKey] : []) {
+      if (r.idMarki == null) continue;
+      brands[`${type}:${r.idMarki}`] = {
+        make: str(r.marka), model: [r.typ, r.wersja, r.wariant].map(str).filter(Boolean).join(' '), producer: str(r.producent),
+        length: optNum(r.dlugosc), width: optNum(r.szerokosc), sizeClass: str(r.katWielkosci),
+        seats: optNum(r.liczMiejscSiedzacychTab), standing: optNum(r.liczMiejscStojacychTab), capacity: optNum(r.liczMiejscTab),
+        wheelchair: optNum(r.liczMiejscWozekInwalid), stroller: optNum(r.liczMiejscWozekDziec),
+        floor: str(r.podloga), ac: typeof r.klimatyzacja === 'boolean' ? r.klimatyzacja : null,
+        power: [r.rodzajZasilania, r.zasilanie].map(str).filter(Boolean).join(' / '), payment: str(r.platnosc),
+      };
+    }
+  }
+  return { vehicles, brands };
+}
+
+async function fetchFleet({ apiKey, fetchImpl = fetch, upstream }) {
+  if (!apiKey && !upstream) throw new Error('Missing WARSAW_API_KEY');
+  const raw = await requestList({ endpoint: FLEET_ENDPOINT, relayQuery: 'resource=fleet', extract: extractFleet, apiKey, fetchImpl, upstream });
+  return normalizeFleet(raw);
+}
+
 async function fetchVehicles({ apiKey, types = [1, 2], fetchImpl = fetch, upstream }) {
   if (!apiKey && !upstream) throw new Error('Missing WARSAW_API_KEY');
   const settled = await Promise.allSettled(types.map((t) => fetchType(t, apiKey, fetchImpl, upstream)));
@@ -218,4 +262,4 @@ async function fetchVehicles({ apiKey, types = [1, 2], fetchImpl = fetch, upstre
   return { vehicles, errors, received };
 }
 
-module.exports = { fetchVehicles, fetchParkings, fetchIncidents, normalize, normalizeParkings, normalizeIncidents, TYPES };
+module.exports = { fetchVehicles, fetchParkings, fetchIncidents, fetchFleet, normalize, normalizeFleet, normalizeParkings, normalizeIncidents, TYPES };

@@ -11,7 +11,7 @@ try {
   }
 } catch {}
 
-const { vehiclesHandler, parkingHandler, incidentsHandler } = require('./lib/handler');
+const { vehiclesHandler, parkingHandler, incidentsHandler, fleetHandler } = require('./lib/handler');
 const PUBLIC = path.join(__dirname, 'public');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.json': 'application/json' };
 
@@ -20,6 +20,7 @@ function createServer(opts = {}) {
     const { pathname } = new URL(req.url, 'http://x');
     if (pathname === '/api/vehicles') return vehiclesHandler(req, res, opts);
     if (pathname === '/api/parking') return parkingHandler(req, res, opts);
+    if (pathname === '/api/fleet') return fleetHandler(req, res, opts);
     if (pathname === '/api/incidents') return incidentsHandler(req, res, opts);
     const file = path.normalize(path.join(PUBLIC, pathname === '/' ? 'index.html' : pathname));
     if (!file.startsWith(PUBLIC)) { res.statusCode = 403; return res.end(); }

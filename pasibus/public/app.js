@@ -78,7 +78,62 @@
     $('p-type').textContent = (v.type === 'bus' ? 'Autobus' : 'Tramwaj') + ' ' + v.line;
     $('p-details').textContent = `Pojazd ${v.vehicle}${v.brigade ? ' · brygada ' + v.brigade : ''}${v.time ? ' · ' + new Date(v.time).toLocaleTimeString('pl-PL') : ''}${isStale(v) ? ` · dane sprzed ${Math.round((state.lastOk - v.time) / 60000)} min` : ''}`;
     for (const x of state.markers.values()) if (x.label) { x.label.remove(); x.label = null; }
+    loadFleet();
+    fillFleet(v);
     refresh();
+  }
+
+  // ---- Fleet details (dataset "Pojazdy transportu publicznego"), fetched once on first selection ----
+  const fleetInfo = (v) => {
+    const f = state.fleet; if (!f) return null;
+    const keys = [v.vehicle, v.vehicle.replace(/^0+/, '')].map((n) => `${v.type}:${n}`);
+    const rec = keys.map((k) => f.vehicles[k]).find(Boolean);
+    return rec ? { rec, brand: rec.brand != null ? f.brands[`${v.type}:${rec.brand}`] : null } : null;
+  };
+  const dim = (mm) => (mm ? (mm / 1000).toFixed(2).replace('.', ',') + ' m' : '');
+  const seatsTxt = (b) => [b.seats != null && `${b.seats} siedzących`, b.standing != null && `${b.standing} stojących`, b.capacity != null && `razem ${b.capacity}`].filter(Boolean).join(' · ');
+  const FLOOR = { LE: 'niskopodłogowy (LE)', LF: 'niskopodłogowy (LF)', HF: 'wysokopodłogowy (HF)' };
+
+  function fillFleet(v) {
+    const dl = $('p-fleet'); dl.textContent = '';
+    if (state.selected !== v.id) return;
+    const info = fleetInfo(v);
+    if (!info) {
+      if (!state.fleet && !state.fleetError) row(dl, 'Dane o pojeździe', 'ładowanie…');
+      else if (state.fleetError) row(dl, 'Dane o pojeździe', 'brak (' + state.fleetError + ')');
+      else row(dl, 'Dane o pojeździe', 'brak w zbiorze dla numeru ' + v.vehicle);
+      dl.hidden = !dl.children.length; return;
+    }
+    const { rec, brand: b } = info;
+    if (b) row(dl, 'Model', [b.make, b.model].filter(Boolean).join(' '));
+    row(dl, 'Rok produkcji', rec.year); row(dl, 'Nr rejestracyjny', rec.plate);
+    row(dl, 'Operator', rec.operator); row(dl, 'Zajezdnia', rec.depot);
+    if (b) {
+      row(dl, 'Producent', b.producer); row(dl, 'Miejsca', seatsTxt(b));
+      row(dl, 'Długość × szer.', b.length ? `${dim(b.length)}${b.width ? ' × ' + dim(b.width) : ''}` : ''); row(dl, 'Klasa', b.sizeClass);
+      row(dl, 'Podłoga', FLOOR[b.floor] || b.floor);
+      if (b.ac != null) row(dl, 'Klimatyzacja', b.ac ? 'tak' : 'nie');
+      row(dl, 'Napęd', b.power); row(dl, 'Płatność', b.payment);
+      if (b.wheelchair != null) row(dl, 'Miejsca na wózek', b.wheelchair + (b.stroller ? ` (+${b.stroller} dziecięcy)` : ''));
+    }
+    row(dl, 'Malowanie', [rec.paint, rec.color].filter(Boolean).join(' · ')); row(dl, 'Tapicerka', rec.upholstery);
+    dl.hidden = !dl.children.length;
+  }
+
+  async function loadFleet() {
+    if (state.fleet || state.fleetLoading) return;
+    state.fleetLoading = true; state.fleetError = null;
+    try {
+      const res = await fetch('/api/fleet');
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || 'HTTP ' + res.status);
+      state.fleet = body; state.fleetError = null;
+    } catch (e) {
+      state.fleetError = e.message; // shown in the panel; loadFleet retries at the next selection
+    }
+    state.fleetLoading = false;
+    const m = state.selected && state.markers.get(state.selected);
+    if (m) fillFleet(m.v);
   }
   function deselect() {
     state.selected = null; state.follow = false; $('follow').classList.remove('on');

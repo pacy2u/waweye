@@ -7,6 +7,7 @@ Aplikacja webowa (komputer + telefon) pokazująca na mapie Warszawy w czasie rze
 
 ## Stan (działa na produkcji: https://pasibus.vercel.app)
 - **Pojazdy** (autobusy + tramwaje): odświeżanie co 10 s, płynny ruch, zoom, wybór pojazdu (pomarańczowy pierścień, reszta wyszarzona), panel szczegółów, „Śledź”, filtry typu i linii, numery linii od zoomu 14.
+- **Dane o pojeździe**: po kliknięciu panel dociąga `/api/fleet` (zbiór `get_ztm_pojazdy`, raz na sesję) i łączy po `numerTaborowy` = `vehicle` + typ (autobus/tramwaj). Format odpowiedzi live NIE sprawdzony (brak dostępu do API z sesji) – jeśli panel pokazuje „brak w zbiorze”, porównaj numery. Wymaga ponownego wklejenia `worker/index.js` w Cloudflare.
 - **Parking** (przycisk z ikoną P): znaczniki „P <wolne>” (zielony/czerwony), panel: wolne z pojemności, podział standard/niepełnosprawni/elektryczne, godziny, cennik, telefon. Odświeżanie 60 s.
 - **Utrudnienia** (przycisk z ikoną ostrzeżenia): punkty i linie, status trwa/zaplanowane/zakończone, panel z treścią i linkiem do infoulice. Odświeżanie 60 s.
 - Panele pojazdu/parkingu/utrudnienia wzajemnie się wykluczają.
