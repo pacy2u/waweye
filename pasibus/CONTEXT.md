@@ -72,5 +72,8 @@ Pełna analiza i plan rozwoju w fazach: `ROADMAPA.md`.
 2. **Metro** – brak w zbiorze pojazdów; opcje: statyczne linie M1/M2 i stacje albo osobny zbiór na żywo (nie znaleziono).
 3. Drobne: opcjonalny filtr starych utrudnień; grupowanie gęstych znaczników/etykiet; ewentualnie ukrycie zakończonych utrudnień.
 
+## Wideo promocyjne
+`wideo-promocyjne/` – 30 s, 1080p60, render z `kompozycja.html` (Chromium klatka po klatce + ffmpeg), muzyka syntezowana w `muzyka.js`, dane z migawek produkcji. Instrukcja w `wideo-promocyjne/README.md`. Folder nie trafia na Vercel (`.vercelignore`).
+
 ## Historia (PR-y w `pacy2u/tst`)
 #1–#2 aplikacja + poprawki Vercel (region fra1) · #3 przyczyna błędu sieci w komunikatach · #4–#5 Worker Cloudflare · #6 treść błędu API · #7 przejście na nowe API (`Authorization`) · #8 timeout 25 s, podgląd odpowiedzi · #9 goła tablica + strefa czasowa · #10–#11 Parking (`carParks`) · #12 Utrudnienia · #13 licznik pojazdów liczony przy wyświetlaniu · #14 CONTEXT.md + CLAUDE.md · #15–#16 raport z testów eksploracyjnych · #17 poprawki z raportu · #18 dane o taborze · #19 klikanie pojazdów przy włączonych utrudnieniach (jeden canvas) · #20 roadmapa i Faza 0: CI, monitoring, automatyczne wdrażanie Workera (działa od 2026-10-02), pauza w ukrytej karcie · gałąź `fix/stabilny-test-e2e-klikania-pojazdow`: stabilny krok e2e klikania pojazdów (zamrożone dane na czas klikania), usunięty `README1st`.
