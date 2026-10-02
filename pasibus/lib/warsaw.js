@@ -29,8 +29,20 @@ function normalize(raw, type, now = Date.now()) {
 
 const TIMEOUT_MS = 12000;
 
+// Node's fetch only says "fetch failed"; the real reason (ECONNRESET, ENOTFOUND, cert...) is in err.cause.
+function describe(err) {
+  const c = err && err.cause;
+  const detail = c && (c.code || c.message);
+  return detail && !String(err.message).includes(detail) ? `${err.message} (${detail})` : err.message;
+}
+
 async function fetchOnce(url, fetchImpl) {
-  const res = await fetchImpl(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+  let res;
+  try {
+    res = await fetchImpl(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+  } catch (e) {
+    throw new Error(describe(e));
+  }
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const body = await res.json();
   if (!Array.isArray(body.result)) {

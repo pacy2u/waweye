@@ -74,3 +74,8 @@ test('retries once on timeout, but not on bad key', async () => {
   await assert.rejects(fetchVehicles({ apiKey: 'x', types: [1], fetchImpl: badKey }));
   assert.equal(bad, 1);
 });
+
+test('network errors expose the underlying cause', async () => {
+  const f = async () => { const e = new TypeError('fetch failed'); e.cause = { code: 'ECONNRESET' }; throw e; };
+  await assert.rejects(fetchVehicles({ apiKey: 'k', types: [1], fetchImpl: f }), /fetch failed \(ECONNRESET\)/);
+});
