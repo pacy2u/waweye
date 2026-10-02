@@ -157,3 +157,19 @@ test('timeouts are not retried; odd responses are shown with a preview', async (
   const odd = async () => ({ ok: true, json: async () => ({ success: true, result: null }) });
   await assert.rejects(fetchVehicles({ apiKey: 'k', types: [2], fetchImpl: odd }), /Unexpected API response: \{"success":true,"result":null\}/);
 });
+
+test('accepts a bare array response (new API) as well as {result: [...]}', async () => {
+  const t = new Date(Date.now() + 2 * 3600e3).toISOString().slice(0, 19).replace('T', ' ');
+  const bare = async () => ({ ok: true, json: async () => [row({ Time: t })] });
+  const r = await fetchVehicles({ apiKey: 'k', types: [1], fetchImpl: bare });
+  assert.equal(r.vehicles.length, 1);
+});
+
+test('Warsaw local time is converted correctly in summer and winter', () => {
+  const { normalize } = require('../lib/warsaw');
+  const summer = normalize([row({ Time: '2026-07-01 12:00:00' })], 1, Date.parse('2026-07-01T10:00:30Z'));
+  assert.equal(summer[0].time, Date.parse('2026-07-01T10:00:00Z')); // CEST = UTC+2
+  const winter = normalize([row({ Time: '2026-01-15 12:00:00' })], 1, Date.parse('2026-01-15T11:00:30Z'));
+  assert.equal(winter.length, 1);
+  assert.equal(winter[0].time, Date.parse('2026-01-15T11:00:00Z')); // CET = UTC+1
+});
