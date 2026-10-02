@@ -1,8 +1,8 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { normalize, fetchVehicles, fetchParkings, normalizeParkings, fetchIncidents, normalizeIncidents } = require('../lib/warsaw');
-const { vehiclesHandler, parkingHandler, incidentsHandler } = require('../lib/handler');
+const { normalize, fetchVehicles, fetchParkings, normalizeParkings, fetchIncidents, normalizeIncidents, fetchFleet, normalizeFleet } = require('../lib/warsaw');
+const { vehiclesHandler, parkingHandler, incidentsHandler, fleetHandler } = require('../lib/handler');
 
 const NOW = Date.parse('2026-10-01T12:00:30+02:00');
 const row = (o = {}) => ({ Lines: '175', Lon: 21.0, Lat: 52.2, VehicleNumber: '1234', Brigade: '3', Time: '2026-10-01 12:00:00', ...o });
@@ -335,11 +335,63 @@ test('handler: rejects invalid types with 400 and non-GET methods with 405', asy
   assert.equal(mixed.status, 400);
   const dup = await call('/api/vehicles?types=1,1', { env: { MOCK: '1' } });
   assert.equal(dup.status, 200);
-  for (const handler of [vehiclesHandler, parkingHandler, incidentsHandler]) {
+  for (const handler of [vehiclesHandler, parkingHandler, incidentsHandler, fleetHandler]) {
     const r = await new Promise((resolve) => {
       const res = { headers: {}, statusCode: 200, setHeader(k, v) { this.headers[k] = v; }, end(b) { resolve({ status: this.statusCode, headers: this.headers, body: JSON.parse(b) }); } };
       handler({ url: '/x', method: 'POST' }, res, { env: { MOCK: '1' } });
     });
     assert.equal(r.status, 405); assert.equal(r.headers.Allow, 'GET, HEAD');
   }
+});
+
+// ---- Fleet details ("Pojazdy transportu publicznego") ----
+const FLEET_DOC = {
+  busy: [{ nazwaSkroconaOperatora: 'KMŁ', schematMalowania: 'ZTM', rokProdukcji: 2016, numerTaborowy: '761', nazwaOperatora: 'Komunikacja Miejska Łomianki Sp. z o.o.',
+    trakcja: 'Bus', numerRejestracyjny: 'WZ 2961M', idMarki: 74, kolorPojazdu: 'RAL 1003+3020', kolorTapicerki: 'niebieski', nazwaZajezdni: 'Rolnicza' }],
+  tramwaje: [{ nazwaSkroconaOperatora: 'TW', rokProdukcji: 2010, numerTaborowy: '3137', nazwaOperatora: 'Tramwaje Warszawskie Sp. z o.o.', trakcja: 'Tram', idMarki: 85, nazwaZajezdni: 'R-5 "Annopol"' }],
+  metro: [{ numerTaborowy: '6530', idMarki: 142 }], kolej: [],
+  markiBus: [{ idMarki: 74, marka: 'Jelcz', typ: 'M121', wersja: 'I', wariant: 'I4', producent: 'Zakłady Samochodowe JELCZ S.A.', dlugosc: 11947, szerokosc: 2500,
+    liczMiejscSiedzacychTab: 30, liczMiejscStojacychTab: 74, liczMiejscTab: 104, klimatyzacja: false, rodzajZasilania: 'Spalinowy', zasilanie: 'ON', podloga: 'LE', liczMiejscWozekInwalid: 1 }],
+  markiTramwaje: [{ idMarki: 85, marka: 'Konstal', typ: '105N', wersja: null, wariant: 'i', liczMiejscTab: 125, klimatyzacja: null }],
+};
+
+test('fleet: normalize keys vehicles and brands by type, drops metro/rail', () => {
+  const { vehicles, brands } = normalizeFleet(FLEET_DOC);
+  assert.deepEqual(Object.keys(vehicles).sort(), ['bus:761', 'tram:3137']);
+  assert.equal(vehicles['bus:761'].plate, 'WZ 2961M'); assert.equal(vehicles['bus:761'].year, 2016); assert.equal(vehicles['bus:761'].brand, 74);
+  assert.equal(vehicles['tram:3137'].plate, ''); assert.equal(vehicles['tram:3137'].depot, 'R-5 "Annopol"');
+  assert.equal(brands['bus:74'].make, 'Jelcz'); assert.equal(brands['bus:74'].model, 'M121 I I4'); assert.equal(brands['bus:74'].seats, 30); assert.equal(brands['bus:74'].ac, false);
+  assert.equal(brands['tram:85'].model, '105N i'); assert.equal(brands['tram:85'].ac, null); assert.equal(brands['tram:85'].length, null);
+});
+
+test('fleet: direct POST without body, relay uses resource=fleet, wrong shape gives a readable error', async () => {
+  let seen;
+  const f = async (url, opts) => { seen = { url, opts }; return { ok: true, json: async () => FLEET_DOC }; };
+  const r = await fetchFleet({ apiKey: 'TOK', fetchImpl: f });
+  assert.equal(seen.url, 'https://dane.um.warszawa.pl/api/action/get_ztm_pojazdy'); assert.equal(seen.opts.headers.Authorization, 'TOK'); assert.equal(seen.opts.body, undefined);
+  assert.ok(r.vehicles['bus:761']);
+  await fetchFleet({ fetchImpl: f, upstream: { url: 'https://w.dev', secret: 's' } });
+  assert.equal(seen.url, 'https://w.dev?resource=fleet'); assert.equal(seen.opts.headers['x-proxy-secret'], 's');
+  const wrapped = await fetchFleet({ apiKey: 'k', fetchImpl: async () => ({ ok: true, json: async () => ({ result: FLEET_DOC }) }) });
+  assert.ok(wrapped.vehicles['tram:3137']);
+  await assert.rejects(fetchFleet({ apiKey: 'k', fetchImpl: async () => ({ ok: true, json: async () => ({ foo: 1 }) }) }), /Unexpected API response/);
+});
+
+test('fleet handler: mock mode, long cache, error path', async () => {
+  const call = (opts) => new Promise((resolve) => {
+    const res = { headers: {}, statusCode: 200, setHeader(k, v) { this.headers[k] = v; }, end(b) { resolve({ status: this.statusCode, body: JSON.parse(b), headers: this.headers }); } };
+    fleetHandler({ url: '/api/fleet' }, res, opts);
+  });
+  const ok = await call({ env: { MOCK: '1' } });
+  assert.equal(ok.status, 200); assert.ok(ok.body.vehicles['bus:1001'] && ok.body.vehicles['tram:1000']); assert.ok(ok.body.brands['bus:1']);
+  assert.match(ok.headers['Cache-Control'], /s-maxage=3600/);
+  assert.equal((await call({ env: {} })).status, 502);
+});
+
+test('worker: fleet resource uses get_ztm_pojazdy without a body', async () => {
+  const { handle } = await import('../worker/index.js');
+  let seen;
+  const res = await handle(new Request('https://w.dev/?resource=fleet', { headers: { 'x-proxy-secret': 's' } }), { PROXY_SECRET: 's', WARSAW_API_KEY: 'TOK' },
+    async (u, init) => { seen = { u, init }; return new Response('{"busy":[]}', { status: 200 }); });
+  assert.equal(res.status, 200); assert.equal(seen.u, 'https://dane.um.warszawa.pl/api/action/get_ztm_pojazdy'); assert.equal(seen.init.body, undefined);
 });

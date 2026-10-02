@@ -3,9 +3,10 @@
 // Secrets (Settings -> Variables and Secrets): WARSAW_API_KEY, PROXY_SECRET.
 // New open-data portal API: POST {"type": 1|2}, token in the Authorization header.
 const ENDPOINT = 'https://dane.um.warszawa.pl/api/action/get_ztm_lokalizacja_pojazdow';
-// Resources without a request body: ?resource=parking | incidents
+// Resources without a request body: ?resource=parking | incidents | fleet
 const RESOURCES = {
   parking: 'https://dane.um.warszawa.pl/api/action/get_m_parkingi_wolne_miejsca',
+  fleet: 'https://dane.um.warszawa.pl/api/action/get_ztm_pojazdy',
   incidents: 'https://dane.um.warszawa.pl/api/action/get_bin_utrudnienia_drogowe',
 };
 
