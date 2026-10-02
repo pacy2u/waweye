@@ -63,3 +63,4 @@ Wdrożenie nie zmienia sekretów Workera (`WARSAW_API_KEY`, `PROXY_SECRET`), a `
 - `dev-server.js` – serwer lokalny
 - `scripts/check-production.js` – kontrola produkcji (monitoring)
 - `ROADMAPA.md` – analiza produktu i plan rozwoju; `CONTEXT.md` – notatki dla kolejnych sesji
+- `wideo-promocyjne/` – 30-sekundowy film promocyjny (`pasibus-showreel.mp4`) i kod, który go generuje z prawdziwych danych; wykluczony z wdrożenia przez `.vercelignore`
