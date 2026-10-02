@@ -4,6 +4,9 @@ Mapa pojazdów (autobusy, tramwaje) w czasie rzeczywistym. Dane: [Lokalizacja po
 
 Funkcje: zoom (przyciski, scroll, pinch), odświeżanie co 10 s z płynnym ruchem pojazdów, kliknięcie pojazdu wyróżnia go (pomarańczowy pierścień, reszta wyszarzona) i pokazuje panel ze szczegółami, tryb „Śledź”, filtr typu i linii. Wyświetlanie całej trasy linii jest zaparkowane.
 
+## Źródło danych
+API ZTM na nowym portalu: `POST https://dane.um.warszawa.pl/api/action/get_ztm_lokalizacja_pojazdow`, token w nagłówku `Authorization`, treść `{"type": 1}` (autobusy) lub `{"type": 2}` (tramwaje). Token generuje się na https://dane.um.warszawa.pl/key-api. Stary adres `api.um.warszawa.pl` z parametrem `apikey` nie przyjmuje tych tokenów.
+
 ## Uruchomienie lokalne
 ```bash
 cd pasibus
@@ -22,17 +25,17 @@ npm run test:e2e  # przeglądarka (Chromium, desktop + mobile) na danych symulow
 ## Wdrożenie na Vercel
 1. Vercel → **Add New → Project** → importuj repo `pacy2u/tst`.
 2. **Root Directory**: `pasibus`. Framework: *Other*.
-3. **Settings → Environment Variables**: `WARSAW_API_KEY` = Twój klucz (Production + Preview).
+3. **Settings → Environment Variables**: `WARSAW_API_KEY` = token API z https://dane.um.warszawa.pl/key-api (Production + Preview).
 4. **Deploy**. Aplikacja działa pod adresem `*.vercel.app` na komputerze i telefonie.
 
 Klucz jest tylko po stronie serwera (`api/vehicles.js`); przeglądarka nigdy go nie widzi. Odpowiedzi są cache'owane na krawędzi przez 5 s, więc wielu użytkowników nie przeciąża API.
 
 ## Pośrednik Cloudflare Worker (gdy Vercel nie łączy się z API Warszawy)
-`api.um.warszawa.pl` nie przyjmuje połączeń z adresów Vercel/AWS (`UND_ERR_CONNECT_TIMEOUT`), a przeglądarka nie może pytać API wprost (brak CORS). Rozwiązanie: Worker w Cloudflare trzyma klucz i odpytuje Warszawę, a funkcja Vercel pyta Worker.
+Stary host `api.um.warszawa.pl` nie przyjmował połączeń z adresów Vercel/AWS (`UND_ERR_CONNECT_TIMEOUT`); jeśli nowy host zachowuje się tak samo, a przeglądarka nie może pytać API wprost (brak CORS). Rozwiązanie: Worker w Cloudflare trzyma klucz i odpytuje Warszawę, a funkcja Vercel pyta Worker.
 
 1. Konto na cloudflare.com (darmowe) → **Workers & Pages → Create → Create Worker**, nazwa `pasibus-proxy`, Deploy.
 2. **Edit code**: wklej zawartość `worker/index.js`, Deploy.
-3. **Settings → Variables and Secrets** (typ *Secret*): `WARSAW_API_KEY` = klucz z Warszawy, `PROXY_SECRET` = dowolny długi losowy ciąg.
+3. **Settings → Variables and Secrets** (typ *Secret*): `WARSAW_API_KEY` = token API z https://dane.um.warszawa.pl/key-api, `PROXY_SECRET` = dowolny długi losowy ciąg.
 4. W Vercel (**Settings → Environment Variables**) dodaj: `UPSTREAM_URL` = adres Workera (`https://pasibus-proxy.<konto>.workers.dev`), `UPSTREAM_SECRET` = ten sam ciąg co `PROXY_SECRET`. Zrób **Redeploy**.
 
 (Alternatywa z CLI: `cd worker && npx wrangler deploy`, potem `npx wrangler secret put WARSAW_API_KEY` i `PROXY_SECRET`.)

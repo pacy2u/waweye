@@ -1,7 +1,7 @@
 'use strict';
 // Warsaw Open Data: "Lokalizacja pojazdów komunikacji miejskiej"
-const ENDPOINT = 'https://api.um.warszawa.pl/api/action/busestrams_get/';
-const RESOURCE_ID = 'f2e5503e-927d-4ad3-9500-4ab9e55deb59';
+// New open-data portal API (dane.um.warszawa.pl): POST JSON {"type": 1|2}, token in the Authorization header.
+const ENDPOINT = 'https://dane.um.warszawa.pl/api/action/get_ztm_lokalizacja_pojazdow';
 const TYPES = { 1: 'bus', 2: 'tram' };
 const MAX_AGE_MS = 5 * 60 * 1000;
 const BBOX = { minLat: 51.9, maxLat: 52.6, minLon: 20.5, maxLon: 21.6 };
@@ -36,41 +36,59 @@ function describe(err) {
   return detail && !String(err.message).includes(detail) ? `${err.message} (${detail})` : err.message;
 }
 
-async function fetchOnce(url, fetchImpl, headers) {
+function errorText(b) {
+  if (!b || typeof b !== 'object') return '';
+  const e = b.error;
+  return (typeof e === 'string' ? e : e && (e.message || JSON.stringify(e))) || b.message || b.detail || (typeof b.result === 'string' ? b.result : '');
+}
+
+async function fetchOnce(url, fetchImpl, init) {
   let res;
   try {
-    res = await fetchImpl(url, { signal: AbortSignal.timeout(TIMEOUT_MS), headers });
+    res = await fetchImpl(url, { signal: AbortSignal.timeout(TIMEOUT_MS), ...init });
   } catch (e) {
     throw new Error(describe(e));
   }
   if (!res.ok) {
     // Relay/API errors carry a JSON {error}; include it so "HTTP 403" says who refused and why.
     let why = '';
-    try { why = (await res.json()).error || ''; } catch {}
+    try { const j = await res.json(); why = errorText(j) || ''; } catch {}
     throw new Error(`HTTP ${res.status}${why ? ` (${why})` : ''}`);
   }
   const body = await res.json();
   if (!Array.isArray(body.result)) {
-    throw new Error(body.error || (typeof body.result === 'string' ? body.result : 'Unexpected API response'));
+    throw new Error(errorText(body) || 'Unexpected API response');
   }
   return body.result;
 }
 
 async function fetchType(type, apiKey, fetchImpl, upstream) {
-  // With an upstream relay (Cloudflare Worker) the key lives there, not here.
-  const url = upstream
-    ? `${upstream.url}${upstream.url.includes('?') ? '&' : '?'}type=${type}`
-    : `${ENDPOINT}?resource_id=${RESOURCE_ID}&apikey=${encodeURIComponent(apiKey)}&type=${type}`;
-  const headers = upstream ? { 'x-proxy-secret': upstream.secret } : undefined;
-  let raw;
-  try {
-    raw = await fetchOnce(url, fetchImpl, headers);
-  } catch (e) {
-    // The Warsaw API is occasionally slow; one retry for network errors/timeouts/5xx (not for bad key).
-    if (!/^(HTTP 4|false)/.test(e.message) && !/apikey/i.test(e.message)) raw = await fetchOnce(url, fetchImpl, headers);
-    else throw e;
+  // Relay mode (Cloudflare Worker): GET with a shared secret; the Warsaw token lives in the Worker.
+  // Direct mode: POST to the Warsaw API. Token format in the docs is ambiguous ("token uzytkownika"),
+  // so try the raw token first and "Bearer <token>" if the API answers 401/403.
+  const attempts = upstream
+    ? [{ url: `${upstream.url}${upstream.url.includes('?') ? '&' : '?'}type=${type}`, init: { headers: { 'x-proxy-secret': upstream.secret } } }]
+    : [apiKey, `Bearer ${apiKey}`].map((auth) => ({
+        url: ENDPOINT,
+        init: { method: 'POST', headers: { Authorization: auth, 'Content-Type': 'application/json' }, body: JSON.stringify({ type }) },
+      }));
+  let raw, lastErr;
+  for (const a of attempts) {
+    try {
+      try {
+        raw = await fetchOnce(a.url, fetchImpl, a.init);
+      } catch (e) {
+        // The API is occasionally slow; one retry for network errors/timeouts/5xx (not for 4xx/auth errors).
+        if (/^HTTP 4/.test(e.message) || /token|klucz|apikey|autoryz|unauthor|forbidden/i.test(e.message)) throw e;
+        raw = await fetchOnce(a.url, fetchImpl, a.init);
+      }
+      return normalize(raw, type);
+    } catch (e) {
+      lastErr = e;
+      if (!/^HTTP (401|403)|token|unauthor|forbidden/i.test(e.message)) break;
+    }
   }
-  return normalize(raw, type);
+  throw lastErr;
 }
 
 async function fetchVehicles({ apiKey, types = [1, 2], fetchImpl = fetch, upstream }) {

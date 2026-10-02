@@ -1,8 +1,8 @@
 // Cloudflare Worker: relay to the Warsaw API from Cloudflare's network
-// (api.um.warszawa.pl does not accept connections from Vercel/AWS addresses).
+// (the Warsaw API may refuse connections from Vercel/AWS addresses).
 // Secrets (Settings -> Variables and Secrets): WARSAW_API_KEY, PROXY_SECRET.
-const ENDPOINT = 'https://api.um.warszawa.pl/api/action/busestrams_get/';
-const RESOURCE_ID = 'f2e5503e-927d-4ad3-9500-4ab9e55deb59';
+// New open-data portal API: POST {"type": 1|2}, token in the Authorization header.
+const ENDPOINT = 'https://dane.um.warszawa.pl/api/action/get_ztm_lokalizacja_pojazdow';
 
 export async function handle(request, env, fetchImpl) {
   const json = (body, status) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -11,7 +11,16 @@ export async function handle(request, env, fetchImpl) {
   if (type !== '1' && type !== '2') return json({ error: 'bad type' }, 400);
   if (!env.WARSAW_API_KEY) return json({ error: 'worker is missing WARSAW_API_KEY' }, 500);
   try {
-    const res = await fetchImpl(`${ENDPOINT}?resource_id=${RESOURCE_ID}&apikey=${encodeURIComponent(env.WARSAW_API_KEY)}&type=${type}`);
+    // The docs say "Authorization: token uzytkownika"; try the raw token, then "Bearer <token>" on 401/403.
+    let res;
+    for (const auth of [env.WARSAW_API_KEY, `Bearer ${env.WARSAW_API_KEY}`]) {
+      res = await fetchImpl(ENDPOINT, {
+        method: 'POST',
+        headers: { Authorization: auth, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: Number(type) }),
+      });
+      if (res.status !== 401 && res.status !== 403) break;
+    }
     return new Response(await res.text(), { status: res.status, headers: { 'Content-Type': 'application/json' } });
   } catch (e) {
     return json({ error: 'upstream: ' + e.message }, 502);
