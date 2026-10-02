@@ -2,7 +2,7 @@
 (function () {
   const POLL_MS = 10000, ANIM_MS = 900, LABEL_ZOOM = 14;
   const COLORS = { bus: '#2B2B33', tram: '#0073E6', sel: '#FC4C02' };
-  const state = { park: false, parkings: [], selectedPark: null, parkMarkers: new Map(), parkError: null, types: { bus: true, tram: true }, query: '', selected: null, follow: false, markers: new Map(), lastOk: 0, data: [] };
+  const state = { inc: false, incidents: [], selectedInc: null, incLayers: new Map(), incError: null, park: false, parkings: [], selectedPark: null, parkMarkers: new Map(), parkError: null, types: { bus: true, tram: true }, query: '', selected: null, follow: false, markers: new Map(), lastOk: 0, data: [] };
 
   const map = L.map('map', { zoomControl: false, preferCanvas: true, minZoom: 9, maxZoom: 19 }).setView([52.2297, 21.0122], 12);
   L.control.zoom({ position: 'topright' }).addTo(map);
@@ -14,6 +14,7 @@
   const labelLayer = L.layerGroup().addTo(map);
   let highlight = null;
   const parkLayer = L.layerGroup();
+  const incLayer = L.layerGroup();
   const $ = (id) => document.getElementById(id);
 
   const radius = () => Math.max(4, Math.min(11, map.getZoom() - 6));
@@ -65,6 +66,7 @@
 
   function select(id) {
     if (state.selectedPark) deselectPark();
+    if (state.selectedInc) deselectInc();
     state.selected = id;
     const m = state.markers.get(id);
     if (!m) return;
@@ -95,7 +97,7 @@
     const el = $('status'), t = $('status-text');
     const n = t.dataset.count || 0;
     if (state.error) { el.className = 'err'; t.textContent = state.error; }
-    else if (state.lastOk) { el.className = 'ok'; t.textContent = `${n} pojazdów · ${new Date(state.lastOk).toLocaleTimeString('pl-PL')}${state.source === 'mock' ? ' · dane testowe' : ''}${state.parkError ? ' · parkingi: ' + state.parkError : ''}${state.data.length === 0 && state.received > 0 ? ` · API zwróciło ${state.received}, wszystkie odrzucone (nieaktualne/poza Warszawą)` : state.data.length === 0 && state.received === 0 ? ' · API zwróciło pustą listę' : ''}`; }
+    else if (state.lastOk) { el.className = 'ok'; t.textContent = `${n} pojazdów · ${new Date(state.lastOk).toLocaleTimeString('pl-PL')}${state.source === 'mock' ? ' · dane testowe' : ''}${state.parkError ? ' · parkingi: ' + state.parkError : ''}${state.incError ? ' · utrudnienia: ' + state.incError : ''}${state.data.length === 0 && state.received > 0 ? ` · API zwróciło ${state.received}, wszystkie odrzucone (nieaktualne/poza Warszawą)` : state.data.length === 0 && state.received === 0 ? ' · API zwróciło pustą listę' : ''}`; }
   }
 
   // Smooth movement between polls.
@@ -181,6 +183,7 @@
   function selectPark(id) {
     const p = state.parkings.find((x) => x.id === id); if (!p) return;
     if (state.selected) deselect();
+    if (state.selectedInc) deselectInc();
     state.selectedPark = id; fillParkPanel(p); $('ppanel').hidden = false; renderParkings();
   }
   function deselectPark() {
@@ -209,6 +212,73 @@
   $('pclose').onclick = deselectPark;
   setInterval(pollParkings, 60000);
 
+  // ---- Road incidents ----
+  const STATUS_TXT = { active: 'Trwa', planned: 'Zaplanowane', ended: 'Zakończone' };
+  const fmtDate = (ms) => (ms ? new Date(ms).toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '?');
+  const incColor = (i) => (i.status === 'active' ? '#F5A100' : i.status === 'planned' ? '#7A8BA6' : '#8a8a92');
+  const incIcon = (i) => L.divIcon({ className: '', iconSize: [28, 28], iconAnchor: [14, 14],
+    html: `<div class="ic ${i.status} ${state.selectedInc === i.id ? 'sel' : ''}">!</div>` });
+
+  function renderIncidents() {
+    for (const g of state.incLayers.values()) incLayer.removeLayer(g);
+    state.incLayers.clear();
+    for (const i of state.incidents) {
+      const group = L.layerGroup();
+      const sel = state.selectedInc === i.id;
+      for (const sh of i.shapes) {
+        if (sh.type === 'line') {
+          L.polyline(sh.points, { color: sel ? '#FC4C02' : incColor(i), weight: sel ? 8 : 6, opacity: i.status === 'ended' ? 0.5 : 0.85 })
+            .on('click', (e) => { L.DomEvent.stopPropagation(e); selectInc(i.id); }).addTo(group);
+        }
+        const at = sh.type === 'line' ? sh.points[Math.floor(sh.points.length / 2)] : sh.points[0];
+        L.marker(at, { icon: incIcon(i), zIndexOffset: 800, keyboard: false, title: i.name })
+          .on('click', (e) => { L.DomEvent.stopPropagation(e); selectInc(i.id); }).addTo(group);
+      }
+      group.addTo(incLayer); state.incLayers.set(i.id, group);
+    }
+    if (state.selectedInc !== null) { const i = state.incidents.find((x) => x.id === state.selectedInc); if (i) fillIncPanel(i); else deselectInc(); }
+  }
+
+  function fillIncPanel(i) {
+    $('ip-badge').className = 'i-badge ' + i.status; $('ip-name').textContent = i.name;
+    $('ip-when').textContent = `${fmtDate(i.start)} – ${fmtDate(i.end)}`;
+    const st = $('ip-status'); st.textContent = STATUS_TXT[i.status]; st.className = 'i-status ' + i.status;
+    const body = $('ip-body'); body.textContent = '';
+    for (const t of i.content) { const p = document.createElement('p'); p.textContent = t; body.appendChild(p); }
+    const link = $('ip-link');
+    if (typeof i.id === 'number') { link.href = `https://infoulice.um.warszawa.pl/?page_id=${i.id}`; link.hidden = false; } else link.hidden = true;
+  }
+  function selectInc(id) {
+    const i = state.incidents.find((x) => x.id === id); if (!i) return;
+    if (state.selected) deselect();
+    if (state.selectedPark) deselectPark();
+    state.selectedInc = id; fillIncPanel(i); $('ipanel').hidden = false; renderIncidents();
+  }
+  function deselectInc() {
+    state.selectedInc = null; $('ipanel').hidden = true; renderIncidents();
+  }
+  async function pollIncidents() {
+    if (!state.inc) return;
+    try {
+      const res = await fetch('/api/incidents', { cache: 'no-store' });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || 'HTTP ' + res.status);
+      state.incError = null; state.incidents = body.incidents; renderIncidents();
+    } catch (e) {
+      state.incError = 'brak danych (' + e.message + ')';
+    }
+    renderStatus();
+  }
+  function toggleIncidents(btn) {
+    state.inc = !state.inc;
+    btn.classList.toggle('on', state.inc); btn.setAttribute('aria-pressed', state.inc);
+    if (state.inc) { incLayer.addTo(map); pollIncidents(); }
+    else { map.removeLayer(incLayer); if (state.selectedInc !== null) deselectInc(); state.incError = null; renderStatus(); }
+  }
+  $('t-inc').onclick = (e) => toggleIncidents(e.currentTarget);
+  $('iclose').onclick = deselectInc;
+  setInterval(pollIncidents, 60000);
+
   function toggleType(key, btn) {
     state.types[key] = !state.types[key];
     btn.classList.toggle('on', state.types[key]); btn.setAttribute('aria-pressed', state.types[key]);
@@ -222,10 +292,10 @@
     state.follow = !state.follow; e.currentTarget.classList.toggle('on', state.follow);
     const s = state.markers.get(state.selected); if (state.follow && s) map.setView(s.mk.getLatLng(), Math.max(map.getZoom(), 15));
   };
-  map.on('click', () => { if (state.selected) deselect(); if (state.selectedPark) deselectPark(); });
+  map.on('click', () => { if (state.selected) deselect(); if (state.selectedPark) deselectPark(); if (state.selectedInc !== null) deselectInc(); });
   map.on('zoomend moveend', refresh);
 
-  window.__pasibus = { state, map, select, deselect, selectPark, deselectPark };
+  window.__pasibus = { state, map, select, deselect, selectPark, deselectPark, selectInc, deselectInc };
   poll(); setInterval(poll, POLL_MS);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
   requestAnimationFrame(frame);

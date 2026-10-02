@@ -120,6 +120,40 @@ function findChromium() {
       assert.equal(await page.locator('.pk').count(), 0);
       assert.ok(await page.evaluate(() => document.getElementById('ppanel').hidden));
     });
+    await step(`${label}: incidents button draws points and lines, panel shows details`, async () => {
+      await page.evaluate(() => { window.__pasibus.map.setView([52.2297, 21.0122], 13, { animate: false }); });
+      assert.equal(await page.locator('.ic').count(), 0);
+      await page.click('#t-inc'); await page.waitForSelector('.ic'); await page.waitForTimeout(300);
+      assert.equal(await page.getAttribute('#t-inc', 'aria-pressed'), 'true');
+      assert.ok(await page.locator('#t-inc svg.pico').count() === 1, 'warning icon');
+      assert.equal(await page.locator('.ic').count(), 4);
+      assert.equal(await page.locator('.ic.planned').count(), 1); assert.equal(await page.locator('.ic.ended').count(), 1);
+      assert.equal(await page.evaluate(() => [...window.__pasibus.state.incLayers.values()].reduce((n, g) => { g.eachLayer((l) => { if (l instanceof L.Polyline) n++; }); return n; }, 0)), 1, 'one polyline');
+      await page.click('.ic.planned');
+      const panel = await page.evaluate(() => ({ hidden: document.getElementById('ipanel').hidden, name: document.getElementById('ip-name').textContent,
+        status: document.getElementById('ip-status').textContent, link: document.getElementById('ip-link').href, linkHidden: document.getElementById('ip-link').hidden,
+        body: document.getElementById('ip-body').textContent, when: document.getElementById('ip-when').textContent }));
+      assert.ok(!panel.hidden); assert.match(panel.name, /Targowej/); assert.equal(panel.status, 'Zaplanowane');
+      assert.equal(panel.link, 'https://infoulice.um.warszawa.pl/?page_id=8150'); assert.ok(!panel.linkHidden); assert.match(panel.body, /przyszłego tygodnia/);
+      await page.screenshot({ path: `${SHOTS}/pasibus-${label}-incidents.png` });
+    });
+    await step(`${label}: incident panel is mutually exclusive with vehicle and parking panels`, async () => {
+      const hidden = () => page.evaluate(() => ['panel', 'ppanel', 'ipanel'].map((id) => document.getElementById(id).hidden));
+      await page.evaluate(() => { const { state, select } = window.__pasibus; select([...state.markers.keys()][0]); });
+      assert.deepEqual(await hidden(), [false, true, true]);
+      await page.evaluate(() => { const { state, selectInc } = window.__pasibus; selectInc(state.incidents[0].id); });
+      assert.deepEqual(await hidden(), [true, true, false]);
+      await page.click('#t-park'); await page.waitForSelector('.pk');
+      await page.evaluate(() => { const { state, selectPark } = window.__pasibus; selectPark(state.parkings[0].id); });
+      assert.deepEqual(await hidden(), [true, false, true]);
+      await page.click('#t-park');
+    });
+    await step(`${label}: incidents button off hides layer and panel`, async () => {
+      await page.evaluate(() => { const { state, selectInc } = window.__pasibus; selectInc(state.incidents[0].id); });
+      await page.click('#t-inc'); await page.waitForTimeout(200);
+      assert.equal(await page.locator('.ic').count(), 0);
+      assert.ok(await page.evaluate(() => document.getElementById('ipanel').hidden));
+    });
     await step(`${label}: no horizontal overflow`, async () => {
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
     });
@@ -147,6 +181,12 @@ function findChromium() {
     await pg.waitForFunction(() => window.__pasibus.state.markers.size > 50);
     await pg.click('#t-park');
     await pg.waitForFunction(() => /parkingi: brak danych/.test(document.getElementById('status-text').textContent));
+    assert.ok(await pg.evaluate(() => window.__pasibus.state.markers.size > 50));
+  });
+  await pg.route('**/api/incidents', (route) => route.fulfill({ status: 502, contentType: 'application/json', body: '{"error":"HTTP 403 (forbidden)"}' }));
+  await step('incidents API failure is reported, vehicles stay visible', async () => {
+    await pg.click('#t-inc');
+    await pg.waitForFunction(() => /utrudnienia: brak danych/.test(document.getElementById('status-text').textContent));
     assert.ok(await pg.evaluate(() => window.__pasibus.state.markers.size > 50));
   });
   await browser.close(); server.close(); bad.close(); half.close();
