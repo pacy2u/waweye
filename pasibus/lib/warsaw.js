@@ -27,15 +27,29 @@ function normalize(raw, type, now = Date.now()) {
   return out;
 }
 
-async function fetchType(type, apiKey, fetchImpl) {
-  const url = `${ENDPOINT}?resource_id=${RESOURCE_ID}&apikey=${encodeURIComponent(apiKey)}&type=${type}`;
-  const res = await fetchImpl(url, { signal: AbortSignal.timeout(8000) });
+const TIMEOUT_MS = 12000;
+
+async function fetchOnce(url, fetchImpl) {
+  const res = await fetchImpl(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const body = await res.json();
   if (!Array.isArray(body.result)) {
     throw new Error(typeof body.result === 'string' ? body.result : (body.error || 'Unexpected API response'));
   }
-  return normalize(body.result, type);
+  return body.result;
+}
+
+async function fetchType(type, apiKey, fetchImpl) {
+  const url = `${ENDPOINT}?resource_id=${RESOURCE_ID}&apikey=${encodeURIComponent(apiKey)}&type=${type}`;
+  let raw;
+  try {
+    raw = await fetchOnce(url, fetchImpl);
+  } catch (e) {
+    // The Warsaw API is occasionally slow; one retry for network errors/timeouts/5xx (not for bad key).
+    if (!/^(HTTP 4|false)/.test(e.message) && !/apikey/i.test(e.message)) raw = await fetchOnce(url, fetchImpl);
+    else throw e;
+  }
+  return normalize(raw, type);
 }
 
 async function fetchVehicles({ apiKey, types = [1, 2], fetchImpl = fetch }) {
