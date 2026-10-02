@@ -37,3 +37,22 @@ Data: 2026-10-02. Przetestowano desktop (1280×800), telefon (360×640) i orient
 - Wolnej sieci i trybu offline poza symulowanymi błędami API.
 - Dostępności dla czytników ekranu (markery mapy mają `keyboard: false`, nie da się ich wybrać klawiaturą).
 - Przeglądarek innych niż Chromium (Safari/iOS, Firefox).
+
+## Status poprawek (gałąź `fix/problemy-z-testow-eksploracyjnych`)
+
+| # | Status | Co zrobiono |
+|---|---|---|
+| 1 | Naprawione | Chipy filtrów zawijają się do kolejnego rzędu (`.chips { flex-wrap }`); na 360 px nie ma przepełnienia paska. Przyciski zoomu na mobile przesunięte pod wyższy pasek. |
+| 2 | Naprawione | Pole wyszukiwania ma min. 140 px, pasek do 720 px; placeholder jest w całości widoczny. |
+| 3 | Naprawione | W niskich oknach (`max-height: 480px`) panele parkingu i utrudnień mają maks. 40% wysokości (144 px zamiast 198 px na 360 px). |
+| 4 | Naprawione | Brak daty końca: „od … · bez daty zakończenia” zamiast „– ?”. |
+| 5 | Naprawione | Dodano `public/favicon.svg` i `<link rel="icon">`; koniec z 404 w konsoli. |
+| 6 | Częściowo | Podczas pierwszego ładowania status ma pulsującą pomarańczową kropkę i napis „Ładowanie pojazdów…”. Czasu odpowiedzi nie zmieniano (zależy od sieci). |
+| 7 | Naprawione | Gdy oba typy są wyłączone, aplikacja nie wysyła zapytania do API. |
+| 8 | Naprawione | Markery wyłączonego typu są ukrywane, a nie usuwane; po ponownym włączeniu pojawiają się od razu. |
+| 9 | Naprawione | API zwraca 405 dla metod innych niż GET/HEAD oraz 400 dla nieprawidłowego `types`. Klient nie wysyła już `types=1,2` jako obejścia. |
+| 10 | Naprawione | Pojazdy z danymi starszymi niż 3 min są przyciemnione, a panel pokazuje „dane sprzed N min”. |
+
+Nie zmieniono: obsługi klawiaturą markerów mapy (osobna decyzja projektowa).
+
+Testy: `npm test` (35 przechodzi, w tym nowy test 400/405) i `npm run test:e2e` (41 przechodzi). Test e2e filtra typów dostosowano do nowego zachowania (#8), a test kliknięcia utrudnienia przesuwa mapę, bo wyższy pasek na mobile zasłaniał znacznik z danych testowych.

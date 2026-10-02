@@ -18,15 +18,17 @@
   const $ = (id) => document.getElementById(id);
 
   const radius = () => Math.max(4, Math.min(11, map.getZoom() - 6));
+  const STALE_MS = 180000;
+  const isStale = (v) => state.lastOk && v.time && state.lastOk - v.time > STALE_MS;
   const visible = (v) => state.types[v.type] && (!state.query || v.line.toLowerCase().startsWith(state.query));
 
   function style(v) {
     const sel = state.selected, dim = sel && sel !== v.id;
     return { radius: sel === v.id ? radius() + 4 : radius(), color: '#fff', weight: sel === v.id ? 3 : 1.5,
-      fillColor: sel === v.id ? COLORS.sel : COLORS[v.type], fillOpacity: dim ? 0.3 : 1, opacity: dim ? 0.35 : 1 };
+      fillColor: sel === v.id ? COLORS.sel : COLORS[v.type], fillOpacity: dim ? 0.3 : isStale(v) ? 0.55 : 1, opacity: dim ? 0.35 : 1 };
   }
 
-  function sync(vehicles) {
+  function sync(vehicles, requested) {
     state.data = vehicles;
     const seen = new Set(), now = performance.now();
     for (const v of vehicles) {
@@ -42,7 +44,8 @@
       }
     }
     for (const [id, m] of state.markers) {
-      if (!seen.has(id)) { m.mk.remove(); if (m.label) m.label.remove(); state.markers.delete(id); if (state.selected === id) deselect(); }
+      // Markers of types we did not ask for are kept (hidden) so re-enabling a type does not flash an empty map.
+      if (!seen.has(id) && requested.has(m.v.type)) { m.mk.remove(); if (m.label) m.label.remove(); state.markers.delete(id); if (state.selected === id) deselect(); }
     }
     refresh();
   }
@@ -73,7 +76,7 @@
     $('panel').hidden = false;
     $('p-line').textContent = v.line;
     $('p-type').textContent = (v.type === 'bus' ? 'Autobus' : 'Tramwaj') + ' ' + v.line;
-    $('p-details').textContent = `Pojazd ${v.vehicle}${v.brigade ? ' · brygada ' + v.brigade : ''}${v.time ? ' · ' + new Date(v.time).toLocaleTimeString('pl-PL') : ''}`;
+    $('p-details').textContent = `Pojazd ${v.vehicle}${v.brigade ? ' · brygada ' + v.brigade : ''}${v.time ? ' · ' + new Date(v.time).toLocaleTimeString('pl-PL') : ''}${isStale(v) ? ` · dane sprzed ${Math.round((state.lastOk - v.time) / 60000)} min` : ''}`;
     for (const x of state.markers.values()) if (x.label) { x.label.remove(); x.label = null; }
     refresh();
   }
@@ -94,6 +97,7 @@
 
   function renderStatus() {
     const el = $('status'), t = $('status-text');
+    if (!state.error && !state.lastOk) return; // still on the initial load
     const n = [...state.markers.values()].filter((m) => visible(m.v)).length; // computed now, never cached
     if (state.error) { el.className = 'err'; t.textContent = state.error; }
     else if (state.lastOk) { el.className = 'ok'; t.textContent = `${n} pojazdów · ${new Date(state.lastOk).toLocaleTimeString('pl-PL')}${state.source === 'mock' ? ' · dane testowe' : ''}${state.parkError ? ' · parkingi: ' + state.parkError : ''}${state.incError ? ' · utrudnienia: ' + state.incError : ''}${state.data.length === 0 && state.received > 0 ? ` · API zwróciło ${state.received}, wszystkie odrzucone (nieaktualne/poza Warszawą)` : state.data.length === 0 && state.received === 0 ? ' · API zwróciło pustą listę' : ''}`; }
@@ -120,11 +124,12 @@
   async function poll() {
     try {
       const types = [state.types.bus && 1, state.types.tram && 2].filter(Boolean);
-      const res = await fetch('/api/vehicles?types=' + (types.length ? types.join(',') : '1,2'), { cache: 'no-store' });
+      if (!types.length) { refresh(); return; } // nothing to show, nothing to fetch
+      const res = await fetch('/api/vehicles?types=' + types.join(','), { cache: 'no-store' });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error || 'HTTP ' + res.status);
       state.error = null; state.lastOk = body.updated; state.source = body.source; state.received = body.received;
-      sync(body.vehicles);
+      sync(body.vehicles, new Set(types.map((t) => (t === 1 ? 'bus' : 'tram'))));
     } catch (e) {
       state.error = 'Brak danych: ' + e.message + (state.lastOk ? ' (pokazuję ostatnie)' : '');
       renderStatus();
@@ -240,7 +245,8 @@
 
   function fillIncPanel(i) {
     $('ip-badge').className = 'i-badge ' + i.status; $('ip-name').textContent = i.name;
-    $('ip-when').textContent = `${fmtDate(i.start)} – ${fmtDate(i.end)}`;
+    $('ip-when').textContent = i.start && i.end ? `${fmtDate(i.start)} – ${fmtDate(i.end)}`
+      : i.start ? `od ${fmtDate(i.start)} · bez daty zakończenia` : i.end ? `do ${fmtDate(i.end)}` : 'brak dat';
     const st = $('ip-status'); st.textContent = STATUS_TXT[i.status]; st.className = 'i-status ' + i.status;
     const body = $('ip-body'); body.textContent = '';
     for (const t of i.content) { const p = document.createElement('p'); p.textContent = t; body.appendChild(p); }

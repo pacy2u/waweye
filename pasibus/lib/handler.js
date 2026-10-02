@@ -2,12 +2,29 @@
 const { fetchVehicles, fetchParkings, fetchIncidents, normalizeParkings, normalizeIncidents } = require('./warsaw');
 const { mockVehicles, mockParkings, mockIncidents } = require('./mock');
 
+// Read-only API: anything but GET/HEAD gets 405. Returns true when the request was rejected.
+function rejectUnlessRead(req, res) {
+  if (!req.method || req.method === 'GET' || req.method === 'HEAD') return false;
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Allow', 'GET, HEAD');
+  res.setHeader('Cache-Control', 'no-store');
+  res.statusCode = 405;
+  res.end(JSON.stringify({ error: 'Method not allowed' }));
+  return true;
+}
+
 // Shared by the Vercel function and the local dev server.
 async function vehiclesHandler(req, res, { env = process.env, fetchImpl = fetch } = {}) {
+  if (rejectUnlessRead(req, res)) return;
   const url = new URL(req.url, 'http://x');
-  const wanted = (url.searchParams.get('types') || '1,2').split(',').map(Number).filter((t) => t === 1 || t === 2);
-  const types = wanted.length ? wanted : [1, 2];
+  const wanted = (url.searchParams.get('types') || '1,2').split(',').map(Number);
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  if (!wanted.length || wanted.some((t) => t !== 1 && t !== 2)) {
+    res.setHeader('Cache-Control', 'no-store');
+    res.statusCode = 400;
+    return res.end(JSON.stringify({ error: 'Invalid types: use 1 (bus), 2 (tram) or 1,2' }));
+  }
+  const types = [...new Set(wanted)];
   try {
     let vehicles, errors = [], source = 'live', received;
     if (env.MOCK === '1') {
@@ -31,6 +48,7 @@ async function vehiclesHandler(req, res, { env = process.env, fetchImpl = fetch 
 }
 
 async function parkingHandler(req, res, { env = process.env, fetchImpl = fetch } = {}) {
+  if (rejectUnlessRead(req, res)) return;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   try {
     let parkings, source = 'live';
@@ -52,6 +70,7 @@ async function parkingHandler(req, res, { env = process.env, fetchImpl = fetch }
 }
 
 async function incidentsHandler(req, res, { env = process.env, fetchImpl = fetch } = {}) {
+  if (rejectUnlessRead(req, res)) return;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   try {
     let incidents, source = 'live';

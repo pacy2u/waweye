@@ -79,8 +79,10 @@ function findChromium() {
     });
     await step(`${label}: type filter`, async () => {
       await page.click('#t-tram'); await page.waitForTimeout(600);
-      assert.equal(await page.evaluate(() => [...window.__pasibus.state.markers.values()].some((m) => m.v.type === 'tram')), false);
-      await page.click('#t-tram'); await page.waitForFunction(() => [...window.__pasibus.state.markers.values()].some((m) => m.v.type === 'tram'));
+      const shownTrams = () => page.evaluate(() => { const { map, state } = window.__pasibus; return [...state.markers.values()].filter((m) => m.v.type === 'tram' && map.hasLayer(m.mk)).length; });
+      assert.equal(await shownTrams(), 0);
+      await page.click('#t-tram');
+      assert.ok(await shownTrams() > 0, 'trams reappear immediately, without waiting for the next poll');
     });
     await step(`${label}: line search`, async () => {
       await page.fill('#search', '175'); await page.waitForTimeout(200);
@@ -129,6 +131,7 @@ function findChromium() {
       assert.equal(await page.locator('.ic').count(), 4);
       assert.equal(await page.locator('.ic.planned').count(), 1); assert.equal(await page.locator('.ic.ended').count(), 1);
       assert.equal(await page.evaluate(() => [...window.__pasibus.state.incLayers.values()].reduce((n, g) => { g.eachLayer((l) => { if (l instanceof L.Polyline) n++; }); return n; }, 0)), 1, 'one polyline');
+      await page.evaluate(() => { window.__pasibus.map.panBy([0, -200], { animate: false }); }); // keep the marker clear of the (wrapped) top bar
       await page.click('.ic.planned');
       const panel = await page.evaluate(() => ({ hidden: document.getElementById('ipanel').hidden, name: document.getElementById('ip-name').textContent,
         status: document.getElementById('ip-status').textContent, link: document.getElementById('ip-link').href, linkHidden: document.getElementById('ip-link').hidden,
