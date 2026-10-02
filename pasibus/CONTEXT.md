@@ -62,8 +62,9 @@ Linie utrudnień muszą używać tego samego renderera canvas co pojazdy (`rende
 
 ## Zasady / pułapki
 - **Nie commituj tokenu.** Token pojawił się w czacie i na zrzutach ekranu; stary token jest w historii gita, ale użytkownik potwierdził jego unieważnienie (2026-10-02). `.env.example` usunięto.
-- Nowy zbiór danych = nowy endpoint w `lib/warsaw.js` + `lib/handler.js` + `api/<nazwa>.js` + `dev-server.js` + wpis w `RESOURCES` w `worker/index.js` + testy (jednostkowe z rekordem z dokumentacji, e2e na MOCK). Worker wdraża się sam po merge'u (`.github/workflows/pasibus-wdrozenie-workera.yml`), o ile w repo są sekrety `CLOUDFLARE_API_TOKEN` i `CLOUDFLARE_ACCOUNT_ID`; bez nich przypomnij o ręcznym wklejeniu. Faza 0 roadmapy przewiduje uproszczenie tego do wspólnego handlera.
+- Nowy zbiór danych = nowy endpoint w `lib/warsaw.js` + `lib/handler.js` + `api/<nazwa>.js` + `dev-server.js` + wpis w `RESOURCES` w `worker/index.js` + testy (jednostkowe z rekordem z dokumentacji, e2e na MOCK). Worker wdraża się sam po merge'u zmian w `worker/` (`.github/workflows/pasibus-wdrozenie-workera.yml`; sekrety `CLOUDFLARE_API_TOKEN` i `CLOUDFLARE_ACCOUNT_ID` są w repo od 2026-10-02), ręczne wklejanie nie jest już potrzebne. Faza 0 roadmapy przewiduje uproszczenie tego do wspólnego handlera.
 - Pasek statusu „0 pojazdów” bywa po prostu efektem wyłączonych przycisków Autobusy/Tramwaje (nie błąd).
+- Testy e2e klikające w pojazdy muszą zamrozić dane (np. `document.hidden` = true, potem czekać, aż żaden znacznik nie ma `to`), bo dane MOCK się ruszają, a poll co 10 s animuje pojazdy spod kursora.
 
 ## Odłożone / pomysły (kolejność wg wartości)
 Pełna analiza i plan rozwoju w fazach: `ROADMAPA.md`.
@@ -72,4 +73,4 @@ Pełna analiza i plan rozwoju w fazach: `ROADMAPA.md`.
 3. Drobne: opcjonalny filtr starych utrudnień; grupowanie gęstych znaczników/etykiet; ewentualnie ukrycie zakończonych utrudnień.
 
 ## Historia (PR-y w `pacy2u/tst`)
-#1–#2 aplikacja + poprawki Vercel (region fra1) · #3 przyczyna błędu sieci w komunikatach · #4–#5 Worker Cloudflare · #6 treść błędu API · #7 przejście na nowe API (`Authorization`) · #8 timeout 25 s, podgląd odpowiedzi · #9 goła tablica + strefa czasowa · #10–#11 Parking (`carParks`) · #12 Utrudnienia · #13 licznik pojazdów liczony przy wyświetlaniu · #14 CONTEXT.md + CLAUDE.md · #15–#16 raport z testów eksploracyjnych · #17 poprawki z raportu · #18 dane o taborze · gałąź `faza-0/fundamenty-pasibus`: roadmapa, CI, monitoring, automatyczne wdrażanie Workera, pauza w ukrytej karcie.
+#1–#2 aplikacja + poprawki Vercel (region fra1) · #3 przyczyna błędu sieci w komunikatach · #4–#5 Worker Cloudflare · #6 treść błędu API · #7 przejście na nowe API (`Authorization`) · #8 timeout 25 s, podgląd odpowiedzi · #9 goła tablica + strefa czasowa · #10–#11 Parking (`carParks`) · #12 Utrudnienia · #13 licznik pojazdów liczony przy wyświetlaniu · #14 CONTEXT.md + CLAUDE.md · #15–#16 raport z testów eksploracyjnych · #17 poprawki z raportu · #18 dane o taborze · #19 klikanie pojazdów przy włączonych utrudnieniach (jeden canvas) · #20 roadmapa i Faza 0: CI, monitoring, automatyczne wdrażanie Workera (działa od 2026-10-02), pauza w ukrytej karcie · gałąź `fix/stabilny-test-e2e-klikania-pojazdow`: stabilny krok e2e klikania pojazdów (zamrożone dane na czas klikania), usunięty `README1st`.
