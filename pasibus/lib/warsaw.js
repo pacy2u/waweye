@@ -6,14 +6,27 @@ const TYPES = { 1: 'bus', 2: 'tram' };
 const MAX_AGE_MS = 5 * 60 * 1000;
 const BBOX = { minLat: 51.9, maxLat: 52.6, minLon: 20.5, maxLon: 21.6 };
 
+// "2026-10-02 17:33:16" is Warsaw local time (CET/CEST); convert to epoch ms without hardcoding the offset.
+const WARSAW_FMT = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Warsaw', hourCycle: 'h23',
+  year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+function parseWarsawTime(str) {
+  const naive = Date.parse(String(str).trim().replace(' ', 'T') + 'Z'); // same wall clock, as if UTC
+  if (!Number.isFinite(naive)) return null;
+  const p = Object.fromEntries(WARSAW_FMT.formatToParts(new Date(naive)).map((x) => [x.type, x.value]));
+  const wall = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second);
+  let guess = naive - (wall - naive); // naive minus the offset Warsaw has at that instant
+  const p2 = Object.fromEntries(WARSAW_FMT.formatToParts(new Date(guess)).map((x) => [x.type, x.value]));
+  guess += naive - Date.UTC(+p2.year, +p2.month - 1, +p2.day, +p2.hour, +p2.minute, +p2.second); // fix near DST edges
+  return guess;
+}
+
 function normalize(raw, type, now = Date.now()) {
   const out = [];
   for (const r of raw) {
     const lat = Number(r.Lat), lon = Number(r.Lon);
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
     if (lat < BBOX.minLat || lat > BBOX.maxLat || lon < BBOX.minLon || lon > BBOX.maxLon) continue;
-    const t = Date.parse(String(r.Time).replace(' ', 'T') + '+02:00');
-    const time = Number.isFinite(t) ? t : null;
+    const time = parseWarsawTime(r.Time);
     if (time !== null && now - time > MAX_AGE_MS) continue;
     out.push({
       id: `${type}-${r.VehicleNumber}`,
@@ -56,6 +69,8 @@ async function fetchOnce(url, fetchImpl, init) {
     throw new Error(`HTTP ${res.status}${why ? ` (${why})` : ''}`);
   }
   const body = await res.json();
+  // The new API returns a bare array; the old one wrapped it as {result: [...]}. Accept both.
+  if (Array.isArray(body)) return body;
   if (!Array.isArray(body.result)) {
     // Show the shape of what we got (keys + a short preview, never headers/tokens) so odd replies can be diagnosed.
     const preview = JSON.stringify(body).slice(0, 160);
