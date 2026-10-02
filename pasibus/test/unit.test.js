@@ -79,3 +79,26 @@ test('network errors expose the underlying cause', async () => {
   const f = async () => { const e = new TypeError('fetch failed'); e.cause = { code: 'ECONNRESET' }; throw e; };
   await assert.rejects(fetchVehicles({ apiKey: 'k', types: [1], fetchImpl: f }), /fetch failed \(ECONNRESET\)/);
 });
+
+test('upstream relay: no API key on Vercel side, secret header sent', async () => {
+  const t = new Date(Date.now() + 2 * 3600e3).toISOString().slice(0, 19).replace('T', ' ');
+  const seen = [];
+  const f = async (url, opts) => { seen.push({ url, h: opts.headers }); return { ok: true, json: async () => ({ result: [row({ Time: t })] }) }; };
+  const r = await fetchVehicles({ types: [1, 2], fetchImpl: f, upstream: { url: 'https://w.example.workers.dev', secret: 's3' } });
+  assert.equal(r.vehicles.length, 2);
+  assert.ok(seen.every((c) => c.h['x-proxy-secret'] === 's3' && c.url.startsWith('https://w.example.workers.dev?type=') && !c.url.includes('apikey')));
+});
+
+test('worker: rejects bad secret/type, relays with key', async () => {
+  const worker = (await import('../worker/index.js')).default;
+  const env = { PROXY_SECRET: 's3', WARSAW_API_KEY: 'KEY' };
+  const req = (q, secret) => new Request('https://w.dev/' + q, { headers: secret ? { 'x-proxy-secret': secret } : {} });
+  assert.equal((await worker.fetch(req('?type=1'), env)).status, 403);
+  assert.equal((await worker.fetch(req('?type=1', 'wrong'), env)).status, 403);
+  assert.equal((await worker.fetch(req('?type=9', 's3'), env)).status, 400);
+  let called;
+  const ok = await worker.fetch(req('?type=2', 's3'), env, async (u) => { called = u; return new Response('{"result":[]}', { status: 200 }); });
+  assert.equal(ok.status, 200); assert.match(called, /apikey=KEY&type=2/);
+  const bad = await worker.fetch(req('?type=1', 's3'), env, async () => { throw new Error('boom'); });
+  assert.equal(bad.status, 502);
+});

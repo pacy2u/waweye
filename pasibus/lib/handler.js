@@ -15,7 +15,10 @@ async function vehiclesHandler(req, res, { env = process.env, fetchImpl = fetch 
       const names = types.map((t) => (t === 1 ? 'bus' : 'tram'));
       vehicles = mockVehicles().filter((v) => names.includes(v.type));
     } else {
-      ({ vehicles, errors } = await fetchVehicles({ apiKey: env.WARSAW_API_KEY, types, fetchImpl }));
+      ({ vehicles, errors } = await fetchVehicles({
+        apiKey: env.WARSAW_API_KEY, types, fetchImpl,
+        upstream: env.UPSTREAM_URL ? { url: env.UPSTREAM_URL, secret: env.UPSTREAM_SECRET || '' } : undefined,
+      }));
     }
     res.setHeader('Cache-Control', 's-maxage=5, stale-while-revalidate=10');
     res.statusCode = 200;
