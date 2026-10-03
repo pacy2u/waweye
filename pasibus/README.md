@@ -1,4 +1,6 @@
-# Pasibus – komunikacja miejska w Warszawie na żywo
+# wawEye – komunikacja miejska w Warszawie na żywo
+
+Nazwa produktu od 3 października 2026 r.: **wawEye** (wcześniej Pasibus, zmieniona z powodu kolizji z siecią burgerowni o tej nazwie). Identyfikatory techniczne zostają bez zmian: folder `pasibus/`, adres https://pasibus.vercel.app, Worker `pasibus-proxy`, nazwy workflow „Pasibus – …”, `window.__pasibus` w testach.
 
 Mapa pojazdów (autobusy, tramwaje) w czasie rzeczywistym. Dane: [Lokalizacja pojazdów komunikacji miejskiej](https://dane.um.warszawa.pl/pl/catalogue/f319f602-7292-4e8c-b3d1-f5898aa9a638), m.st. Warszawa. Mapa: OpenStreetMap + Leaflet.
 

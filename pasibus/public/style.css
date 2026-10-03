@@ -11,7 +11,7 @@ html, body { margin: 0; height: 100%; background: var(--charcoal); color: var(--
 #bar { position: fixed; top: max(10px, env(safe-area-inset-top)); left: 10px; right: 10px; z-index: 1000;
   display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 10px;
   background: var(--panel); border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,.3); max-width: 720px; }
-.brand { font-weight: 800; letter-spacing: .5px; color: var(--orange); font-size: 18px; text-transform: uppercase; }
+.brand { font-weight: 800; letter-spacing: .5px; color: var(--orange); font-size: 18px; }
 #search { flex: 1 1 140px; min-width: 140px; background: #34343a; color: var(--ink); border: 1px solid var(--line);
   border-radius: 8px; padding: 8px 10px; font-size: 16px; }
 #search:focus { outline: 2px solid var(--orange); border-color: var(--orange); }
