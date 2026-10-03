@@ -24,7 +24,7 @@ Kto wykonuje kroki:
 | Obszar | Gdzie | Co zawiera „pasibus” | Wpływ na działanie | Faza |
 |---|---|---|---|---|
 | Interfejs i dokumentacja | `public/index.html`, `public/app.js` (komunikat), `public/style.css`, `KOMUNIKAT_PRASOWY.*`, `README.md`, `ROADMAPA.md`, `CONTEXT.md` | nazwa produktu | brak | 1 (zrobione) |
-| Folder aplikacji | `pasibus/` (61 plików) | ścieżka | **krytyczny**: Root Directory w Vercel i ścieżki w workflowach | 6 |
+| Folder aplikacji | `pasibus/` (ok. 60 plików) | ścieżka | **krytyczny**: Root Directory w Vercel i ścieżki w workflowach | 6 |
 | Workflow testów | `.github/workflows/pasibus-testy.yml` | nazwa pliku i workflow, `paths`, `working-directory`, `cache-dependency-path`, grupa `concurrency`, artefakt `pasibus-*.png` | testy przy PR | 5, 6 |
 | Workflow monitoringu | `.github/workflows/pasibus-monitoring-produkcji.yml` | nazwa, sprawdzany adres, **tytuł zgłoszenia** `[monitoring] pasibus.vercel.app nie działa poprawnie`, ścieżka skryptu | wykrywanie awarii | 3, 6 |
 | Workflow wdrożenia Workera | `.github/workflows/pasibus-wdrozenie-workera.yml` | nazwa, `paths`, `working-directory`, `workingDirectory` | wdrożenie Workera | 6 |
