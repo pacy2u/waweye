@@ -1,4 +1,4 @@
-name = "pasibus-proxy"
+name = "waweye-proxy" # until 2026-10: pasibus-proxy; see PLAN_MIGRACJI_WAWEYE.md, Faza 4
 main = "index.js"
 compatibility_date = "2024-11-01"
 workers_dev = true

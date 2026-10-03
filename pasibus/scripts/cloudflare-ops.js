@@ -3,7 +3,7 @@
 // run by .github/workflows/waweye-operacje-cloudflare.yml:
 //   node scripts/cloudflare-ops.js <operation> [worker] [confirmation]
 // Env: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID; PROXY_SECRET (test-workera, ustaw-sekrety);
-// WARSAW_API_KEY (ustaw-sekrety); VERCEL_* (stan, usun-workera: which Worker production uses).
+// WARSAW_API_KEY (ustaw-sekrety); VERCEL_* (stan, usun-workera: which Worker production uses, when Vercel reveals it).
 // Prints a Markdown report (Polish) and never prints token or secret values.
 const fs = require('fs');
 const path = require('path');
@@ -192,16 +192,19 @@ async function usunWorkera(ctx, value, confirmation) {
   const worker = checkWorker(value);
   if (String(confirmation || '').trim() !== worker) throw new Error(`Aby usunąć Workera, wpisz w polu potwierdzenia dokładnie jego nazwę: ${worker}.`);
   if (worker === deployedName()) throw new Error(`${worker} to Worker, którego wdraża workflow (worker/wrangler.toml). Nie usuwam go.`);
+  // Production must not depend on it: either Vercel's UPSTREAM_URL points elsewhere or, when Vercel hides the value
+  // (type "sensitive"), the Worker had no traffic for 7 days (production and its monitoring would show up there).
   const up = await vercelUpstream(ctx);
-  if (up.error || up.url === null) {
-    throw new Error(`Nie mogę sprawdzić, którego Workera używa produkcja Vercel (${up.error || 'wartość UPSTREAM_URL jest ukryta'}). Bez tego nie usuwam. Sprawdź ruch w panelu Cloudflare i usuń ręcznie.`);
-  }
-  if (isUsedBy(up.url, worker)) throw new Error(`Produkcja Vercel nadal używa Workera ${worker} (UPSTREAM_URL). Najpierw przełącz ją na nowego Workera (operacje Vercel: przelacz-workera).`);
+  const known = !up.error && up.url !== null;
+  if (known && isUsedBy(up.url, worker)) throw new Error(`Produkcja Vercel nadal używa Workera ${worker} (UPSTREAM_URL). Najpierw przełącz ją na nowego Workera (operacje Vercel: przelacz-workera).`);
   if (!(await scripts(ctx)).some((s) => s.id === worker)) return `### Cloudflare: Worker ${worker} nie istnieje, nic nie usuwam.`;
   const r = await requests7d(ctx, worker);
   if (!r.error && r.requests > 0) throw new Error(`Worker ${worker} obsłużył ${r.requests} zapytań w ostatnich 7 dniach. Usuń go dopiero, gdy ruch spadnie do zera.`);
+  if (!known && r.error) {
+    throw new Error(`Nie mogę sprawdzić, czy produkcja używa Workera ${worker}: UPSTREAM_URL jest niedostępny (${up.error || 'wartość ukryta w Vercel'}), a ruchu nie da się odczytać (${r.error}). Bez tego nie usuwam.`);
+  }
   await ctx.api('DELETE', `/accounts/${ctx.accountId}/workers/scripts/${worker}`);
-  return `### Cloudflare: usunięto Workera ${worker}\n\nProdukcja używa: ${up.url || 'bez Workera'}.${r.error ? ` Ruchu z ostatnich 7 dni nie dało się odczytać (${r.error}).` : ' Ruch w ostatnich 7 dniach: 0.'}`;
+  return `### Cloudflare: usunięto Workera ${worker}\n\n${known ? `Produkcja używa: ${up.url || 'bez Workera'}.` : 'Wartość UPSTREAM_URL jest ukryta w Vercel; o usunięciu zdecydował brak ruchu.'}${r.error ? ` Ruchu z ostatnich 7 dni nie dało się odczytać (${r.error}).` : ' Ruch w ostatnich 7 dniach: 0.'}`;
 }
 
 const OPERATIONS = {

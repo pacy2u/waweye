@@ -1,6 +1,6 @@
 # wawEye – komunikacja miejska w Warszawie na żywo
 
-Nazwa produktu od 3 października 2026 r.: **wawEye** (wcześniej Pasibus, zmieniona z powodu kolizji z siecią burgerowni o tej nazwie). Identyfikatory techniczne zostają bez zmian: folder `pasibus/`, adres https://pasibus.vercel.app, Worker `pasibus-proxy`, nazwy workflow „Pasibus – …”, `window.__pasibus` w testach.
+Nazwa produktu od 3 października 2026 r.: **wawEye** (wcześniej Pasibus, zmieniona z powodu kolizji z siecią burgerowni o tej nazwie). Migracja identyfikatorów technicznych trwa według `PLAN_MIGRACJI_WAWEYE.md`: aplikacja działa pod https://waweye.vercel.app i pod dotychczasowym https://pasibus.vercel.app; folder `pasibus/`, nazwy workflow „Pasibus – …” i `window.__pasibus` w testach zmienią się w kolejnych fazach.
 
 Mapa pojazdów (autobusy, tramwaje) w czasie rzeczywistym. Dane: [Lokalizacja pojazdów komunikacji miejskiej](https://dane.um.warszawa.pl/pl/catalogue/f319f602-7292-4e8c-b3d1-f5898aa9a638), m.st. Warszawa. Mapa: OpenStreetMap + Leaflet.
 
@@ -28,7 +28,7 @@ node scripts/check-production.js   # kontrola produkcji: pojazdy, parkingi, utru
 ```
 W GitHub Actions (`.github/workflows/`):
 - **Pasibus – testy**: oba zestawy testów przy każdym PR i po zmianie na `main` (zmiany samych plików `.md` nie zużywają minut).
-- **Pasibus – monitoring produkcji**: co 2 godziny `scripts/check-production.js` sprawdza https://pasibus.vercel.app (także to, czy pojazdy na żywo znajdują się w zbiorze taboru). Przy awarii zakłada jedno zgłoszenie (issue) „[monitoring] pasibus.vercel.app nie działa poprawnie”, a GitHub wysyła e-mail. Po pierwszej udanej kontroli zgłoszenie zamyka się samo. Ręcznie: Actions → Pasibus – monitoring produkcji → Run workflow.
+- **Pasibus – monitoring produkcji**: co 2 godziny `scripts/check-production.js` sprawdza https://waweye.vercel.app i https://pasibus.vercel.app (także to, czy pojazdy na żywo znajdują się w zbiorze taboru). Przy awarii zakłada jedno zgłoszenie (issue) „[monitoring] wawEye nie działa poprawnie”, a GitHub wysyła e-mail. GitHub uruchamia zaplanowane przebiegi z opóźnieniem albo je pomija (2026-10-03: 4 przebiegi w 17 godzin), więc odstępy bywają dłuższe niż 2 godziny. Po pierwszej udanej kontroli zgłoszenie zamyka się samo. Ręcznie: Actions → Pasibus – monitoring produkcji → Run workflow.
 - Repo jest prywatne, więc obowiązuje darmowa pula minut Actions (2000 min/mies. na koncie GitHub Free). Monitoring zużywa ok. 360 min/mies., testy kilka minut na PR. Po wyczerpaniu puli zadania się zatrzymują, nie generując kosztów (przy domyślnym limicie wydatków 0 USD).
 
 ## Wdrożenie na Vercel
@@ -42,10 +42,10 @@ Klucz jest tylko po stronie serwera (`api/vehicles.js`); przeglądarka nigdy go 
 ## Pośrednik Cloudflare Worker (gdy Vercel nie łączy się z API Warszawy)
 Stary host `api.um.warszawa.pl` nie przyjmował połączeń z adresów Vercel/AWS (`UND_ERR_CONNECT_TIMEOUT`); jeśli nowy host zachowuje się tak samo, a przeglądarka nie może pytać API wprost (brak CORS). Rozwiązanie: Worker w Cloudflare trzyma klucz i odpytuje Warszawę, a funkcja Vercel pyta Worker.
 
-1. Konto na cloudflare.com (darmowe) → **Workers & Pages → Create → Create Worker**, nazwa `pasibus-proxy`, Deploy.
+1. Konto na cloudflare.com (darmowe) → **Workers & Pages → Create → Create Worker**, nazwa `waweye-proxy` (do 2026-10 `pasibus-proxy`), Deploy.
 2. **Edit code**: wklej zawartość `worker/index.js`, Deploy.
 3. **Settings → Variables and Secrets** (typ *Secret*): `WARSAW_API_KEY` = token API z https://dane.um.warszawa.pl/key-api, `PROXY_SECRET` = dowolny długi losowy ciąg.
-4. W Vercel (**Settings → Environment Variables**) dodaj: `UPSTREAM_URL` = adres Workera (`https://pasibus-proxy.<konto>.workers.dev`), `UPSTREAM_SECRET` = ten sam ciąg co `PROXY_SECRET`. Zrób **Redeploy**.
+4. W Vercel (**Settings → Environment Variables**) dodaj: `UPSTREAM_URL` = adres Workera (`https://waweye-proxy.<konto>.workers.dev`), `UPSTREAM_SECRET` = ten sam ciąg co `PROXY_SECRET`. Zrób **Redeploy**.
 
 (Alternatywa z CLI: `cd worker && npx wrangler deploy`, potem `npx wrangler secret put WARSAW_API_KEY` i `PROXY_SECRET`.)
 
@@ -59,7 +59,7 @@ Workflow **Pasibus – wdrożenie Workera Cloudflare** wdraża `worker/` po każ
 Wdrożenie nie zmienia sekretów Workera (`WARSAW_API_KEY`, `PROXY_SECRET`), a `keep_vars = true` w `wrangler.toml` zachowuje zmienne ustawione w panelu. Bez sekretów workflow kończy się ostrzeżeniem i trzeba wkleić kod ręcznie jak wyżej.
 
 ## Operacje w Vercel i Cloudflare bez panelu (workflowy na żądanie)
-Zmiany w projekcie Vercel i Workerach Cloudflare robią workflowy uruchamiane ręcznie (**Actions → workflow → Run workflow**) albo przez Claude w sesji. Tokeny są tylko w sekretach repozytorium. Logika: `scripts/vercel-ops.js` i `scripts/cloudflare-ops.js`, testy w `test/operacje.test.js`. Kolejność użycia przy zmianie nazwy opisuje `PLAN_MIGRACJI_WAWEYE.md`.
+Zmiany w projekcie Vercel i Workerach Cloudflare robią workflowy uruchamiane ręcznie (**Actions → workflow → Run workflow**). Aplikacja Claude na GitHubie nie może uruchamiać workflowów, więc Claude podaje parametry, a potem sam odczytuje wynik przebiegu. Tokeny są tylko w sekretach repozytorium. Logika: `scripts/vercel-ops.js` i `scripts/cloudflare-ops.js`, testy w `test/operacje.test.js`. Kolejność użycia przy zmianie nazwy opisuje `PLAN_MIGRACJI_WAWEYE.md`.
 - **wawEye – operacje Vercel**: `stan` (tylko odczyt), `dodaj-domene`, `przekieruj-domene` (308), `przelacz-workera` (zmienia `UPSTREAM_URL`, opcjonalnie `UPSTREAM_SECRET`, i wdraża produkcję), `ustaw-root-directory` (i wdraża), `zmien-nazwe-projektu` (przywraca domeny, gdyby zniknęły), `wdroz-produkcje`. Po każdym wdrożeniu uruchamia kontrolę produkcji na wszystkich domenach produkcyjnych.
 - **wawEye – operacje Cloudflare**: `stan`, `test-workera` (wszystkie zasoby z sekretem i 403 bez niego), `ustaw-sekrety` (z sekretów repozytorium), `usun-workera`. Usunięcia odmawia, jeśli Worker jest celem wdrożeń, używa go produkcja Vercel albo miał ruch w ostatnich 7 dniach.
 - **wawEye – kontrola adresu**: `scripts/check-production.js` dla dowolnego adresu na serwerach GitHuba, bez zakładania zgłoszeń.

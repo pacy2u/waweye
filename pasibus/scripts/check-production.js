@@ -1,9 +1,9 @@
 'use strict';
 // Production health check: do all live data sources answer, and do vehicles join with the fleet dataset?
-// Run: node scripts/check-production.js [base URL, default https://pasibus.vercel.app]
+// Run: node scripts/check-production.js [base URL, default https://waweye.vercel.app]
 // Prints a Markdown report (Polish, it becomes the body of the alert issue); exit code 1 when something is wrong.
 
-const DEFAULT_URL = 'https://pasibus.vercel.app';
+const DEFAULT_URL = 'https://waweye.vercel.app';
 const TIMEOUT_MS = 60000; // the fleet dataset took ~21 s on a cold cache (2026-10-02)
 const MIN_FLEET_MATCH = 0.9; // 2026-10-02: 99.5% of live buses and 99.6% of live trams were in the fleet dataset
 const MIN_SAMPLE = 20; // too few vehicles of a type (e.g. trams at night) say nothing about the join
@@ -102,7 +102,8 @@ function report(base, result, when = new Date()) {
 }
 
 async function main() {
-  const base = process.argv[2] || process.env.PASIBUS_URL || DEFAULT_URL;
+  // PASIBUS_URL: old name, kept until the end of the wawEye migration (PLAN_MIGRACJI_WAWEYE.md, Faza 9).
+  const base = process.argv[2] || process.env.WAWEYE_URL || process.env.PASIBUS_URL || DEFAULT_URL;
   const check = async () => {
     const [vehicles, parking, incidents, fleet] = await Promise.all(['/api/vehicles', '/api/parking', '/api/incidents', '/api/fleet'].map((p) => get(base, p)));
     return evaluate({ vehicles, parking, incidents, fleet });
