@@ -132,7 +132,7 @@ Wynik: `waweye-proxy` wdrożony 20:23 (pacy2u/tst#29). Sekrety ustawione. Test p
 - Wynik (2026-10-03): `npm test` 62/62, `npm run test:e2e` 65/65, zrzuty `waweye-*.png`. Nazwa w `package.json` zmieniona ręcznie, bo `npm pkg set` przeformatowałby cały plik; `package-lock.json` wygenerowany przez `npm install --package-lock-only`.
 - Weryfikacja: `npm test`, `npm run test:e2e`, zielone CI. Wycofanie: revert PR.
 
-### Faza 6 – Folder `pasibus/` → `waweye/`
+### Faza 6 – Folder `pasibus/` → `waweye/` – w PR (2026-10-03)
 Przygotowanie:
 - Zmerguj albo zamknij wszystkie otwarte PR-y. Gałęzie sprzed zmiany folderu będą miały konflikty.
 - Najlepiej po Fazie 4. Merge tego PR-a uruchomi workflow wdrożenia Workera, bo zmienią się ścieżki w `worker/`, i wdroży ten sam kod pod ostateczną nazwą. To nieszkodliwe.

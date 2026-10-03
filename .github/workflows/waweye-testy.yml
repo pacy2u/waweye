@@ -1,16 +1,16 @@
-name: Pasibus – testy
+name: wawEye – testy
 
 # Unit and browser tests on every PR and on main. Docs-only changes (*.md) do not use Actions minutes.
 on:
   pull_request:
-    paths: ['pasibus/**', '!pasibus/**/*.md', '.github/workflows/pasibus-*.yml']
+    paths: ['waweye/**', '!waweye/**/*.md', '.github/workflows/waweye-*.yml']
   push:
     branches: [main]
-    paths: ['pasibus/**', '!pasibus/**/*.md', '.github/workflows/pasibus-*.yml']
+    paths: ['waweye/**', '!waweye/**/*.md', '.github/workflows/waweye-*.yml']
   workflow_dispatch:
 
 concurrency:
-  group: pasibus-testy-${{ github.ref }}
+  group: waweye-testy-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -22,14 +22,14 @@ jobs:
     timeout-minutes: 10
     defaults:
       run:
-        working-directory: pasibus
+        working-directory: waweye
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: pasibus/package-lock.json
+          cache-dependency-path: waweye/package-lock.json
       - run: npm ci
       - name: Testy jednostkowe
         run: npm test

@@ -1,7 +1,7 @@
 name: wawEye – kontrola adresu
 
 # On-demand production check of any address (a new domain, a preview) without opening monitoring issues.
-# Runs pasibus/scripts/check-production.js on GitHub's runners, so it works even when a Claude session
+# Runs waweye/scripts/check-production.js on GitHub's runners, so it works even when a Claude session
 # cannot reach the address.
 on:
   workflow_dispatch:
@@ -30,4 +30,4 @@ jobs:
           ADRES: ${{ inputs.adres }}
         run: |
           if [[ ! "$ADRES" =~ ^https://[A-Za-z0-9.-]+(/.*)?$ ]]; then echo "::error::Podaj adres zaczynający się od https://"; exit 1; fi
-          node pasibus/scripts/check-production.js "$ADRES" | tee -a "$GITHUB_STEP_SUMMARY"
+          node waweye/scripts/check-production.js "$ADRES" | tee -a "$GITHUB_STEP_SUMMARY"

@@ -1,4 +1,4 @@
-name: Pasibus – monitoring produkcji
+name: wawEye – monitoring produkcji
 
 # Every 2 hours: checks vehicles, parkings, incidents and fleet on both production addresses
 # (https://waweye.vercel.app and, until the end of the wawEye migration, https://pasibus.vercel.app).
@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: pasibus-monitoring
+  group: waweye-monitoring
   cancel-in-progress: false
 
 permissions:
@@ -37,7 +37,7 @@ jobs:
         run: |
           status=0
           for adres in https://waweye.vercel.app https://pasibus.vercel.app; do
-            node pasibus/scripts/check-production.js "$adres" >> raport.md || status=1
+            node waweye/scripts/check-production.js "$adres" >> raport.md || status=1
           done
           cat raport.md >> "$GITHUB_STEP_SUMMARY"
           exit $status
