@@ -13,9 +13,9 @@ const { serve, openComposition, launch } = require('./wspolne');
 const FPS = +process.env.FPS || 60, SUB = +process.env.SUB || 4, SHUTTER = 0.5;
 const CRF = process.env.CRF || '18', GRAIN = process.env.GRAIN || '3'; // grain also dithers the dark gradients against banding
 const WORKERS = +process.env.WORKERS || Math.max(1, os.cpus().length - 1);
-const OUT = path.resolve(process.argv[2] || path.join(__dirname, 'pasibus-showreel.mp4'));
+const OUT = path.resolve(process.argv[2] || path.join(__dirname, 'waweye-showreel.mp4'));
 const AUDIO = path.join(__dirname, 'zasoby', 'muzyka.wav');
-const TMP = fs.mkdtempSync(path.join(process.env.RENDER_TMP || os.tmpdir(), 'pasibus-render-'));
+const TMP = fs.mkdtempSync(path.join(process.env.RENDER_TMP || os.tmpdir(), 'waweye-render-'));
 
 function ffmpegSegment(file) {
   const vf = SUB > 1 ? `tmix=frames=${SUB},select='not(mod(n+1\\,${SUB}))',setpts=N/(${FPS}*TB)` : 'null';
@@ -64,7 +64,7 @@ const write = (s, buf) => new Promise((r) => (s.write(buf) ? r() : s.once('drain
     '-map', '0:v', ...(withAudio ? ['-map', '1:a', '-c:a', 'aac', '-b:a', '256k', '-shortest'] : []),
     '-vf', `noise=c0s=${GRAIN}:c0f=t+u`, // film grain (cheaper here than as a blended layer in the browser)
     '-c:v', 'libx264', '-preset', 'slow', '-crf', CRF, '-tune', 'film', '-pix_fmt', 'yuv420p', '-profile:v', 'high', '-level', '4.2',
-    '-r', String(FPS), '-movflags', '+faststart', '-metadata', 'title=Pasibus – Warsaw, live.', OUT], { stdio: 'inherit' });
+    '-r', String(FPS), '-movflags', '+faststart', '-metadata', 'title=wawEye – Warsaw, live.', OUT], { stdio: 'inherit' });
   fs.rmSync(TMP, { recursive: true, force: true });
   console.log(`gotowe: ${OUT} (${(fs.statSync(OUT).size / 1e6).toFixed(1)} MB) w ${((Date.now() - started) / 1000).toFixed(0)} s`);
 })().catch((e) => { console.error(e); process.exit(1); });

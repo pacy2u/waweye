@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Pasibus – showreel</title>
+<title>wawEye – showreel</title>
 <!--
   Kompozycja wideo 1920×1080, 30 s. Cały obraz jest funkcją czasu: window.seek(t) rysuje klatkę dla t w sekundach.
   Podgląd w przeglądarce: kompozycja.html?play (odtwarzanie) albo kompozycja.html?t=12.5 (jedna klatka).
@@ -53,7 +53,7 @@ canvas { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
 #logo { position: absolute; left: 960px; top: 540px; display: flex; align-items: center; gap: 56px; transform-origin: 50% 50%; white-space: nowrap; }
 #icon { width: 236px; height: 236px; overflow: visible; flex: none; }
 #word { font-size: 236px; line-height: 1; letter-spacing: -.01em; font-variation-settings: 'wdth' 112, 'wght' 900; display: flex; }
-#word .lm { display: inline-block; overflow: hidden; padding: .1em .004em .06em; margin: -.1em 0 -.06em; }
+#word .lm { display: inline-block; overflow: hidden; padding: .1em .004em .3em; margin: -.1em 0 -.3em; }
 #word .li { display: inline-block; }
 #tagline { position: absolute; left: 0; right: 0; text-align: center; top: 740px; font-size: 30px; color: rgba(255,255,255,.88); letter-spacing: .5em; }
 /* Map HUD */
@@ -148,7 +148,7 @@ canvas { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
   </div>
 
   <div id="sE" class="scene">
-    <div id="eTitle"><div class="ex mono">NYSE</div><div class="tk">PSBS</div><div class="nm mono">Pasibus Inc. · Class A · Live</div></div>
+    <div id="eTitle"><div class="ex mono">NYSE</div><div class="tk">WAWE</div><div class="nm mono"><span style="text-transform:none">wawEye</span> Inc. · Class A · Live</div></div>
     <div id="ePrice"><b>$0.00</b><i>+0.0%</i></div>
     <div id="kpis"></div>
     <div class="tape mono" id="tapeTop"><div></div></div>
@@ -157,8 +157,8 @@ canvas { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
 
   <div id="sF" class="scene">
     <div id="fBadge" class="mono"></div>
-    <div id="fUrl" class="mono">pasibus.vercel.app</div>
-    <div id="fFine" class="mono">Pasibus is not listed on any stock exchange. Yet.  ·  Live data: m.st. Warszawa (dane.um.warszawa.pl)  ·  Map data © OpenStreetMap contributors</div>
+    <div id="fUrl" class="mono">waweye.vercel.app</div>
+    <div id="fFine" class="mono">wawEye is not listed on any stock exchange. Yet.  ·  Live data: m.st. Warszawa (dane.um.warszawa.pl)  ·  Map data © OpenStreetMap contributors</div>
   </div>
 
   <div id="logo">
@@ -424,7 +424,7 @@ function sceneB(t) {
 }
 
 // ---------------------------------------------------------------- logo (C at 6.0, F at 26.0)
-const WORD = 'PASIBUS';
+const WORD = 'wawEye';
 $('word').innerHTML = [...WORD].map((ch) => `<span class="lm"><span class="li">${ch}</span></span>`).join('');
 const LI = [...document.querySelectorAll('#word .li')];
 function logo(t, t0, sp, scale, outT) { // sp: speed factor
@@ -438,8 +438,8 @@ function logo(t, t0, sp, scale, outT) { // sp: speed factor
   $('icW2').setAttribute('transform', `translate(0 ${(1 - w2) * -9})`); $('icW2').style.opacity = u > 0.36 ? 1 : 0;
   LI.forEach((li, i) => {
     const k = P(u, 0.16 + i * 0.04, 0.62 + i * 0.04, E.outExpo);
-    let y = (1 - k) * 105;
-    if (outT != null) y -= P(t, outT + i * 0.025, outT + 0.28 + i * 0.025, E.inCub) * 110;
+    let y = (1 - k) * 140; // fully below the mask (room for the descender of "y")
+    if (outT != null) y -= P(t, outT + i * 0.025, outT + 0.28 + i * 0.025, E.inCub) * 135;
     li.style.transform = `translateY(${y}%)`;
   });
   $('word').style.fontVariationSettings = `'wdth' ${lerp(70, 112, P(u, 0.16, 0.9, E.outExpo))}, 'wght' 900`;
@@ -583,7 +583,7 @@ function sceneDText(t) {
 }
 
 // ---------------------------------------------------------------- scene E: IPO (20–26)
-const TAPE = [['PSBS', '412.69', '▲ +4,026.9%'], ['LIVE VEHICLES', fmt(S.live), '▲'], ['LINES', S.lines, ''], ['FLEET MATCH', S.fleetMatchPct + '%', '▲'], ['REFRESH', '10 S', ''],
+const TAPE = [['WAWE', '412.69', '▲ +4,026.9%'], ['LIVE VEHICLES', fmt(S.live), '▲'], ['LINES', S.lines, ''], ['FLEET MATCH', S.fleetMatchPct + '%', '▲'], ['REFRESH', '10 S', ''],
   ['INFRA COST', '$0/MO', ''], ['TESTS', '89/89', '✓'], ['CAR PARKS', S.parkings, ''], ['INCIDENTS', S.incidentsActive, ''], ['DEPOTS', S.depots, '']];
 const tapeHTML = TAPE.map(([a, b, c]) => `<span>${a} </span><span class="o">${b}</span> <span class="u">${c}</span><span class="s">///</span>`).join('');
 $('tapeTop').firstElementChild.innerHTML = tapeHTML.repeat(4); $('tapeBot').firstElementChild.innerHTML = tapeHTML.repeat(4);
@@ -713,7 +713,7 @@ function sceneF(t) {
     const ic = $('icon').getBoundingClientRect(); fctx.strokeStyle = `rgba(252,76,2,${1 - k})`; fctx.lineWidth = 6 * (1 - k) + 1;
     fctx.beginPath(); fctx.arc(ic.left + ic.width / 2, ic.top + ic.height / 2, ic.width * 0.6 + 380 * k, 0, 6.2832); fctx.stroke(); }
   show($('sF'), 1);
-  setHTML($('fBadge'), '<svg width="26" height="26" viewBox="0 0 24 24"><path d="M12 2a1.6 1.6 0 0 1 1.6 1.6v.5A7 7 0 0 1 19 11v4.5l2 2.5H3l2-2.5V11a7 7 0 0 1 5.4-6.9v-.5A1.6 1.6 0 0 1 12 2zm-2.6 18h5.2a2.6 2.6 0 0 1-5.2 0z" fill="#FC4C02"/></svg>NYSE: PSBS  ·  Opening bell soon');
+  setHTML($('fBadge'), '<svg width="26" height="26" viewBox="0 0 24 24"><path d="M12 2a1.6 1.6 0 0 1 1.6 1.6v.5A7 7 0 0 1 19 11v4.5l2 2.5H3l2-2.5V11a7 7 0 0 1 5.4-6.9v-.5A1.6 1.6 0 0 1 12 2zm-2.6 18h5.2a2.6 2.6 0 0 1-5.2 0z" fill="#FC4C02"/></svg>NYSE: WAWE  ·  Opening bell soon');
   const b = $('fBadge'); b.style.opacity = P(t, 27.0, 27.3); b.style.transform = `translate(-50%, ${(1 - P(t, 27.0, 27.4, E.outExpo)) * -20}px)`;
   const url = $('fUrl'); url.style.opacity = P(t, 26.8, 27.1); url.style.transform = `translate(-50%, ${(1 - P(t, 26.8, 27.3, E.outExpo)) * 30}px)`;
   $('fFine').style.opacity = 0.9 * P(t, 28.2, 28.8);
