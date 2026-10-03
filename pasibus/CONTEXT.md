@@ -55,7 +55,7 @@ Linie utrudnień muszą używać tego samego renderera canvas co pojazdy (`rende
 - Rozkłady, trasy i przystanki: **tylko oficjalne zbiory miasta** (bez społecznościowego GTFS).
 - Budżet: **0 zł** (Vercel Hobby, darmowe progi, darmowa pula minut GitHub Actions dla prywatnego repo).
 - **Bez analityki** użytkowników, także bezciasteczkowej. Mierzymy tylko technicznie (monitoring).
-- Nazwa (2026-10-03): **wawEye**, pisane dokładnie tak (małe „waw”, wielkie „E”; logo bez zamiany na wielkie litery). Wcześniej Pasibus – kolizja z siecią burgerowni Pasibus. Identyfikatory techniczne zostają: folder `pasibus/`, https://pasibus.vercel.app, Worker `pasibus-proxy`, nazwy workflow, `window.__pasibus`. Do zrobienia: nowy adres (np. alias domeny w Vercel) i ponowny render wideo promocyjnego (logo, zrzuty, napisy końcowe).
+- Nazwa (2026-10-03): **wawEye**, pisane dokładnie tak (małe „waw”, wielkie „E”; logo bez zamiany na wielkie litery). Wcześniej Pasibus – kolizja z siecią burgerowni Pasibus. Identyfikatory techniczne zostają: folder `pasibus/`, https://pasibus.vercel.app, Worker `pasibus-proxy`, nazwy workflow, `window.__pasibus`. Dalsze kroki (domena, Worker, folder, repo, wideo) opisuje `PLAN_MIGRACJI_WAWEYE.md`.
 
 ## Środowisko pracy (sesje w chmurze)
 - Dostęp sieciowy sesji ustawia się w edycji środowiska (`apck01`); **zmiany stosują się tylko do nowych sesji**. Potrzebne domeny: `dane.um.warszawa.pl` (czytanie opisów zbiorów i test API; użytkownik zgodził się ją dodać 2026-10-02), `tile.openstreetmap.org` (kafelki w testach), `api.um.warszawa.pl` (stary host). Produkcja `pasibus.vercel.app` jest osiągalna z sesji, więc żywe dane można sprawdzać przez `/api/*` albo `node scripts/check-production.js`.
