@@ -2,10 +2,12 @@
 // Vercel project operations for the wawEye migration (PLAN_MIGRACJI_WAWEYE.md),
 // run by .github/workflows/waweye-operacje-vercel.yml:
 //   node scripts/vercel-ops.js <operation> [value] [redirectTo]
-// Env: VERCEL_TOKEN, VERCEL_TEAM_ID, VERCEL_PROJECT_ID; NOWY_SEKRET=true and PROXY_SECRET only for przelacz-workera
-// with a new secret.
+// Env: VERCEL_TOKEN, VERCEL_TEAM_ID, VERCEL_PROJECT_ID; PROXY_SECRET for przelacz-podglady, and with NOWY_SEKRET=true
+// for przelacz-workera with a new secret.
 // Prints a Markdown report (Polish) and never prints the token or secret values.
 // Operations that deploy write the production addresses to check to GITHUB_OUTPUT as `sprawdz`.
+
+const checkProduction = require('./check-production');
 
 const API = 'https://api.vercel.com';
 const POLL_MS = 10000;
@@ -143,12 +145,15 @@ async function setVar(ctx, envs, key, value, type) {
   return `${key}: zaktualizowano (${records.map((r) => targets(r).join(', ')).join('; ')})`;
 }
 
-async function wdrozProdukcje(ctx) {
+// Deploys the production branch from git, as production or as a preview (no target), and waits until it is ready.
+async function deployBranch(ctx, production) {
   const { api, projectId, sleep, now } = ctx;
   const p = await api('GET', `/v9/projects/${projectId}`);
   if (!p.link || p.link.type !== 'github' || !p.link.repoId) throw new Error('Projekt nie jest połączony z repozytorium GitHub, więc nie mogę wdrożyć gałęzi produkcyjnej.');
   const ref = p.link.productionBranch || 'main';
-  const created = await api('POST', '/v13/deployments', { name: p.name, project: projectId, target: 'production', gitSource: { type: 'github', repoId: String(p.link.repoId), ref } });
+  const body = { name: p.name, project: projectId, gitSource: { type: 'github', repoId: String(p.link.repoId), ref } };
+  if (production) body.target = 'production';
+  const created = await api('POST', '/v13/deployments', body);
   const t0 = now();
   let d = created;
   while (!['READY', 'ERROR', 'CANCELED'].includes(d.readyState)) {
@@ -159,18 +164,63 @@ async function wdrozProdukcje(ctx) {
   if (d.readyState !== 'READY') {
     throw new Error(`Wdrożenie ${created.id} zakończyło się stanem ${d.readyState}. Produkcja działa dalej na poprzednim wdrożeniu. Szczegóły: ${d.inspectorUrl || created.inspectorUrl || 'panel Vercel'}`);
   }
+  return { d, ref, id: created.id };
+}
+
+async function wdrozProdukcje(ctx) {
+  const { api, sleep } = ctx;
+  let { d, ref, id } = await deployBranch(ctx, true);
   for (let i = 0; i < ALIAS_WAIT_POLLS && !d.aliasAssigned && !d.aliasError; i++) {
     await sleep(POLL_MS);
-    d = await api('GET', `/v13/deployments/${created.id}`);
+    d = await api('GET', `/v13/deployments/${id}`);
   }
   if (d.aliasError) throw new Error(`Wdrożenie jest gotowe, ale domeny produkcyjne go nie wskazują: ${d.aliasError.message || d.aliasError.code}`);
   const check = productionDomains(await listDomains(ctx));
   return { md: `Wdrożenie produkcyjne gałęzi \`${ref}\` gotowe: ${d.url}${d.aliasAssigned ? '' : ' (domeny jeszcze się przełączają)'}.`, check };
 }
 
-async function przelaczWorkera(ctx, value, newSecret) {
+function checkWorkerUrl(value) {
   const url = String(value || '').trim().replace(/\/$/, '');
   if (!WORKER_URL_RE.test(url)) throw new Error(`Niepoprawny adres Workera: "${value}". Oczekuję https://<nazwa>.<konto>.workers.dev`);
+  return url;
+}
+
+// Preview-only variables: a record that also serves production is never changed here.
+async function setPreviewVar(ctx, envs, key, value, type) {
+  const { api, projectId } = ctx;
+  const records = envs.filter((e) => e.key === key && targets(e).includes('preview'));
+  if (records.some((e) => targets(e).includes('production'))) throw new Error(`Zmienna ${key} jest wspólna dla produkcji i podglądów, więc nie zmieniam jej tylko dla podglądów.`);
+  if (!records.length) {
+    await api('POST', `/v10/projects/${projectId}/env`, { key, value, type, target: ['preview'] });
+    return `${key}: utworzono (preview)`;
+  }
+  for (const r of records) await api('PATCH', `/v9/projects/${projectId}/env/${r.id}`, { value });
+  return `${key}: zaktualizowano (preview)`;
+}
+
+// Points previews at a Worker and deploys a preview of the production branch: its functions run in the same region as
+// production (fra1), so this tests a new Worker the way production would use it, without touching production.
+async function przelaczPodglady(ctx, value, secret) {
+  const url = checkWorkerUrl(value);
+  if (!secret) throw new Error('Brak sekretu PROXY_SECRET w repozytorium, a podglądy potrzebują go jako UPSTREAM_SECRET.');
+  const envs = (await ctx.api('GET', `/v9/projects/${ctx.projectId}/env`)).envs || [];
+  const changes = [await setPreviewVar(ctx, envs, 'UPSTREAM_URL', url, 'plain'), await setPreviewVar(ctx, envs, 'UPSTREAM_SECRET', secret, 'encrypted')];
+  const { d, ref } = await deployBranch(ctx, false);
+  const base = `https://${d.url}`;
+  const paths = ['/api/vehicles', '/api/parking', '/api/incidents', '/api/fleet'];
+  const [vehicles, parking, incidents, fleet] = await Promise.all(paths.map((p) => checkProduction.get(base, p, ctx.fetchImpl)));
+  const head = [`Podglądy używają Workera ${url}:`, '', ...changes.map((c) => `- ${c}`), '', `Podgląd gałęzi \`${ref}\` gotowy: ${base}`, ''];
+  if ([vehicles, parking, incidents, fleet].every((r) => r.status === 401 || r.status === 403) && !(vehicles.body && vehicles.body.error)) {
+    return { md: [...head, `Podgląd jest chroniony logowaniem Vercel, więc workflow nie może go sprawdzić. Otwórz ${base} w przeglądarce, w której jesteś zalogowany do Vercel. Jeśli na mapie są pojazdy, a po kliknięciu parkingów i utrudnień pojawiają się znaczniki, nowy Worker działa.`].join('\n'), check: [] };
+  }
+  const result = checkProduction.evaluate({ vehicles, parking, incidents, fleet });
+  const md = [...head, checkProduction.report(base, result)].join('\n');
+  if (!result.ok) throw new Error(md + '\nProdukcja jest bez zmian. Zmienne podglądów można zostawić albo przełączyć z powrotem tą samą operacją.');
+  return { md, check: [] };
+}
+
+async function przelaczWorkera(ctx, value, newSecret) {
+  const url = checkWorkerUrl(value);
   const envs = (await ctx.api('GET', `/v9/projects/${ctx.projectId}/env`)).envs || [];
   const changes = [await setVar(ctx, envs, 'UPSTREAM_URL', url, 'plain')];
   if (newSecret) changes.push(await setVar(ctx, envs, 'UPSTREAM_SECRET', newSecret, 'encrypted'));
@@ -216,6 +266,7 @@ const OPERATIONS = {
   stan: (ctx) => stan(ctx),
   'dodaj-domene': (ctx, [value]) => dodajDomene(ctx, value),
   'przekieruj-domene': (ctx, [value, redirectTo]) => przekierujDomene(ctx, value, redirectTo),
+  'przelacz-podglady': (ctx, [value]) => przelaczPodglady(ctx, value, ctx.proxySecret),
   'przelacz-workera': (ctx, [value]) => {
     if (ctx.wantNewSecret && !ctx.proxySecret) throw new Error('Zaznaczono nowy_sekret, ale w repozytorium nie ma sekretu PROXY_SECRET. Nic nie zmieniam.');
     return przelaczWorkera(ctx, value, ctx.wantNewSecret ? ctx.proxySecret : '');

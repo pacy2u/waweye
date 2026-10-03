@@ -154,9 +154,11 @@ async function testWorkera(ctx, value) {
     }
   };
   const rows = [];
+  const statuses = [];
   let ok = true;
   for (const p of PROBES) {
     const r = await probe(p.query, ctx.proxySecret);
+    statuses.push(r.status);
     let problem = r.error ? `brak odpowiedzi (${r.error})` : r.status !== 200 ? `HTTP ${r.status}${r.body && r.body.error ? ` (${r.body.error})` : ''}` : r.body === undefined ? 'odpowiedź nie jest JSON-em' : null;
     if (!problem && p.mustHaveRecords && !recordCount(r.body)) problem = '0 rekordów';
     if (problem) ok = false;
@@ -167,6 +169,14 @@ async function testWorkera(ctx, value) {
   if (!anonOk) ok = false;
   rows.push(`| Bez sekretu (oczekiwane 403) | ${anonOk ? 'OK' : 'BŁĄD'} | HTTP ${anon.status || anon.error} |`);
   const md = [`### Cloudflare: test Workera ${worker}: ${ok ? 'działa' : 'PROBLEM'}`, '', base, '', '| Sprawdzenie | Wynik | Szczegóły |', '|---|---|---|', ...rows].join('\n');
+  // 52x on every resource while the secret check passes: Cloudflare runs the Worker near the caller (GitHub's runners
+  // are in the USA) and the Warsaw API does not accept connections from there (2026-10-03). Production calls the
+  // Worker from Vercel's fra1 region, so test it through a preview instead.
+  if (anonOk && statuses.every((st) => st >= 520 && st <= 530)) {
+    const err = new Error(`${md}\n\nSekret działa (bez niego 403), ale każde zapytanie Workera do API Warszawy kończy się błędem 52x Cloudflare. Ten test działa na serwerach GitHuba w USA, a API Warszawy nie przyjmuje połączeń z takich lokalizacji. Produkcja woła Workera z Vercel we Frankfurcie. Sprawdź Workera tak, jak użyje go produkcja: operacje Vercel → przelacz-podglady.`);
+    err.report = true;
+    throw err;
+  }
   if (!ok) { const err = new Error(md); err.report = true; throw err; }
   return md;
 }

@@ -68,7 +68,7 @@ Uruchamia je właściciel (Actions → wybrany workflow → Run workflow) z para
 
 | Workflow | Operacje |
 |---|---|
-| `wawEye – operacje Vercel` | `stan` (tylko odczyt), `dodaj-domene`, `przekieruj-domene`, `przelacz-workera`, `ustaw-root-directory`, `zmien-nazwe-projektu`, `wdroz-produkcje`. Po każdym wdrożeniu uruchamia kontrolę produkcji na wszystkich domenach produkcyjnych. |
+| `wawEye – operacje Vercel` | `stan` (tylko odczyt), `dodaj-domene`, `przekieruj-domene`, `przelacz-podglady` (Worker tylko dla podglądów i podgląd `main` do sprawdzenia), `przelacz-workera`, `ustaw-root-directory`, `zmien-nazwe-projektu`, `wdroz-produkcje`. Po każdym wdrożeniu uruchamia kontrolę produkcji na wszystkich domenach produkcyjnych. |
 | `wawEye – operacje Cloudflare` | `stan` (tylko odczyt), `test-workera`, `ustaw-sekrety`, `usun-workera`. Usunięcia odmawia, jeśli Worker jest celem wdrożeń, używa go produkcja Vercel albo miał ruch w ostatnich 7 dniach. |
 | `wawEye – kontrola adresu` | kontrola produkcji dowolnego adresu na serwerach GitHuba, bez zakładania zgłoszeń. Działa także wtedy, gdy sesja Claude nie ma dostępu do adresu. |
 
@@ -110,7 +110,10 @@ Wynik (2026-10-03):
 ### Faza 4 – Nowy Worker obok starego
 1. **Claude (PR):** w `wrangler.toml` zmień nazwę na `name = "waweye-proxy"` i zaktualizuj dokumentację. Po merge'u workflow wdroży **nowego** Workera. Stary `pasibus-proxy` zostaje nietknięty i dalej obsługuje produkcję.
 2. **Claude:** `operacje Cloudflare → ustaw-sekrety`, Worker `waweye-proxy`. Wpisuje `WARSAW_API_KEY` i `PROXY_SECRET` z sekretów repozytorium. Wdrożenie nigdy nie ustawia sekretów, więc bez tego kroku nowy Worker zwraca błędy. Dopóki nic na niego nie wskazuje, nikomu to nie szkodzi.
-3. **Claude, test bez ryzyka dla produkcji:** `operacje Cloudflare → test-workera`, Worker `waweye-proxy`. Workflow pyta nowego Workera bezpośrednio o autobusy, tramwaje, parkingi, utrudnienia i tabor, a także sprawdza, czy bez sekretu odpowiada 403. Produkcja dalej korzysta ze starego Workera.
+3. **Claude, test bez ryzyka dla produkcji:**
+   - `operacje Cloudflare → test-workera`, Worker `waweye-proxy`, sprawdza sekret: bez niego Worker ma odpowiadać 403. Zrobione 2026-10-03: sekret działa, ale zapytania do API Warszawy kończą się błędem 522. Test działa na serwerach GitHuba w USA, Cloudflare uruchamia wtedy Workera w USA, a API Warszawy nie przyjmuje połączeń z takich miejsc. Z sesji Claude połączenie z `dane.um.warszawa.pl` też jest zrywane.
+   - Miarodajny test: `operacje Vercel → przelacz-podglady`, wartość `https://waweye-proxy.<konto>.workers.dev`. Ustawia `UPSTREAM_URL` i `UPSTREAM_SECRET` **tylko dla podglądów** (zmiennych produkcji nie dotyka; jeśli zmienna jest wspólna z produkcją, odmawia) i wdraża podgląd `main`. Funkcje podglądu działają we Frankfurcie jak produkcja, więc Worker łączy się z API Warszawy z Europy. Workflow sprawdza podgląd. Jeśli Vercel chroni go logowaniem, właściciel otwiera link z raportu i patrzy, czy na mapie są pojazdy. Przy okazji podglądy, które dotąd nie miały `UPSTREAM_URL`, zaczynają pokazywać dane.
+   - Produkcja przez cały czas korzysta ze starego Workera.
 4. **Claude, przełączenie:** `operacje Vercel → przelacz-workera`, wartość `https://waweye-proxy.<konto>.workers.dev`, **z opcją `nowy_sekret`** (`PROXY_SECRET` w GitHubie jest nowy, patrz wynik Fazy 0). Workflow ustawia `UPSTREAM_URL` i `UPSTREAM_SECRET` jednym wdrożeniem `main`, a potem uruchamia kontrolę produkcji na wszystkich domenach.
 5. **Claude, zaraz po udanym przełączeniu:** `operacje Cloudflare → ustaw-sekrety`, Worker `pasibus-proxy`. Stary Worker nie obsługuje już produkcji, więc można mu bezpiecznie wpisać nowy sekret. Od tej chwili oba Workery przyjmują tę samą parę, a powrót jest jedną operacją. Potem `test-workera` dla `pasibus-proxy`.
 6. Obserwuj przez co najmniej 7 dni. Usunięcie starego Workera jest w Fazie 9.
