@@ -190,7 +190,7 @@ test('vercel przelacz-podglady: preview-only variables, a preview of main, produ
   assert.equal(s.envs.find((e) => e.id === 'e2').value, 'tajne-stare');
   const dep = s.calls.find((c) => c.method === 'POST' && c.path === '/v13/deployments');
   assert.deepEqual(dep.body, { name: 'pasibus', project: 'prj_1', gitSource: { type: 'github', repoId: '123', ref: 'main' } });
-  assert.match(r.md, /chroniony logowaniem Vercel[\s\S]*https:\/\/pasibus-new\.vercel\.app/);
+  assert.match(r.md, /nie może sprawdzić podglądu sam \(HTTP 401[\s\S]*chroni podglądy logowaniem[\s\S]*https:\/\/pasibus-new\.vercel\.app/);
   assert.doesNotMatch(r.md, /nowe-tajne/);
   assert.deepEqual(r.check, []);
   // A second run updates the preview records instead of adding new ones.

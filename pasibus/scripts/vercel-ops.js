@@ -210,8 +210,9 @@ async function przelaczPodglady(ctx, value, secret) {
   const paths = ['/api/vehicles', '/api/parking', '/api/incidents', '/api/fleet'];
   const [vehicles, parking, incidents, fleet] = await Promise.all(paths.map((p) => checkProduction.get(base, p, ctx.fetchImpl)));
   const head = [`Podglądy używają Workera ${url}:`, '', ...changes.map((c) => `- ${c}`), '', `Podgląd gałęzi \`${ref}\` gotowy: ${base}`, ''];
-  if ([vehicles, parking, incidents, fleet].every((r) => r.status === 401 || r.status === 403) && !(vehicles.body && vehicles.body.error)) {
-    return { md: [...head, `Podgląd jest chroniony logowaniem Vercel, więc workflow nie może go sprawdzić. Otwórz ${base} w przeglądarce, w której jesteś zalogowany do Vercel. Jeśli na mapie są pojazdy, a po kliknięciu parkingów i utrudnień pojawiają się znaczniki, nowy Worker działa.`].join('\n'), check: [] };
+  // No JSON at all (401, or a redirect to the Vercel login page): Deployment Protection, so a person has to look.
+  if ([vehicles, parking, incidents, fleet].every((r) => !r.error && r.body === null)) {
+    return { md: [...head, `Workflow nie może sprawdzić podglądu sam (HTTP ${vehicles.status}, zamiast danych strona). Zwykle oznacza to, że Vercel chroni podglądy logowaniem. Otwórz ${base} w przeglądarce, w której jesteś zalogowany do Vercel. Jeśli na mapie są pojazdy, a po włączeniu parkingów i utrudnień pojawiają się znaczniki, nowy Worker działa.`].join('\n'), check: [] };
   }
   const result = checkProduction.evaluate({ vehicles, parking, incidents, fleet });
   const md = [...head, checkProduction.report(base, result)].join('\n');
