@@ -22,7 +22,7 @@ MOCK=1 npm start          # dane symulowane, bez klucza
 
 ## Testy
 ```bash
-npm test          # jednostkowe: normalizacja, błędy API, handler
+npm test          # jednostkowe: normalizacja, błędy API, handler, operacje Vercel/Cloudflare
 npm run test:e2e  # przeglądarka (Chromium, desktop + mobile) na danych symulowanych
 node scripts/check-production.js   # kontrola produkcji: pojazdy, parkingi, utrudnienia, tabor
 ```
@@ -58,12 +58,25 @@ Workflow **Pasibus – wdrożenie Workera Cloudflare** wdraża `worker/` po każ
 
 Wdrożenie nie zmienia sekretów Workera (`WARSAW_API_KEY`, `PROXY_SECRET`), a `keep_vars = true` w `wrangler.toml` zachowuje zmienne ustawione w panelu. Bez sekretów workflow kończy się ostrzeżeniem i trzeba wkleić kod ręcznie jak wyżej.
 
+## Operacje w Vercel i Cloudflare bez panelu (workflowy na żądanie)
+Zmiany w projekcie Vercel i Workerach Cloudflare robią workflowy uruchamiane ręcznie (**Actions → workflow → Run workflow**) albo przez Claude w sesji. Tokeny są tylko w sekretach repozytorium. Logika: `scripts/vercel-ops.js` i `scripts/cloudflare-ops.js`, testy w `test/operacje.test.js`. Kolejność użycia przy zmianie nazwy opisuje `PLAN_MIGRACJI_WAWEYE.md`.
+- **wawEye – operacje Vercel**: `stan` (tylko odczyt), `dodaj-domene`, `przekieruj-domene` (308), `przelacz-workera` (zmienia `UPSTREAM_URL`, opcjonalnie `UPSTREAM_SECRET`, i wdraża produkcję), `ustaw-root-directory` (i wdraża), `zmien-nazwe-projektu` (przywraca domeny, gdyby zniknęły), `wdroz-produkcje`. Po każdym wdrożeniu uruchamia kontrolę produkcji na wszystkich domenach produkcyjnych.
+- **wawEye – operacje Cloudflare**: `stan`, `test-workera` (wszystkie zasoby z sekretem i 403 bez niego), `ustaw-sekrety` (z sekretów repozytorium), `usun-workera`. Usunięcia odmawia, jeśli Worker jest celem wdrożeń, używa go produkcja Vercel albo miał ruch w ostatnich 7 dniach.
+- **wawEye – kontrola adresu**: `scripts/check-production.js` dla dowolnego adresu na serwerach GitHuba, bez zakładania zgłoszeń.
+
+Sekrety repozytorium (**Settings → Secrets and variables → Actions**), poza `CLOUDFLARE_API_TOKEN` i `CLOUDFLARE_ACCOUNT_ID`:
+- `VERCEL_TOKEN`: Vercel → Account Settings → Tokens → Create Token (zakres: zespół `ampm10`, z datą ważności).
+- `WARSAW_API_KEY`: ten sam klucz, który ma Worker. Nie generuj nowego, bo może unieważnić stary.
+- `PROXY_SECRET`: ten sam ciąg co `PROXY_SECRET` w Workerze i `UPSTREAM_SECRET` w Vercel.
+
+Opcjonalnie dodaj do tokenu Cloudflare uprawnienie Account Analytics: Read, wtedy `stan` pokaże ruch każdego Workera. Identyfikatory zespołu i projektu Vercel są wpisane w workflowach. To nie są sekrety, a identyfikator projektu nie zmienia się po zmianie nazwy.
+
 ## Struktura
 - `public/` – front (Leaflet, `app.js`, `style.css`)
 - `worker/` – opcjonalny pośrednik Cloudflare
 - `api/*.js` – funkcje Vercel; `lib/` – logika API, mock, handler
 - `dev-server.js` – serwer lokalny
-- `scripts/check-production.js` – kontrola produkcji (monitoring)
+- `scripts/check-production.js` – kontrola produkcji (monitoring); `scripts/vercel-ops.js`, `scripts/cloudflare-ops.js` – operacje wywoływane przez workflowy na żądanie
 - `ROADMAPA.md` – analiza produktu i plan rozwoju; `CONTEXT.md` – notatki dla kolejnych sesji
 - `wideo-promocyjne/` – 30-sekundowy film promocyjny (`pasibus-showreel.mp4`) i kod, który go generuje z prawdziwych danych; wykluczony z wdrożenia przez `.vercelignore`
 - `PLAN_MIGRACJI_WAWEYE.md` – plan migracji nazwy z „pasibus” na wawEye (domena, Worker, folder, repo) bez przerwy w działaniu
