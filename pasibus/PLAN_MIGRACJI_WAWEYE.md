@@ -153,6 +153,8 @@ Okno zmiany (kilka minut):
 - Wycofanie: zmień nazwę z powrotem na `tst`.
 
 ### Faza 8 – Wideo promocyjne (po Fazach 2 i 5)
+**Stan (2026-10-03):** zrobione bez ponownego zbierania danych. `waweye-showreel.mp4` zastępuje `pasibus-showreel.mp4`: logo `wawEye`, notowanie `WAWE`, „wawEye Inc.”, adres `waweye.vercel.app` (dodany w Fazie 2), stopka. W zrzutach podmieniony tylko pierwszy wiersz nagłówka aplikacji. Identyfikatory techniczne w skryptach wideo (`__pasibus`, `PASIBUS_URL`, User-Agent, katalog cache) zostają do Faz 5 i 7.
+
 1. **Claude (PR):**
    - `kompozycja.html`: logo, notowanie, „Pasibus Inc.”, adres i stopka według decyzji D5.
    - Nowe zrzuty: `zrzuty-aplikacji.js` na nowym adresie.

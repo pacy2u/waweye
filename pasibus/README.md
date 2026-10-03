@@ -78,6 +78,6 @@ Opcjonalnie dodaj do tokenu Cloudflare uprawnienie Account Analytics: Read, wted
 - `dev-server.js` – serwer lokalny
 - `scripts/check-production.js` – kontrola produkcji (monitoring); `scripts/vercel-ops.js`, `scripts/cloudflare-ops.js` – operacje wywoływane przez workflowy na żądanie
 - `ROADMAPA.md` – analiza produktu i plan rozwoju; `CONTEXT.md` – notatki dla kolejnych sesji
-- `wideo-promocyjne/` – 30-sekundowy film promocyjny (`pasibus-showreel.mp4`) i kod, który go generuje z prawdziwych danych; wykluczony z wdrożenia przez `.vercelignore`
+- `wideo-promocyjne/` – 30-sekundowy film promocyjny (`waweye-showreel.mp4`) i kod, który go generuje z prawdziwych danych; wykluczony z wdrożenia przez `.vercelignore`
 - `PLAN_MIGRACJI_WAWEYE.md` – plan migracji nazwy z „pasibus” na wawEye (domena, Worker, folder, repo) bez przerwy w działaniu
 - `KOMUNIKAT_PRASOWY.md` – komunikat prasowy: cel, funkcje, źródła danych, plan rozwoju; `KOMUNIKAT_PRASOWY.html` – ten sam komunikat jako strona do udostępnienia (poza `public/`, więc Vercel jej nie publikuje)
