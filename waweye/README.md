@@ -1,6 +1,6 @@
 # wawEye – komunikacja miejska w Warszawie na żywo
 
-Nazwa produktu od 3 października 2026 r.: **wawEye** (wcześniej Pasibus, zmieniona z powodu kolizji z siecią burgerowni o tej nazwie). Migracja identyfikatorów technicznych trwa według `PLAN_MIGRACJI_WAWEYE.md`: aplikacja działa pod https://waweye.vercel.app i pod dotychczasowym https://pasibus.vercel.app; produkcja korzysta z Workera `waweye-proxy`, a aplikacja i workflowy mają już nowe nazwy (folder `waweye/`, „wawEye – …”). Projekt w Vercel nadal nazywa się `pasibus`, a repozytorium `pacy2u/tst`.
+Nazwa produktu od 3 października 2026 r.: **wawEye** (wcześniej Pasibus, zmieniona z powodu kolizji z siecią burgerowni o tej nazwie). Migracja identyfikatorów technicznych trwa według `PLAN_MIGRACJI_WAWEYE.md`: aplikacja działa pod https://waweye.vercel.app i pod dotychczasowym https://pasibus.vercel.app; produkcja korzysta z Workera `waweye-proxy`, a aplikacja i workflowy mają już nowe nazwy (folder `waweye/`, „wawEye – …”). Projekt w Vercel nazywa się `waweye`, repozytorium `pacy2u/waweye` (do 2026-10 `pacy2u/tst`; GitHub przekierowuje stare adresy). Stary adres https://pasibus.vercel.app działa dalej i w Fazie 9 zacznie przekierowywać na nowy.
 
 Mapa pojazdów (autobusy, tramwaje) w czasie rzeczywistym. Dane: [Lokalizacja pojazdów komunikacji miejskiej](https://dane.um.warszawa.pl/pl/catalogue/f319f602-7292-4e8c-b3d1-f5898aa9a638), m.st. Warszawa. Mapa: OpenStreetMap + Leaflet.
 
@@ -32,7 +32,7 @@ W GitHub Actions (`.github/workflows/`):
 - Repo jest prywatne, więc obowiązuje darmowa pula minut Actions (2000 min/mies. na koncie GitHub Free). Monitoring zużywa ok. 360 min/mies., testy kilka minut na PR. Po wyczerpaniu puli zadania się zatrzymują, nie generując kosztów (przy domyślnym limicie wydatków 0 USD).
 
 ## Wdrożenie na Vercel
-1. Vercel → **Add New → Project** → importuj repo `pacy2u/tst`.
+1. Vercel → **Add New → Project** → importuj repo `pacy2u/waweye`.
 2. **Root Directory**: `waweye` (do 2026-10 `pasibus`). Framework: *Other*.
 3. **Settings → Environment Variables**: `WARSAW_API_KEY` = token API z https://dane.um.warszawa.pl/key-api (Production + Preview).
 4. **Deploy**. Aplikacja działa pod adresem `*.vercel.app` na komputerze i telefonie.
@@ -53,7 +53,7 @@ Stary host `api.um.warszawa.pl` nie przyjmował połączeń z adresów Vercel/AW
 Workflow **wawEye – wdrożenie Workera Cloudflare** wdraża `worker/` po każdym merge'u zmian w tym folderze do `main`. Jednorazowa konfiguracja w przeglądarce:
 1. Cloudflare → **My Profile → API Tokens → Create Token** → szablon **Edit Cloudflare Workers** → Create. Skopiuj token.
 2. Cloudflare → **Workers & Pages**: skopiuj **Account ID** (prawa kolumna).
-3. GitHub → repo `pacy2u/tst` → **Settings → Secrets and variables → Actions → New repository secret**: `CLOUDFLARE_API_TOKEN` i `CLOUDFLARE_ACCOUNT_ID`.
+3. GitHub → repo `pacy2u/waweye` → **Settings → Secrets and variables → Actions → New repository secret**: `CLOUDFLARE_API_TOKEN` i `CLOUDFLARE_ACCOUNT_ID`.
 4. **Actions → wawEye – wdrożenie Workera Cloudflare → Run workflow**, żeby od razu wgrać aktualny kod.
 
 Wdrożenie nie zmienia sekretów Workera (`WARSAW_API_KEY`, `PROXY_SECRET`), a `keep_vars = true` w `wrangler.toml` zachowuje zmienne ustawione w panelu. Bez sekretów workflow kończy się ostrzeżeniem i trzeba wkleić kod ręcznie jak wyżej.
