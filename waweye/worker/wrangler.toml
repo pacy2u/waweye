@@ -4,6 +4,6 @@ compatibility_date = "2024-11-01"
 workers_dev = true
 # Only the workers.dev address is used (UPSTREAM_URL); no extra per-version preview addresses.
 preview_urls = false
-# Deployed by .github/workflows/pasibus-wdrozenie-workera.yml. Keep variables set in the Cloudflare dashboard;
+# Deployed by .github/workflows/waweye-wdrozenie-workera.yml. Keep variables set in the Cloudflare dashboard;
 # secrets (WARSAW_API_KEY, PROXY_SECRET) are never touched by a deploy.
 keep_vars = true

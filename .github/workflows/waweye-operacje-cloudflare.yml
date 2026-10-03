@@ -1,8 +1,8 @@
 name: wawEye – operacje Cloudflare
 
-# On-demand operations on the Cloudflare Workers for the wawEye migration (pasibus/PLAN_MIGRACJI_WAWEYE.md).
-# Logic: pasibus/scripts/cloudflare-ops.js (unit-tested). The Worker code itself is deployed by
-# pasibus-wdrozenie-workera.yml; this workflow sets its secrets, tests it and removes old Workers.
+# On-demand operations on the Cloudflare Workers for the wawEye migration (waweye/PLAN_MIGRACJI_WAWEYE.md).
+# Logic: waweye/scripts/cloudflare-ops.js (unit-tested). The Worker code itself is deployed by
+# waweye-wdrozenie-workera.yml; this workflow sets its secrets, tests it and removes old Workers.
 # Needs repository secrets CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID; WARSAW_API_KEY and PROXY_SECRET
 # for ustaw-sekrety (PROXY_SECRET also for test-workera); VERCEL_TOKEN so that usun-workera can check
 # which Worker production uses.
@@ -53,4 +53,4 @@ jobs:
           POTWIERDZENIE: ${{ inputs.potwierdzenie }}
           PROXY_SECRET: ${{ (inputs.operacja == 'test-workera' || inputs.operacja == 'ustaw-sekrety') && secrets.PROXY_SECRET || '' }}
           WARSAW_API_KEY: ${{ inputs.operacja == 'ustaw-sekrety' && secrets.WARSAW_API_KEY || '' }}
-        run: node pasibus/scripts/cloudflare-ops.js "$OPERACJA" "$WORKER" "$POTWIERDZENIE" | tee -a "$GITHUB_STEP_SUMMARY"
+        run: node waweye/scripts/cloudflare-ops.js "$OPERACJA" "$WORKER" "$POTWIERDZENIE" | tee -a "$GITHUB_STEP_SUMMARY"

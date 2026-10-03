@@ -19,10 +19,10 @@ Zmiana nazwy na wawEye (3 października 2026) objęła tylko elementy z nazwą: 
 | 26–30 s | Finał | dzwon otwarcia sesji, logo, deszcz konfetti z taśmy giełdowej, adres, podpis o źródłach danych |
 
 ## Jak odtworzyć
-Wymagania: Node 18+, `npm install` w `pasibus/` (playwright-core), Chromium, `ffmpeg`, ImageMagick (`convert`).
+Wymagania: Node 18+, `npm install` w `waweye/` (playwright-core), Chromium, `ffmpeg`, ImageMagick (`convert`).
 W sandboksie sesji Claude polecenia sieciowe uruchamiaj z `NODE_USE_ENV_PROXY=1`.
 ```bash
-cd pasibus
+cd waweye
 node wideo-promocyjne/zbierz-migawki.js /tmp/migawki 100 15          # ~25 min jazdy na żywo + parkingi, utrudnienia, tabor
 node wideo-promocyjne/przygotuj-dane.js /tmp/migawki /tmp/migawki     # → zasoby/dane-wideo.js
 node wideo-promocyjne/przygotuj-wode.js                               # → zasoby/woda.js (Wisła z kafelków OSM)

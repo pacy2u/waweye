@@ -1,6 +1,6 @@
 # wawEye – komunikacja miejska w Warszawie na żywo
 
-Nazwa produktu od 3 października 2026 r.: **wawEye** (wcześniej Pasibus, zmieniona z powodu kolizji z siecią burgerowni o tej nazwie). Migracja identyfikatorów technicznych trwa według `PLAN_MIGRACJI_WAWEYE.md`: aplikacja działa pod https://waweye.vercel.app i pod dotychczasowym https://pasibus.vercel.app; produkcja korzysta z Workera `waweye-proxy`; folder `pasibus/` i nazwy workflow „Pasibus – …” zmienią się w kolejnych fazach.
+Nazwa produktu od 3 października 2026 r.: **wawEye** (wcześniej Pasibus, zmieniona z powodu kolizji z siecią burgerowni o tej nazwie). Migracja identyfikatorów technicznych trwa według `PLAN_MIGRACJI_WAWEYE.md`: aplikacja działa pod https://waweye.vercel.app i pod dotychczasowym https://pasibus.vercel.app; produkcja korzysta z Workera `waweye-proxy`, a aplikacja i workflowy mają już nowe nazwy (folder `waweye/`, „wawEye – …”). Projekt w Vercel nadal nazywa się `pasibus`, a repozytorium `pacy2u/tst`.
 
 Mapa pojazdów (autobusy, tramwaje) w czasie rzeczywistym. Dane: [Lokalizacja pojazdów komunikacji miejskiej](https://dane.um.warszawa.pl/pl/catalogue/f319f602-7292-4e8c-b3d1-f5898aa9a638), m.st. Warszawa. Mapa: OpenStreetMap + Leaflet.
 
@@ -13,7 +13,7 @@ Parkingi: `POST https://dane.um.warszawa.pl/api/action/get_m_parkingi_wolne_miej
 
 ## Uruchomienie lokalne
 ```bash
-cd pasibus
+cd waweye
 npm install
 echo 'WARSAW_API_KEY=<token>' > .env   # token z https://dane.um.warszawa.pl/key-api
 npm start                 # http://localhost:3000
@@ -27,13 +27,13 @@ npm run test:e2e  # przeglądarka (Chromium, desktop + mobile) na danych symulow
 node scripts/check-production.js   # kontrola produkcji: pojazdy, parkingi, utrudnienia, tabor
 ```
 W GitHub Actions (`.github/workflows/`):
-- **Pasibus – testy**: oba zestawy testów przy każdym PR i po zmianie na `main` (zmiany samych plików `.md` nie zużywają minut).
-- **Pasibus – monitoring produkcji**: co 2 godziny `scripts/check-production.js` sprawdza https://waweye.vercel.app i https://pasibus.vercel.app (także to, czy pojazdy na żywo znajdują się w zbiorze taboru). Przy awarii zakłada jedno zgłoszenie (issue) „[monitoring] wawEye nie działa poprawnie”, a GitHub wysyła e-mail. GitHub uruchamia zaplanowane przebiegi z opóźnieniem albo je pomija (2026-10-03: 4 przebiegi w 17 godzin), więc odstępy bywają dłuższe niż 2 godziny. Po pierwszej udanej kontroli zgłoszenie zamyka się samo. Ręcznie: Actions → Pasibus – monitoring produkcji → Run workflow.
+- **wawEye – testy**: oba zestawy testów przy każdym PR i po zmianie na `main` (zmiany samych plików `.md` nie zużywają minut).
+- **wawEye – monitoring produkcji**: co 2 godziny `scripts/check-production.js` sprawdza https://waweye.vercel.app i https://pasibus.vercel.app (także to, czy pojazdy na żywo znajdują się w zbiorze taboru). Przy awarii zakłada jedno zgłoszenie (issue) „[monitoring] wawEye nie działa poprawnie”, a GitHub wysyła e-mail. GitHub uruchamia zaplanowane przebiegi z opóźnieniem albo je pomija (2026-10-03: 4 przebiegi w 17 godzin), więc odstępy bywają dłuższe niż 2 godziny. Po pierwszej udanej kontroli zgłoszenie zamyka się samo. Ręcznie: Actions → wawEye – monitoring produkcji → Run workflow.
 - Repo jest prywatne, więc obowiązuje darmowa pula minut Actions (2000 min/mies. na koncie GitHub Free). Monitoring zużywa ok. 360 min/mies., testy kilka minut na PR. Po wyczerpaniu puli zadania się zatrzymują, nie generując kosztów (przy domyślnym limicie wydatków 0 USD).
 
 ## Wdrożenie na Vercel
 1. Vercel → **Add New → Project** → importuj repo `pacy2u/tst`.
-2. **Root Directory**: `pasibus`. Framework: *Other*.
+2. **Root Directory**: `waweye` (do 2026-10 `pasibus`). Framework: *Other*.
 3. **Settings → Environment Variables**: `WARSAW_API_KEY` = token API z https://dane.um.warszawa.pl/key-api (Production + Preview).
 4. **Deploy**. Aplikacja działa pod adresem `*.vercel.app` na komputerze i telefonie.
 
@@ -50,11 +50,11 @@ Stary host `api.um.warszawa.pl` nie przyjmował połączeń z adresów Vercel/AW
 (Alternatywa z CLI: `cd worker && npx wrangler deploy`, potem `npx wrangler secret put WARSAW_API_KEY` i `PROXY_SECRET`.)
 
 ### Automatyczne wdrażanie Workera (bez wklejania kodu)
-Workflow **Pasibus – wdrożenie Workera Cloudflare** wdraża `worker/` po każdym merge'u zmian w tym folderze do `main`. Jednorazowa konfiguracja w przeglądarce:
+Workflow **wawEye – wdrożenie Workera Cloudflare** wdraża `worker/` po każdym merge'u zmian w tym folderze do `main`. Jednorazowa konfiguracja w przeglądarce:
 1. Cloudflare → **My Profile → API Tokens → Create Token** → szablon **Edit Cloudflare Workers** → Create. Skopiuj token.
 2. Cloudflare → **Workers & Pages**: skopiuj **Account ID** (prawa kolumna).
 3. GitHub → repo `pacy2u/tst` → **Settings → Secrets and variables → Actions → New repository secret**: `CLOUDFLARE_API_TOKEN` i `CLOUDFLARE_ACCOUNT_ID`.
-4. **Actions → Pasibus – wdrożenie Workera Cloudflare → Run workflow**, żeby od razu wgrać aktualny kod.
+4. **Actions → wawEye – wdrożenie Workera Cloudflare → Run workflow**, żeby od razu wgrać aktualny kod.
 
 Wdrożenie nie zmienia sekretów Workera (`WARSAW_API_KEY`, `PROXY_SECRET`), a `keep_vars = true` w `wrangler.toml` zachowuje zmienne ustawione w panelu. Bez sekretów workflow kończy się ostrzeżeniem i trzeba wkleić kod ręcznie jak wyżej.
 

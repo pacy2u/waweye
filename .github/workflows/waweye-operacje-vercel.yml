@@ -1,7 +1,7 @@
 name: wawEye – operacje Vercel
 
-# On-demand operations on the Vercel project for the wawEye migration (pasibus/PLAN_MIGRACJI_WAWEYE.md),
-# so they do not have to be clicked in the Vercel dashboard. Logic: pasibus/scripts/vercel-ops.js (unit-tested).
+# On-demand operations on the Vercel project for the wawEye migration (waweye/PLAN_MIGRACJI_WAWEYE.md),
+# so they do not have to be clicked in the Vercel dashboard. Logic: waweye/scripts/vercel-ops.js (unit-tested).
 # Needs repository secret VERCEL_TOKEN; PROXY_SECRET for przelacz-podglady and for przelacz-workera with "nowy_sekret".
 # Operations that deploy (and dodaj-domene) then run the production check on the affected domains.
 on:
@@ -54,7 +54,7 @@ jobs:
           PRZEKIERUJ_NA: ${{ inputs.przekieruj_na }}
           NOWY_SEKRET: ${{ inputs.nowy_sekret }}
           PROXY_SECRET: ${{ (inputs.nowy_sekret || inputs.operacja == 'przelacz-podglady') && secrets.PROXY_SECRET || '' }}
-        run: node pasibus/scripts/vercel-ops.js "$OPERACJA" "$WARTOSC" "$PRZEKIERUJ_NA" | tee -a "$GITHUB_STEP_SUMMARY"
+        run: node waweye/scripts/vercel-ops.js "$OPERACJA" "$WARTOSC" "$PRZEKIERUJ_NA" | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Kontrola produkcji
         if: steps.op.outputs.sprawdz != ''
         shell: bash
@@ -63,6 +63,6 @@ jobs:
         run: |
           status=0
           for adres in $ADRESY; do
-            node pasibus/scripts/check-production.js "$adres" | tee -a "$GITHUB_STEP_SUMMARY" || status=1
+            node waweye/scripts/check-production.js "$adres" | tee -a "$GITHUB_STEP_SUMMARY" || status=1
           done
           exit $status
