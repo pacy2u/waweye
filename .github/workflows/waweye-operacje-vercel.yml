@@ -39,7 +39,7 @@ jobs:
     env:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_TEAM_ID: team_cc72c42CNFxSv2ZSpnhfbDIw # team ampm10 (an identifier, not a secret)
-      VERCEL_PROJECT_ID: prj_BbZW22uPfts5S9gjDz7l3E9WnFwG # project pasibus; the id survives a project rename
+      VERCEL_PROJECT_ID: prj_BbZW22uPfts5S9gjDz7l3E9WnFwG # project waweye (until 2026-10: pasibus); the id survives renames
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

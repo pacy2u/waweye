@@ -25,7 +25,7 @@ async function viaNode(route) {
   const req = route.request(), url = req.url();
   try {
     if (tileCache.has(url)) return route.fulfill(tileCache.get(url));
-    const r = await fetch(url, { method: req.method(), headers: { 'User-Agent': 'waweye-promo-video (github.com/pacy2u/tst)', 'Accept': req.headers().accept || '*/*' },
+    const r = await fetch(url, { method: req.method(), headers: { 'User-Agent': 'waweye-promo-video (github.com/pacy2u/waweye)', 'Accept': req.headers().accept || '*/*' },
       body: ['GET', 'HEAD'].includes(req.method()) ? undefined : req.postDataBuffer() });
     const res = { status: r.status, body: Buffer.from(await r.arrayBuffer()), contentType: r.headers.get('content-type') || undefined };
     if (url.includes('tile.openstreetmap.org') && r.ok) tileCache.set(url, res);

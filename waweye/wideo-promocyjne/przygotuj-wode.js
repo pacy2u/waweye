@@ -23,7 +23,7 @@ const lat = (y) => { const n = Math.PI - 2 * Math.PI * y / 2 ** Z; return 180 / 
     for (let x = x0; x <= x1; x++) {
       const f = path.join(CACHE, `${Z}-${x}-${y}.png`);
       if (!fs.existsSync(f)) {
-        const r = await fetch(`https://tile.openstreetmap.org/${Z}/${x}/${y}.png`, { headers: { 'User-Agent': 'waweye-promo-video (github.com/pacy2u/tst)' } });
+        const r = await fetch(`https://tile.openstreetmap.org/${Z}/${x}/${y}.png`, { headers: { 'User-Agent': 'waweye-promo-video (github.com/pacy2u/waweye)' } });
         if (!r.ok) throw new Error(`kafelek ${x},${y}: HTTP ${r.status}`);
         fs.writeFileSync(f, Buffer.from(await r.arrayBuffer()));
         await new Promise((res) => setTimeout(res, 150));

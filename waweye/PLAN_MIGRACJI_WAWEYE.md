@@ -132,7 +132,10 @@ Wynik: `waweye-proxy` wdrożony 20:23 (pacy2u/tst#29). Sekrety ustawione. Test p
 - Wynik (2026-10-03): `npm test` 62/62, `npm run test:e2e` 65/65, zrzuty `waweye-*.png`. Nazwa w `package.json` zmieniona ręcznie, bo `npm pkg set` przeformatowałby cały plik; `package-lock.json` wygenerowany przez `npm install --package-lock-only`.
 - Weryfikacja: `npm test`, `npm run test:e2e`, zielone CI. Wycofanie: revert PR.
 
-### Faza 6 – Folder `pasibus/` → `waweye/` – w PR (2026-10-03)
+### Faza 6 – Folder `pasibus/` → `waweye/` – zrobione 2026-10-03 (pacy2u/tst#33)
+
+Wynik: merge 21:10, build produkcyjny Vercel nie powstał (spodziewane), produkcja działała dalej. `ustaw-root-directory waweye` o 21:14 wdrożył `main` z nowego folderu; oba adresy przeszły kontrolę. Pierwsze przebiegi „wawEye – wdrożenie Workera Cloudflare” i „wawEye – testy” z nowych plików zielone. Projekt Vercel przemianowany na `waweye` o 21:18 (Faza 2, krok 3); domeny zostały na miejscu.
+
 Przygotowanie:
 - Zmerguj albo zamknij wszystkie otwarte PR-y. Gałęzie sprzed zmiany folderu będą miały konflikty.
 - Najlepiej po Fazie 4. Merge tego PR-a uruchomi workflow wdrożenia Workera, bo zmienią się ścieżki w `worker/`, i wdroży ten sam kod pod ostateczną nazwą. To nieszkodliwe.
@@ -151,12 +154,12 @@ Okno zmiany (kilka minut):
 - Wycofanie: przycisk Revert przy PR-ze na GitHubie, potem `ustaw-root-directory` z wartością `pasibus`.
 - Zmiana nazw plików workflowów tworzy w Actions nowe workflowy. Historia przebiegów zostaje pod starymi nazwami. Identyfikator zadania `testy` zostaje bez zmian, więc ewentualne reguły ochrony gałęzi nadal pasują.
 
-### Faza 7 – Repozytorium `pacy2u/tst` → `pacy2u/waweye`
+### Faza 7 – Repozytorium `pacy2u/tst` → `pacy2u/waweye` – w toku (2026-10-03)
 1. **Właściciel:** sprawdź, czy nazwa `waweye` jest wolna, potem GitHub → Settings → General → Repository name → `waweye` → Rename. **Nigdy nie zakładaj później nowego repo o nazwie `tst`**, bo przestaną działać przekierowania.
 2. **Claude:** `operacje Vercel → stan` powinien pokazać repozytorium `pacy2u/waweye`. Następnie `wdroz-produkcje` potwierdza, że wdrożenia z gita działają. Jeśli nie działają, **właściciel** robi w Vercel → Settings → Git Disconnect i Connect tego samego repo. Produkcja działa w tym czasie bez przerwy.
 3. Sekrety i workflowy Actions przechodzą razem z repo. **Claude** sprawdza to, uruchamiając monitoring.
 4. **Claude:** aplikacja Claude na GitHubie jest przypisana do repo, nie do nazwy. Nową sesję trzeba jednak założyć z wybranym `pacy2u/waweye`. Jeśli sesja nie widzi repo, połącz GitHub ponownie na https://claude.ai/connect-github.
-5. **Claude (PR):** linki `github.com/pacy2u/tst` w README, CONTEXT i User-Agent w skryptach wideo.
+5. **Claude (PR):** linki `github.com/pacy2u/tst` w README, CONTEXT i User-Agent w skryptach wideo. Zrobione w PR przed zmianą nazwy: merge tego PR-a i zaraz potem zmiana nazwy repozytorium.
 - Wycofanie: zmień nazwę z powrotem na `tst`.
 
 ### Faza 8 – Wideo promocyjne (po Fazach 2 i 5)
