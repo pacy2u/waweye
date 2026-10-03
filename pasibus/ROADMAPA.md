@@ -1,4 +1,4 @@
-# Pasibus – analiza produktu i roadmapa
+# wawEye – analiza produktu i roadmapa
 
 Data: 2026-10-02. Na podstawie kodu z `main` (po PR #18), `README.md`, `CONTEXT.md` i `RAPORT_TESTOW_EKSPLORACYJNYCH.md`. Testy w dniu analizy: `npm test` – 39/39, `npm run test:e2e` – 43/43 (dane MOCK).
 
@@ -6,7 +6,7 @@ Data: 2026-10-02. Na podstawie kodu z `main` (po PR #18), `README.md`, `CONTEXT.
 
 ## 1. W skrócie
 
-Pasibus to lekka mapa komunikacji miejskiej Warszawy na żywo. Od zera do produkcji (https://pasibus.vercel.app) powstał w dwa dni. Pokazuje autobusy i tramwaje, parkingi z wolnymi miejscami, utrudnienia drogowe i dane o taborze. Kod jest mały (ok. 1 700 linii razem z testami), dobrze przetestowany i odporny na kaprysy API Warszawy.
+wawEye (do 3 października 2026 r. Pasibus) to lekka mapa komunikacji miejskiej Warszawy na żywo. Od zera do produkcji (https://pasibus.vercel.app) powstał w dwa dni. Pokazuje autobusy i tramwaje, parkingi z wolnymi miejscami, utrudnienia drogowe i dane o taborze. Kod jest mały (ok. 1 700 linii razem z testami), dobrze przetestowany i odporny na kaprysy API Warszawy.
 
 Najważniejsze wnioski:
 
@@ -67,7 +67,7 @@ Przeglądarka (Leaflet, bez bundlera) → funkcje Vercel `/api/*` (region `fra1`
 
 **Dla kogo (decyzja).** Główny użytkownik to **codzienny pasażer** w Warszawie, który chce wiedzieć, gdzie jest jego autobus i czy zdąży. Miłośnik komunikacji (tabor, malowania, zajezdnie) jest obsłużony tym, co już jest w panelu pojazdu; funkcje tylko dla niego nie mają priorytetu.
 
-**Wyróżnik.** Jakdojade i Google Maps planują podróże; Pasibus ma być **najszybszym podglądem miasta na żywo**: otwierasz i od razu widzisz pojazdy, utrudnienia i parkingi na jednej mapie. Bez instalacji, bez reklam, z danymi o konkretnym pojeździe.
+**Wyróżnik.** Jakdojade i Google Maps planują podróże; wawEye ma być **najszybszym podglądem miasta na żywo**: otwierasz i od razu widzisz pojazdy, utrudnienia i parkingi na jednej mapie. Bez instalacji, bez reklam, z danymi o konkretnym pojeździe.
 
 **Czego nie robimy (na razie):**
 - planera podróży (to robią inni i wymaga ogromnej pracy),
@@ -121,7 +121,7 @@ Cel: aplikację da się zainstalować na telefonie i używać codziennie do spra
 | Dostępność: status ogłaszany tylko przy błędzie (D10), lista pojazdów linii obsługiwana klawiaturą (D11), testy e2e także w WebKit i Firefox | iOS/Safari to duża część telefonów; czytniki ekranu | M |
 
 ### Faza 3 – Kontekst miasta i skala (I–II kwartał 2027)
-Cel: Pasibus wytrzymuje większy ruch i łączy komunikację z innymi danymi miejskimi.
+Cel: wawEye wytrzymuje większy ruch i łączy komunikację z innymi danymi miejskimi.
 
 | Zadanie | Dlaczego | Rozmiar |
 |---|---|---|

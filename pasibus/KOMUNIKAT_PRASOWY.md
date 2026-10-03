@@ -2,22 +2,22 @@
 
 **Warszawa, 2 października 2026 r.** · Do publikacji od zaraz
 
-## Pasibus: autobusy i tramwaje Warszawy na jednej mapie, na żywo
+## wawEye: autobusy i tramwaje Warszawy na jednej mapie, na żywo
 
-**Darmowa aplikacja webowa pokazuje, gdzie w tej chwili jest każdy warszawski autobus i tramwaj. Na tej samej mapie widać wolne miejsca na parkingach i utrudnienia w ruchu. Pasibus działa w przeglądarce na telefonie i komputerze. Nie trzeba go instalować ani zakładać konta, nie ma reklam i nie zbiera danych o użytkownikach.**
+**Darmowa aplikacja webowa pokazuje, gdzie w tej chwili jest każdy warszawski autobus i tramwaj. Na tej samej mapie widać wolne miejsca na parkingach i utrudnienia w ruchu. wawEye działa w przeglądarce na telefonie i komputerze. Nie trzeba go instalować ani zakładać konta, nie ma reklam i nie zbiera danych o użytkownikach.**
 
-Pasibus (https://pasibus.vercel.app) to nowa aplikacja dla osób, które codziennie jeżdżą warszawską komunikacją miejską. Pozycje wszystkich autobusów i tramwajów odświeżają się na mapie co 10 sekund, a pojazdy przesuwają się płynnie. Po kliknięciu w pojazd widać jego linię i brygadę oraz dane konkretnego egzemplarza: model, rok produkcji, zajezdnię, liczbę miejsc i to, czy ma niską podłogę, klimatyzację i miejsce na wózek. Wszystkie dane pochodzą z oficjalnego portalu otwartych danych m.st. Warszawy.
+wawEye (https://pasibus.vercel.app) to nowa aplikacja dla osób, które codziennie jeżdżą warszawską komunikacją miejską. Pozycje wszystkich autobusów i tramwajów odświeżają się na mapie co 10 sekund, a pojazdy przesuwają się płynnie. Po kliknięciu w pojazd widać jego linię i brygadę oraz dane konkretnego egzemplarza: model, rok produkcji, zajezdnię, liczbę miejsc i to, czy ma niską podłogę, klimatyzację i miejsce na wózek. Wszystkie dane pochodzą z oficjalnego portalu otwartych danych m.st. Warszawy.
 
 ### Cel: najszybszy podgląd miasta na żywo
 
-Planery podróży mówią, jak dojechać z punktu A do punktu B. Pasibus odpowiada na pytanie, które pasażer zadaje sobie na przystanku: gdzie jest teraz mój autobus? Otwierasz stronę i od razu widzisz pojazdy, utrudnienia i parkingi na jednej mapie.
+Planery podróży mówią, jak dojechać z punktu A do punktu B. wawEye odpowiada na pytanie, które pasażer zadaje sobie na przystanku: gdzie jest teraz mój autobus? Otwierasz stronę i od razu widzisz pojazdy, utrudnienia i parkingi na jednej mapie.
 
-Pasibus powstał z myślą o codziennych pasażerach. Miłośnicy komunikacji też znajdą tu coś dla siebie: szczegółowe dane o każdym pojeździe, od producenta po malowanie.
+Aplikacja wawEye powstała z myślą o codziennych pasażerach. Miłośnicy komunikacji też znajdą tu coś dla siebie: szczegółowe dane o każdym pojeździe, od producenta po malowanie.
 
 > „[Proponowany cytat do zatwierdzenia przez autora] Chciałem mieć aplikację, która otwiera się w sekundę i po prostu pokazuje, gdzie jest mój autobus. Bez reklam, bez logowania i bez śledzenia użytkowników.”
-> – [imię i nazwisko], twórca Pasibusa
+> – [imię i nazwisko], twórca wawEye
 
-### Co potrafi Pasibus
+### Co potrafi wawEye
 
 **Pojazdy na żywo**
 - Wszystkie autobusy i tramwaje w Warszawie, odświeżane co 10 sekund.
@@ -36,11 +36,11 @@ Po włączeniu warstwy „P” na mapie pojawiają się parkingi z liczbą wolny
 Utrudnienia drogowe są na mapie punktami lub odcinkami ulic, a kolor mówi, czy trwają, są zaplanowane, czy już się skończyły. Panel podaje opis, daty i link do miejskiego serwisu infoulice.um.warszawa.pl. Dane odświeżają się co minutę.
 
 **Wygodnie i oszczędnie**
-Aplikację zaprojektowano najpierw na telefon. Mapę przybliża się gestem lub przyciskami. Gdy karta z aplikacją jest w tle, Pasibus wstrzymuje odświeżanie, co oszczędza baterię i transfer. Każdą zmianę w aplikacji sprawdzają automatyczne testy, a działanie wersji produkcyjnej jest kontrolowane co dwie godziny.
+Aplikację zaprojektowano najpierw na telefon. Mapę przybliża się gestem lub przyciskami. Gdy karta z aplikacją jest w tle, wawEye wstrzymuje odświeżanie, co oszczędza baterię i transfer. Każdą zmianę w aplikacji sprawdzają automatyczne testy, a działanie wersji produkcyjnej jest kontrolowane co dwie godziny.
 
 ### Źródła danych
 
-Pasibus nie tworzy własnych danych o ruchu. Pokazuje to, co publikuje miasto, pobierając dane przez oficjalne API portalu [dane.um.warszawa.pl](https://dane.um.warszawa.pl).
+wawEye nie tworzy własnych danych o ruchu. Pokazuje to, co publikuje miasto, pobierając dane przez oficjalne API portalu [dane.um.warszawa.pl](https://dane.um.warszawa.pl).
 
 | Co widać w aplikacji | Zbiór danych | Udostępnia | Odświeżanie |
 |---|---|---|---|
@@ -54,7 +54,7 @@ Odpowiedzi API są przez kilka sekund przechowywane w pamięci podręcznej serwe
 
 ### Co dalej: plan rozwoju
 
-Rozwój Pasibusa zaplanowano w fazach. Terminy są orientacyjne.
+Rozwój wawEye zaplanowano w fazach. Terminy są orientacyjne.
 
 **Październik 2026 – fundamenty (w dużej części gotowe).** Automatyczne testy przy każdej zmianie, automatyczne wdrażanie i monitoring wersji produkcyjnej z powiadomieniem o awarii. Dzięki temu problem z danymi zostaje wykryty, zanim zgłosi go użytkownik.
 
@@ -83,11 +83,11 @@ Rozwój Pasibusa zaplanowano w fazach. Terminy są orientacyjne.
 
 Zakres funkcji opartych na rozkładach zależy od danych publikowanych przez miasto. Na przykład szacowanie opóźnień wymaga rozkładów z podziałem na brygady, a jeśli miasto nie udostępni dokładnego przebiegu tras, trasa zostanie narysowana przez kolejne przystanki.
 
-Pasibus nie będzie planerem podróży ani osobną aplikacją natywną. Nie wprowadzi kont użytkowników, reklam ani analityki zachowań. Ma pozostać szybkim, darmowym podglądem miasta na żywo.
+wawEye nie będzie planerem podróży ani osobną aplikacją natywną. Nie wprowadzi kont użytkowników, reklam ani analityki zachowań. Ma pozostać szybkim, darmowym podglądem miasta na żywo.
 
-### O Pasibusie
+### O wawEye
 
-Pasibus to niekomercyjna aplikacja webowa, która pokazuje warszawską komunikację miejską w czasie rzeczywistym na podstawie otwartych danych m.st. Warszawy. Wersja produkcyjna powstała w dwa dni. Projekt nie ma budżetu: działa w darmowych planach usług chmurowych (Vercel, Cloudflare), a mapę rysuje biblioteka open source Leaflet na podkładzie OpenStreetMap. Klucz do miejskiego API jest przechowywany wyłącznie po stronie serwera.
+wawEye to niekomercyjna aplikacja webowa, która pokazuje warszawską komunikację miejską w czasie rzeczywistym na podstawie otwartych danych m.st. Warszawy. Nazwa łączy WAW, popularny skrót Warszawy, z angielskim „eye” (oko). Wersja produkcyjna powstała w dwa dni. Projekt nie ma budżetu: działa w darmowych planach usług chmurowych (Vercel, Cloudflare), a mapę rysuje biblioteka open source Leaflet na podkładzie OpenStreetMap. Klucz do miejskiego API jest przechowywany wyłącznie po stronie serwera.
 
 Aplikacja: https://pasibus.vercel.app
 

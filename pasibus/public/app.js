@@ -379,7 +379,7 @@
     setCentered(true); me.flying = true;
     map.once('moveend', () => { me.flying = false; });
     map.flyTo(me.pos, zoom, { duration: 0.8 });
-    if (!WARSAW.contains(me.pos)) toast('Jesteś poza Warszawą – Pasibus pokazuje pojazdy tylko w Warszawie.');
+    if (!WARSAW.contains(me.pos)) toast('Jesteś poza Warszawą – wawEye pokazuje pojazdy tylko w Warszawie.');
   }
 
   function onPosition(p) {

@@ -1,0 +1,33 @@
+name: wawEye – kontrola adresu
+
+# On-demand production check of any address (a new domain, a preview) without opening monitoring issues.
+# Runs pasibus/scripts/check-production.js on GitHub's runners, so it works even when a Claude session
+# cannot reach the address.
+on:
+  workflow_dispatch:
+    inputs:
+      adres:
+        description: 'Adres do sprawdzenia, np. https://waweye.vercel.app'
+        type: string
+        required: true
+        default: https://pasibus.vercel.app
+
+permissions:
+  contents: read
+
+jobs:
+  kontrola:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Kontrola produkcji
+        shell: bash
+        env:
+          ADRES: ${{ inputs.adres }}
+        run: |
+          if [[ ! "$ADRES" =~ ^https://[A-Za-z0-9.-]+(/.*)?$ ]]; then echo "::error::Podaj adres zaczynający się od https://"; exit 1; fi
+          node pasibus/scripts/check-production.js "$ADRES" | tee -a "$GITHUB_STEP_SUMMARY"

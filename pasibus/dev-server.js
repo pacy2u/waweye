@@ -34,6 +34,6 @@ function createServer(opts = {}) {
 
 if (require.main === module) {
   const port = process.env.PORT || 3000;
-  createServer().listen(port, () => console.log(`Pasibus on http://localhost:${port}${process.env.MOCK === '1' ? ' (MOCK)' : ''}`));
+  createServer().listen(port, () => console.log(`wawEye on http://localhost:${port}${process.env.MOCK === '1' ? ' (MOCK)' : ''}`));
 }
 module.exports = { createServer };

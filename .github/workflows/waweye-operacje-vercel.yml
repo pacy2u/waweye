@@ -1,0 +1,68 @@
+name: wawEye – operacje Vercel
+
+# On-demand operations on the Vercel project for the wawEye migration (pasibus/PLAN_MIGRACJI_WAWEYE.md),
+# so they do not have to be clicked in the Vercel dashboard. Logic: pasibus/scripts/vercel-ops.js (unit-tested).
+# Needs repository secret VERCEL_TOKEN; PROXY_SECRET only for przelacz-workera with "nowy_sekret".
+# Operations that deploy (and dodaj-domene) then run the production check on the affected domains.
+on:
+  workflow_dispatch:
+    inputs:
+      operacja:
+        description: 'Operacja'
+        type: choice
+        default: stan
+        options: [stan, dodaj-domene, przekieruj-domene, przelacz-workera, ustaw-root-directory, zmien-nazwe-projektu, wdroz-produkcje]
+      wartosc:
+        description: 'Domena, adres Workera, folder albo nowa nazwa projektu (zależnie od operacji)'
+        type: string
+        required: false
+      przekieruj_na:
+        description: 'Tylko przekieruj-domene: domena docelowa'
+        type: string
+        required: false
+      nowy_sekret:
+        description: 'Tylko przelacz-workera: ustaw też UPSTREAM_SECRET z sekretu PROXY_SECRET'
+        type: boolean
+        default: false
+
+concurrency:
+  group: waweye-operacje-vercel
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  operacja:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_TEAM_ID: team_cc72c42CNFxSv2ZSpnhfbDIw # team ampm10 (an identifier, not a secret)
+      VERCEL_PROJECT_ID: prj_BbZW22uPfts5S9gjDz7l3E9WnFwG # project pasibus; the id survives a project rename
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Operacja
+        id: op
+        shell: bash
+        env:
+          OPERACJA: ${{ inputs.operacja }}
+          WARTOSC: ${{ inputs.wartosc }}
+          PRZEKIERUJ_NA: ${{ inputs.przekieruj_na }}
+          NOWY_SEKRET: ${{ inputs.nowy_sekret }}
+          PROXY_SECRET: ${{ inputs.nowy_sekret && secrets.PROXY_SECRET || '' }}
+        run: node pasibus/scripts/vercel-ops.js "$OPERACJA" "$WARTOSC" "$PRZEKIERUJ_NA" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Kontrola produkcji
+        if: steps.op.outputs.sprawdz != ''
+        shell: bash
+        env:
+          ADRESY: ${{ steps.op.outputs.sprawdz }}
+        run: |
+          status=0
+          for adres in $ADRESY; do
+            node pasibus/scripts/check-production.js "$adres" | tee -a "$GITHUB_STEP_SUMMARY" || status=1
+          done
+          exit $status
