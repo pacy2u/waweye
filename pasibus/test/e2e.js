@@ -32,12 +32,12 @@ function findChromium() {
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
     await page.goto(url);
-    const S = () => page.evaluate(() => ({ n: window.__pasibus.state.markers.size, sel: window.__pasibus.state.selected, z: window.__pasibus.map.getZoom(),
-      shown: [...window.__pasibus.state.markers.values()].filter((m) => window.__pasibus.map.hasLayer(m.mk)).length,
+    const S = () => page.evaluate(() => ({ n: window.__waweye.state.markers.size, sel: window.__waweye.state.selected, z: window.__waweye.map.getZoom(),
+      shown: [...window.__waweye.state.markers.values()].filter((m) => window.__waweye.map.hasLayer(m.mk)).length,
       labels: document.querySelectorAll('.lbl').length, panel: !document.getElementById('panel').hidden }));
 
     await step(`${label}: vehicles load and render`, async () => {
-      await page.waitForFunction(() => window.__pasibus.state.markers.size > 50);
+      await page.waitForFunction(() => window.__waweye.state.markers.size > 50);
       assert.ok((await S()).shown > 50);
       assert.match(await page.textContent('#status-text'), /pojazdów/);
     });
@@ -55,11 +55,11 @@ function findChromium() {
       let pt;
       try {
         await page.waitForTimeout(200);
-        await page.waitForFunction(() => [...window.__pasibus.state.markers.values()].every((m) => !m.to));
-        await page.evaluate(() => { const { map, state } = window.__pasibus; const m = [...state.markers.values()][5]; map.setView(m.mk.getLatLng(), 16, { animate: false }); });
+        await page.waitForFunction(() => [...window.__waweye.state.markers.values()].every((m) => !m.to));
+        await page.evaluate(() => { const { map, state } = window.__waweye; const m = [...state.markers.values()][5]; map.setView(m.mk.getLatLng(), 16, { animate: false }); });
         await page.waitForTimeout(300);
         // A vehicle on its own and not under the top bar, the status or the buttons.
-        pt = await page.evaluate(() => { const { map, state } = window.__pasibus; const r = map.getContainer().getBoundingClientRect(), cv = document.querySelector('.leaflet-overlay-pane canvas');
+        pt = await page.evaluate(() => { const { map, state } = window.__waweye; const r = map.getContainer().getBoundingClientRect(), cv = document.querySelector('.leaflet-overlay-pane canvas');
           const all = [...state.markers.values()].filter((x) => map.hasLayer(x.mk)).map((x) => { const p = map.latLngToContainerPoint(x.mk.getLatLng()); return { x: r.left + p.x, y: r.top + p.y, id: x.v.id }; });
           return all.find((p) => document.elementFromPoint(p.x, p.y) === cv && all.every((q) => q === p || Math.hypot(q.x - p.x, q.y - p.y) > 20)); });
         assert.ok(pt, 'no clickable vehicle in view');
@@ -70,69 +70,69 @@ function findChromium() {
       const s = await S();
       assert.equal(s.sel, pt.id); assert.ok(s.panel);
       assert.ok(await page.locator('.hl').count() === 1);
-      const fills = await page.evaluate(() => { const { state } = window.__pasibus; const o = [...state.markers.values()].find((m) => m.v.id !== state.selected); return { sel: state.markers.get(state.selected).mk.options.fillColor, other: o.mk.options.fillOpacity }; });
+      const fills = await page.evaluate(() => { const { state } = window.__waweye; const o = [...state.markers.values()].find((m) => m.v.id !== state.selected); return { sel: state.markers.get(state.selected).mk.options.fillColor, other: o.mk.options.fillOpacity }; });
       assert.equal(fills.sel, '#FC4C02'); assert.ok(fills.other < 1);
-      await page.screenshot({ path: `${SHOTS}/pasibus-${label}-selected.png` });
+      await page.screenshot({ path: `${SHOTS}/waweye-${label}-selected.png` });
     });
     await step(`${label}: vehicle panel shows fleet details from the public-transport-vehicles dataset`, async () => {
       await page.waitForFunction(() => document.querySelectorAll('#p-fleet dt').length > 3);
       const txt = await page.textContent('#p-fleet');
       for (const t of ['Model', 'Rok produkcji', 'Operator', 'Zajezdnia', 'Miejsca', 'Klimatyzacja']) assert.ok(txt.includes(t), 'missing ' + t + ': ' + txt);
-      const m = await page.evaluate(() => { const { state } = window.__pasibus; return state.markers.get(state.selected).v.type; });
+      const m = await page.evaluate(() => { const { state } = window.__waweye; return state.markers.get(state.selected).v.type; });
       assert.match(txt, m === 'bus' ? /Solaris Urbino 12 IV/ : /Konstal 105N i/);
       assert.ok(await page.isVisible('#p-fleet'));
-      await page.screenshot({ path: `${SHOTS}/pasibus-${label}-fleet.png` });
+      await page.screenshot({ path: `${SHOTS}/waweye-${label}-fleet.png` });
     });
     await step(`${label}: selection survives refresh`, async () => {
-      const id = (await S()).sel; const t0 = await page.evaluate(() => window.__pasibus.state.lastOk); await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange'))); await page.evaluate(() => { Object.defineProperty(document, 'hidden', { value: false, configurable: true }); document.dispatchEvent(new Event('visibilitychange')); }); await page.waitForFunction((t) => window.__pasibus.state.lastOk > t, t0);
+      const id = (await S()).sel; const t0 = await page.evaluate(() => window.__waweye.state.lastOk); await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange'))); await page.evaluate(() => { Object.defineProperty(document, 'hidden', { value: false, configurable: true }); document.dispatchEvent(new Event('visibilitychange')); }); await page.waitForFunction((t) => window.__waweye.state.lastOk > t, t0);
       await page.waitForTimeout(100); assert.equal((await S()).sel, id);
     });
     await step(`${label}: follow mode centres selected`, async () => {
       await page.click('#follow'); await page.waitForTimeout(500);
-      const d = await page.evaluate(() => { const { map, state } = window.__pasibus; const p = map.latLngToContainerPoint(state.markers.get(state.selected).mk.getLatLng()); const s = map.getSize(); return Math.hypot(p.x - s.x / 2, p.y - s.y / 2); });
+      const d = await page.evaluate(() => { const { map, state } = window.__waweye; const p = map.latLngToContainerPoint(state.markers.get(state.selected).mk.getLatLng()); const s = map.getSize(); return Math.hypot(p.x - s.x / 2, p.y - s.y / 2); });
       assert.ok(d < 5, 'distance ' + d);
     });
     await step(`${label}: close panel deselects`, async () => {
       await page.click('#close'); const s = await S(); assert.equal(s.sel, null); assert.ok(!s.panel); assert.equal(await page.locator('.hl').count(), 0);
     });
     await step(`${label}: map click deselects`, async () => {
-      await page.evaluate(() => { const { state, select } = window.__pasibus; select([...state.markers.keys()][0]); });
+      await page.evaluate(() => { const { state, select } = window.__waweye; select([...state.markers.keys()][0]); });
       await page.mouse.click(5, ctxOpts.viewport.height - 5); await page.waitForTimeout(200);
       // bottom-left may hit status chip; use map centre-top-right instead if still selected
-      if ((await S()).sel) { await page.evaluate(() => window.__pasibus.map.fire('click')); }
+      if ((await S()).sel) { await page.evaluate(() => window.__waweye.map.fire('click')); }
       assert.equal((await S()).sel, null);
     });
     await step(`${label}: type filter`, async () => {
       await page.click('#t-tram'); await page.waitForTimeout(600);
-      const shownTrams = () => page.evaluate(() => { const { map, state } = window.__pasibus; return [...state.markers.values()].filter((m) => m.v.type === 'tram' && map.hasLayer(m.mk)).length; });
+      const shownTrams = () => page.evaluate(() => { const { map, state } = window.__waweye; return [...state.markers.values()].filter((m) => m.v.type === 'tram' && map.hasLayer(m.mk)).length; });
       assert.equal(await shownTrams(), 0);
       await page.click('#t-tram');
       assert.ok(await shownTrams() > 0, 'trams reappear immediately, without waiting for the next poll');
     });
     await step(`${label}: line search`, async () => {
       await page.fill('#search', '175'); await page.waitForTimeout(200);
-      const r = await page.evaluate(() => { const { map, state } = window.__pasibus; return [...state.markers.values()].filter((m) => map.hasLayer(m.mk)).map((m) => m.v.line); });
+      const r = await page.evaluate(() => { const { map, state } = window.__waweye; return [...state.markers.values()].filter((m) => map.hasLayer(m.mk)).map((m) => m.v.line); });
       assert.ok(r.length > 0 && r.every((l) => l === '175'), JSON.stringify(r));
       await page.fill('#search', ''); await page.waitForTimeout(200);
     });
     await step(`${label}: labels at high zoom`, async () => {
-      await page.evaluate(() => { const { map, state } = window.__pasibus; map.setView([...state.markers.values()][3].mk.getLatLng(), 16, { animate: false }); });
+      await page.evaluate(() => { const { map, state } = window.__waweye; map.setView([...state.markers.values()][3].mk.getLatLng(), 16, { animate: false }); });
       await page.waitForTimeout(500); assert.ok((await S()).labels > 0);
     });
     // ---- My location (Google Maps style button) ----
     const ME = { latitude: 52.2318, longitude: 21.0060, accuracy: 30 }; // Palace of Culture
-    const L_ = () => page.evaluate(() => { const { me, map } = window.__pasibus; return { cls: document.getElementById('locate').className, centered: me.centered,
+    const L_ = () => page.evaluate(() => { const { me, map } = window.__waweye; return { cls: document.getElementById('locate').className, centered: me.centered,
       flying: me.flying, z: map.getZoom(), off: me.pos ? map.latLngToContainerPoint(me.pos).distanceTo(map.getSize().divideBy(2)) : null, pos: me.pos && [me.pos.lat, me.pos.lng], dots: document.querySelectorAll('.me').length,
       r: me.circle && me.circle.getRadius() }; });
     // Leaflet pans by whole pixels, so "centred" means within a pixel or so of the middle (about 3 m at zoom 15).
-    const settled = () => page.waitForFunction(() => { const { me, map } = window.__pasibus; return me.pos && !me.flying && map.latLngToContainerPoint(me.pos).distanceTo(map.getSize().divideBy(2)) < 1.5; });
-    const moveTo = async (g) => { await ctx.setGeolocation(g); await page.waitForFunction((g) => { const p = window.__pasibus.me.pos; return p && Math.abs(p.lat - g.latitude) < 1e-7 && Math.abs(p.lng - g.longitude) < 1e-7; }, g); };
+    const settled = () => page.waitForFunction(() => { const { me, map } = window.__waweye; return me.pos && !me.flying && map.latLngToContainerPoint(me.pos).distanceTo(map.getSize().divideBy(2)) < 1.5; });
+    const moveTo = async (g) => { await ctx.setGeolocation(g); await page.waitForFunction((g) => { const p = window.__waweye.me.pos; return p && Math.abs(p.lat - g.latitude) < 1e-7 && Math.abs(p.lng - g.longitude) < 1e-7; }, g); };
     const drag = async () => {
       const c = { x: ctxOpts.viewport.width / 2, y: ctxOpts.viewport.height / 2 };
       await page.mouse.move(c.x, c.y); await page.mouse.down(); await page.mouse.move(c.x + 120, c.y + 60, { steps: 6 }); await page.mouse.up(); await page.waitForTimeout(300);
     };
     await step(`${label}: locate button finds the user, zooms in on them and shows the blue dot`, async () => {
-      await page.evaluate(() => { window.__pasibus.map.setView([52.2297, 21.0122], 12, { animate: false }); });
+      await page.evaluate(() => { window.__waweye.map.setView([52.2297, 21.0122], 12, { animate: false }); });
       let s = await L_(); assert.equal(s.cls, 'locate'); assert.equal(s.dots, 0);
       assert.ok(await page.isVisible('#locate'));
       await ctx.grantPermissions(['geolocation']); await ctx.setGeolocation(ME);
@@ -141,7 +141,7 @@ function findChromium() {
       assert.ok(s.centered); assert.equal(s.cls, 'locate on'); assert.equal(s.z, 16); assert.ok(s.off < 1.5, 'centre off by px ' + s.off);
       assert.equal(s.dots, 1); assert.equal(s.r, 30, 'accuracy circle in metres');
       assert.equal(await page.locator('.leaflet-overlay-pane canvas').count(), 1, 'accuracy circle shares the vehicles canvas');
-      await page.screenshot({ path: `${SHOTS}/pasibus-${label}-location.png` });
+      await page.screenshot({ path: `${SHOTS}/waweye-${label}-location.png` });
     });
     await step(`${label}: map follows the user while centred; dragging stops it; the button centres again`, async () => {
       await moveTo({ ...ME, latitude: 52.2330, longitude: 21.0100 }); await settled();
@@ -155,7 +155,7 @@ function findChromium() {
     await step(`${label}: zooming while centred keeps the user in the middle`, async () => {
       const z0 = (await L_()).z;
       await page.mouse.move(ctxOpts.viewport.width / 2 + 100, ctxOpts.viewport.height / 2 + 120); await page.mouse.wheel(0, 300);
-      await page.waitForFunction((z) => window.__pasibus.map.getZoom() < z, z0); await page.waitForTimeout(400);
+      await page.waitForFunction((z) => window.__waweye.map.getZoom() < z, z0); await page.waitForTimeout(400);
       const s = await L_(); assert.ok(s.centered); assert.ok(s.off < 1.5, 'centre off by px ' + s.off);
     });
     await step(`${label}: compass turns the heading beam, the short way round`, async () => {
@@ -173,17 +173,17 @@ function findChromium() {
       await page.evaluate(() => Object.defineProperty(document, 'hidden', { configurable: true, get: () => true })); // freeze vehicles, as above
       try {
         await page.waitForTimeout(200);
-        await page.waitForFunction(() => [...window.__pasibus.state.markers.values()].every((m) => !m.to));
-        const v = await page.evaluate(() => { const { map, state } = window.__pasibus; const shown = [...state.markers.values()].filter((x) => map.hasLayer(x.mk));
+        await page.waitForFunction(() => [...window.__waweye.state.markers.values()].every((m) => !m.to));
+        const v = await page.evaluate(() => { const { map, state } = window.__waweye; const shown = [...state.markers.values()].filter((x) => map.hasLayer(x.mk));
           const px = (x) => map.latLngToContainerPoint(x.mk.getLatLng()); // pixel distances do not depend on where the map is centred
           const m = shown.find((x) => shown.every((o) => o === x || px(o).distanceTo(px(x)) > 24)); const p = m.mk.getLatLng(); return { lat: p.lat, lng: p.lng, id: m.v.id }; });
         await moveTo({ latitude: v.lat, longitude: v.lng, accuracy: 300 }); await settled(); await page.waitForTimeout(300);
         assert.equal((await L_()).r, 300);
-        const pt = await page.evaluate((id) => { const { map, state } = window.__pasibus; const p = map.latLngToContainerPoint(state.markers.get(id).mk.getLatLng()); const r = map.getContainer().getBoundingClientRect(); return { x: r.left + p.x, y: r.top + p.y }; }, v.id);
+        const pt = await page.evaluate((id) => { const { map, state } = window.__waweye; const p = map.latLngToContainerPoint(state.markers.get(id).mk.getLatLng()); const r = map.getContainer().getBoundingClientRect(); return { x: r.left + p.x, y: r.top + p.y }; }, v.id);
         await page.mouse.click(pt.x, pt.y); await page.waitForTimeout(100);
-        assert.equal(await page.evaluate(() => window.__pasibus.state.selected), v.id, 'vehicle under the blue dot not selectable');
+        assert.equal(await page.evaluate(() => window.__waweye.state.selected), v.id, 'vehicle under the blue dot not selectable');
         assert.ok(await page.evaluate(() => getComputedStyle(document.querySelector('.me-dot')).pointerEvents === 'none'));
-        await page.evaluate(() => window.__pasibus.deselect());
+        await page.evaluate(() => window.__waweye.deselect());
       } finally {
         await page.evaluate(() => { delete document.hidden; });
       }
@@ -191,42 +191,42 @@ function findChromium() {
     await step(`${label}: locate button rises above an open panel instead of hiding under it`, async () => {
       const rects = () => page.evaluate(() => { const b = document.getElementById('locate').getBoundingClientRect(), p = document.getElementById('panel').getBoundingClientRect();
         return { overlap: b.left < p.right && b.right > p.left && b.top < p.bottom && b.bottom > p.top, lifted: document.getElementById('locate').style.bottom !== '' }; });
-      await page.evaluate(() => { const { state, select } = window.__pasibus; select([...state.markers.keys()][0]); });
+      await page.evaluate(() => { const { state, select } = window.__waweye; select([...state.markers.keys()][0]); });
       await page.waitForFunction(() => document.querySelectorAll('#p-fleet dt').length > 3); await page.waitForTimeout(400);
       let r = await rects(); assert.ok(!r.overlap, 'button covered by the panel'); assert.equal(r.lifted, label === 'mobile');
       await page.click('#close'); await page.waitForTimeout(400);
       r = await rects(); assert.ok(!r.lifted, 'button back in the corner');
     });
     await step(`${label}: following a vehicle and following the user exclude each other`, async () => {
-      await page.evaluate(() => { const { state, select } = window.__pasibus; select([...state.markers.keys()][0]); });
+      await page.evaluate(() => { const { state, select } = window.__waweye; select([...state.markers.keys()][0]); });
       await page.click('#follow');
       let s = await L_(); assert.ok(!s.centered); assert.equal(s.cls, 'locate found');
       await page.click('#locate'); await settled();
       s = await L_(); assert.ok(s.centered);
-      assert.ok(!(await page.evaluate(() => window.__pasibus.state.follow))); assert.ok(!(await page.getAttribute('#follow', 'class')).includes('on'));
+      assert.ok(!(await page.evaluate(() => window.__waweye.state.follow))); assert.ok(!(await page.getAttribute('#follow', 'class')).includes('on'));
       await page.click('#close');
       await drag(); assert.ok(!(await L_()).centered); // leave the map free for the next steps
     });
     await step(`${label}: parking button shows parkings, panel has free/total places`, async () => {
-      await page.evaluate(() => { window.__pasibus.map.setView([52.2297, 21.0122], 12, { animate: false }); });
+      await page.evaluate(() => { window.__waweye.map.setView([52.2297, 21.0122], 12, { animate: false }); });
       assert.equal(await page.locator('.pk').count(), 0);
       await page.click('#t-park'); await page.waitForSelector('.pk'); await page.waitForTimeout(300);
       assert.equal(await page.getAttribute('#t-park', 'aria-pressed'), 'true');
       assert.ok(await page.locator('#t-park svg.pico').count() === 1, 'parking icon');
       assert.ok((await page.locator('.pk').count()) >= 5);
-      await page.evaluate(() => window.__pasibus.selectPark(window.__pasibus.state.parkings.find((p) => p.name.includes('Stadion')).id));
+      await page.evaluate(() => window.__waweye.selectPark(window.__waweye.state.parkings.find((p) => p.name.includes('Stadion')).id));
       const panel = await page.evaluate(() => ({ hidden: document.getElementById('ppanel').hidden, name: document.getElementById('pp-name').textContent,
         free: document.getElementById('pp-free').textContent, of: document.getElementById('pp-of').textContent, rows: document.getElementById('pp-rows').textContent }));
       assert.ok(!panel.hidden); assert.match(panel.name, /Stadion/);
       assert.equal(panel.free, '234'); assert.match(panel.of, /wolnych miejsc z 506/); // free 233+0+1, capacity 500+2+4
       assert.match(panel.rows, /Standardowe233 wolnych z 500/); assert.match(panel.rows, /Cennik/);
-      await page.screenshot({ path: `${SHOTS}/pasibus-${label}-parking.png` });
+      await page.screenshot({ path: `${SHOTS}/waweye-${label}-parking.png` });
     });
     await step(`${label}: parking and vehicle panels are mutually exclusive`, async () => {
-      await page.evaluate(() => { const { state, select } = window.__pasibus; select([...state.markers.keys()][0]); });
+      await page.evaluate(() => { const { state, select } = window.__waweye; select([...state.markers.keys()][0]); });
       let s = await page.evaluate(() => ({ p: document.getElementById('ppanel').hidden, v: document.getElementById('panel').hidden }));
       assert.ok(s.p && !s.v);
-      await page.evaluate(() => { const { state, selectPark } = window.__pasibus; selectPark(state.parkings[0].id); });
+      await page.evaluate(() => { const { state, selectPark } = window.__waweye; selectPark(state.parkings[0].id); });
       s = await page.evaluate(() => ({ p: document.getElementById('ppanel').hidden, v: document.getElementById('panel').hidden }));
       assert.ok(!s.p && s.v);
     });
@@ -236,40 +236,40 @@ function findChromium() {
       assert.ok(await page.evaluate(() => document.getElementById('ppanel').hidden));
     });
     await step(`${label}: incidents button draws points and lines, panel shows details`, async () => {
-      await page.evaluate(() => { window.__pasibus.map.setView([52.2297, 21.0122], 13, { animate: false }); });
+      await page.evaluate(() => { window.__waweye.map.setView([52.2297, 21.0122], 13, { animate: false }); });
       assert.equal(await page.locator('.ic').count(), 0);
       await page.click('#t-inc'); await page.waitForSelector('.ic'); await page.waitForTimeout(300);
       assert.equal(await page.getAttribute('#t-inc', 'aria-pressed'), 'true');
       assert.ok(await page.locator('#t-inc svg.pico').count() === 1, 'warning icon');
       assert.equal(await page.locator('.ic').count(), 4);
       assert.equal(await page.locator('.ic.planned').count(), 1); assert.equal(await page.locator('.ic.ended').count(), 1);
-      assert.equal(await page.evaluate(() => [...window.__pasibus.state.incLayers.values()].reduce((n, g) => { g.eachLayer((l) => { if (l instanceof L.Polyline) n++; }); return n; }, 0)), 1, 'one polyline');
-      await page.evaluate(() => { window.__pasibus.map.panBy([0, -200], { animate: false }); }); // keep the marker clear of the (wrapped) top bar
+      assert.equal(await page.evaluate(() => [...window.__waweye.state.incLayers.values()].reduce((n, g) => { g.eachLayer((l) => { if (l instanceof L.Polyline) n++; }); return n; }, 0)), 1, 'one polyline');
+      await page.evaluate(() => { window.__waweye.map.panBy([0, -200], { animate: false }); }); // keep the marker clear of the (wrapped) top bar
       await page.click('.ic.planned');
       const panel = await page.evaluate(() => ({ hidden: document.getElementById('ipanel').hidden, name: document.getElementById('ip-name').textContent,
         status: document.getElementById('ip-status').textContent, link: document.getElementById('ip-link').href, linkHidden: document.getElementById('ip-link').hidden,
         body: document.getElementById('ip-body').textContent, when: document.getElementById('ip-when').textContent }));
       assert.ok(!panel.hidden); assert.match(panel.name, /Targowej/); assert.equal(panel.status, 'Zaplanowane');
       assert.equal(panel.link, 'https://infoulice.um.warszawa.pl/?page_id=8150'); assert.ok(!panel.linkHidden); assert.match(panel.body, /przyszłego tygodnia/);
-      await page.screenshot({ path: `${SHOTS}/pasibus-${label}-incidents.png` });
+      await page.screenshot({ path: `${SHOTS}/waweye-${label}-incidents.png` });
     });
     await step(`${label}: vehicles stay clickable while the incidents layer is on`, async () => {
-      await page.evaluate(() => { const { map } = window.__pasibus; map.setView([52.2297, 21.0122], 13, { animate: false }); });
+      await page.evaluate(() => { const { map } = window.__waweye; map.setView([52.2297, 21.0122], 13, { animate: false }); });
       await page.waitForTimeout(500);
       // Freeze the data while clicking (polling pauses in a hidden tab): a poll in between would animate vehicles away
       // from the computed points and the click would miss (14 of 300 clicks in a probe, failed CI on main).
       await page.evaluate(() => Object.defineProperty(document, 'hidden', { configurable: true, get: () => true }));
       try {
         await page.waitForTimeout(200); // a request already in flight may still land
-        await page.waitForFunction(() => [...window.__pasibus.state.markers.values()].every((m) => !m.to));
-        const pts = await page.evaluate(() => { const { map, state } = window.__pasibus; const r = map.getContainer().getBoundingClientRect(); const sz = map.getSize();
+        await page.waitForFunction(() => [...window.__waweye.state.markers.values()].every((m) => !m.to));
+        const pts = await page.evaluate(() => { const { map, state } = window.__waweye; const r = map.getContainer().getBoundingClientRect(); const sz = map.getSize();
           return [...state.markers.values()].filter((m) => map.getBounds().contains(m.mk.getLatLng())).map((m) => { const p = map.latLngToContainerPoint(m.mk.getLatLng());
             return { x: r.left + p.x, y: r.top + p.y, cy: p.y, cx: p.x, id: m.v.id, w: sz.x, h: sz.y }; }).filter((p, _, all) => p.cy > 160 && p.cy < p.h - 120 && p.cx > 40 && p.cx < p.w - 80 && all.every((q) => q === p || Math.hypot(q.cx - p.cx, q.cy - p.cy) > 20)).slice(0, 6); });
         assert.ok(pts.length >= 3);
         for (const p of pts) {
           await page.mouse.click(p.x, p.y); await page.waitForTimeout(80);
-          assert.equal(await page.evaluate(() => window.__pasibus.state.selected), p.id, 'vehicle not selectable with incidents on');
-          await page.evaluate(() => window.__pasibus.deselect());
+          assert.equal(await page.evaluate(() => window.__waweye.state.selected), p.id, 'vehicle not selectable with incidents on');
+          await page.evaluate(() => window.__waweye.deselect());
         }
       } finally {
         await page.evaluate(() => { delete document.hidden; });
@@ -278,17 +278,17 @@ function findChromium() {
     });
     await step(`${label}: incident panel is mutually exclusive with vehicle and parking panels`, async () => {
       const hidden = () => page.evaluate(() => ['panel', 'ppanel', 'ipanel'].map((id) => document.getElementById(id).hidden));
-      await page.evaluate(() => { const { state, select } = window.__pasibus; select([...state.markers.keys()][0]); });
+      await page.evaluate(() => { const { state, select } = window.__waweye; select([...state.markers.keys()][0]); });
       assert.deepEqual(await hidden(), [false, true, true]);
-      await page.evaluate(() => { const { state, selectInc } = window.__pasibus; selectInc(state.incidents[0].id); });
+      await page.evaluate(() => { const { state, selectInc } = window.__waweye; selectInc(state.incidents[0].id); });
       assert.deepEqual(await hidden(), [true, true, false]);
       await page.click('#t-park'); await page.waitForSelector('.pk');
-      await page.evaluate(() => { const { state, selectPark } = window.__pasibus; selectPark(state.parkings[0].id); });
+      await page.evaluate(() => { const { state, selectPark } = window.__waweye; selectPark(state.parkings[0].id); });
       assert.deepEqual(await hidden(), [true, false, true]);
       await page.click('#t-park');
     });
     await step(`${label}: incidents button off hides layer and panel`, async () => {
-      await page.evaluate(() => { const { state, selectInc } = window.__pasibus; selectInc(state.incidents[0].id); });
+      await page.evaluate(() => { const { state, selectInc } = window.__waweye; selectInc(state.incidents[0].id); });
       await page.click('#t-inc'); await page.waitForTimeout(200);
       assert.equal(await page.locator('.ic').count(), 0);
       assert.ok(await page.evaluate(() => document.getElementById('ipanel').hidden));
@@ -298,7 +298,7 @@ function findChromium() {
       await page.click('#t-inc');
       await page.waitForFunction(() => /utrudnienia: brak danych/.test(document.getElementById('status-text').textContent));
       const r = await page.evaluate(() => ({ text: document.getElementById('status-text').textContent,
-        shown: [...window.__pasibus.state.markers.values()].filter((m) => window.__pasibus.map.hasLayer(m.mk)).length }));
+        shown: [...window.__waweye.state.markers.values()].filter((m) => window.__waweye.map.hasLayer(m.mk)).length }));
       assert.ok(r.shown > 50); assert.ok(r.text.startsWith(`${r.shown} pojazdów`), r.text + ' vs ' + r.shown);
       await page.click('#t-inc'); await page.unroute('**/api/incidents');
     });
@@ -307,7 +307,7 @@ function findChromium() {
       await page.evaluate(() => Object.defineProperty(document, 'hidden', { configurable: true, get: () => true }));
       await page.waitForTimeout(100); // let any request issued before hiding be reported first
       page.on('request', onReq);
-      await page.evaluate(() => window.__pasibus.poll());
+      await page.evaluate(() => window.__waweye.poll());
       await page.waitForTimeout(300);
       page.off('request', onReq);
       assert.deepEqual(urls, []);
@@ -319,7 +319,7 @@ function findChromium() {
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
     });
     await step(`${label}: no JS errors`, async () => assert.deepEqual(errors, []));
-    await page.screenshot({ path: `${SHOTS}/pasibus-${label}.png` });
+    await page.screenshot({ path: `${SHOTS}/waweye-${label}.png` });
     await ctx.close();
   }
 
@@ -339,16 +339,16 @@ function findChromium() {
   await pg.route('**/api/parking', (route) => route.fulfill({ status: 502, contentType: 'application/json', body: '{"error":"HTTP 403 (forbidden)"}' }));
   await pg.goto(`http://localhost:${half.address().port}/`);
   await step('parking API failure is reported, vehicles stay visible', async () => {
-    await pg.waitForFunction(() => window.__pasibus.state.markers.size > 50);
+    await pg.waitForFunction(() => window.__waweye.state.markers.size > 50);
     await pg.click('#t-park');
     await pg.waitForFunction(() => /parkingi: brak danych/.test(document.getElementById('status-text').textContent));
-    assert.ok(await pg.evaluate(() => window.__pasibus.state.markers.size > 50));
+    assert.ok(await pg.evaluate(() => window.__waweye.state.markers.size > 50));
   });
   await pg.route('**/api/incidents', (route) => route.fulfill({ status: 502, contentType: 'application/json', body: '{"error":"HTTP 403 (forbidden)"}' }));
   await step('incidents API failure is reported, vehicles stay visible', async () => {
     await pg.click('#t-inc');
     await pg.waitForFunction(() => /utrudnienia: brak danych/.test(document.getElementById('status-text').textContent));
-    assert.ok(await pg.evaluate(() => window.__pasibus.state.markers.size > 50));
+    assert.ok(await pg.evaluate(() => window.__waweye.state.markers.size > 50));
   });
 
   // My location: refused permission, a position outside Warsaw, permission given on an earlier visit.
@@ -358,7 +358,7 @@ function findChromium() {
   lp.on('pageerror', (e) => lerrors.push(e.message));
   await lp.goto(url);
   await step('location: refused permission shows a message and a crossed-out button', async () => {
-    await lp.waitForFunction(() => window.__pasibus.state.markers.size > 50);
+    await lp.waitForFunction(() => window.__waweye.state.markers.size > 50);
     // As if the user had clicked "Block" (Playwright has no API for refusing a permission prompt).
     const cdp = await lctx.newCDPSession(lp), { targetInfo } = await cdp.send('Target.getTargetInfo');
     await cdp.send('Browser.setPermission', { permission: { name: 'geolocation' }, setting: 'denied', origin: new URL(url).origin, browserContextId: targetInfo.browserContextId });
@@ -371,7 +371,7 @@ function findChromium() {
   await step('location outside Warsaw: the map goes there and says vehicles are only in Warsaw', async () => {
     await lctx.grantPermissions(['geolocation'], { origin: new URL(url).origin }); await lctx.setGeolocation({ latitude: 50.0614, longitude: 19.9366, accuracy: 20 }); // Kraków
     await lp.click('#locate');
-    await lp.waitForFunction(() => { const { me, map } = window.__pasibus; return me.centered && !me.flying && map.distance(map.getCenter(), me.pos) < 2; });
+    await lp.waitForFunction(() => { const { me, map } = window.__waweye; return me.centered && !me.flying && map.distance(map.getCenter(), me.pos) < 2; });
     assert.match(await lp.textContent('#toast'), /poza Warszawą/);
     assert.equal(await lp.getAttribute('#locate', 'class'), 'locate on');
   });
@@ -381,7 +381,7 @@ function findChromium() {
   await gp.goto(url);
   await step('location permission given earlier: the dot appears on load and the map stays put', async () => {
     await gp.waitForSelector('.me');
-    const s = await gp.evaluate(() => { const { map, me } = window.__pasibus; const c = map.getCenter(); return { z: map.getZoom(), lat: c.lat, lng: c.lng, cls: document.getElementById('locate').className, centered: me.centered }; });
+    const s = await gp.evaluate(() => { const { map, me } = window.__waweye; const c = map.getCenter(); return { z: map.getZoom(), lat: c.lat, lng: c.lng, cls: document.getElementById('locate').className, centered: me.centered }; });
     assert.equal(s.z, 12); assert.ok(!s.centered); assert.equal(s.cls, 'locate found');
     assert.ok(Math.abs(s.lat - 52.2297) < 1e-6 && Math.abs(s.lng - 21.0122) < 1e-6, 'map moved on load');
   });

@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
-const URL = process.env.PASIBUS_URL || 'https://pasibus.vercel.app/';
+const URL = process.env.WAWEYE_URL || process.env.PASIBUS_URL || 'https://pasibus.vercel.app/';
 const OUT = path.join(__dirname, 'zasoby');
 const CHROME = process.env.CHROME_PATH || '/opt/pw-browsers/chromium';
 
@@ -15,7 +15,7 @@ const settle = async (page, ms = 2500) => {
   await page.waitForTimeout(ms);
   // Wait until every tile image has loaded and no vehicle is mid-animation.
   await page.waitForFunction(() => [...document.querySelectorAll('.leaflet-tile')].every((i) => i.complete)
-    && [...window.__pasibus.state.markers.values()].every((m) => !m.to), null, { timeout: 20000 }).catch(() => {});
+    && [...window.__waweye.state.markers.values()].every((m) => !m.to), null, { timeout: 20000 }).catch(() => {});
 };
 // The sandbox re-terminates TLS with its own CA, which Chromium does not trust; fetch every
 // https request in Node (it trusts NODE_EXTRA_CA_CERTS; run with NODE_USE_ENV_PROXY=1) and hand it to the page.
@@ -25,7 +25,7 @@ async function viaNode(route) {
   const req = route.request(), url = req.url();
   try {
     if (tileCache.has(url)) return route.fulfill(tileCache.get(url));
-    const r = await fetch(url, { method: req.method(), headers: { 'User-Agent': 'pasibus-promo-video (github.com/pacy2u/tst)', 'Accept': req.headers().accept || '*/*' },
+    const r = await fetch(url, { method: req.method(), headers: { 'User-Agent': 'waweye-promo-video (github.com/pacy2u/tst)', 'Accept': req.headers().accept || '*/*' },
       body: ['GET', 'HEAD'].includes(req.method()) ? undefined : req.postDataBuffer() });
     const res = { status: r.status, body: Buffer.from(await r.arrayBuffer()), contentType: r.headers.get('content-type') || undefined };
     if (url.includes('tile.openstreetmap.org') && r.ok) tileCache.set(url, res);
@@ -52,7 +52,7 @@ const freeze = (page) => page.evaluate(() => { Object.defineProperty(document, "
     await ctx.route(/^https:\/\//, viaNode);
     const page = await ctx.newPage();
     await page.goto(URL);
-    await page.waitForFunction(() => window.__pasibus && window.__pasibus.state.markers.size > 100, null, { timeout: 60000 });
+    await page.waitForFunction(() => window.__waweye && window.__waweye.state.markers.size > 100, null, { timeout: 60000 });
     await settle(page);
     return { ctx, page };
   }
@@ -61,7 +61,7 @@ const freeze = (page) => page.evaluate(() => { Object.defineProperty(document, "
   async function pickTram(page, near) {
     return page.evaluate(async (near) => {
       const f = await (await fetch('/api/fleet')).json();
-      const cands = [...window.__pasibus.state.markers.values()].map((m) => m.v).filter((v) => v.type === 'tram')
+      const cands = [...window.__waweye.state.markers.values()].map((m) => m.v).filter((v) => v.type === 'tram')
         .map((v) => { const r = f.vehicles['tram:' + v.vehicle]; const b = r && f.brands['tram:' + r.brand]; return { v, r, b }; })
         .filter((x) => x.r && x.b && x.b.ac && x.r.year >= 2015)
         .map((x) => ({ ...x, d: Math.hypot(x.v.lat - near[0], (x.v.lon - near[1]) * 0.61) }))
@@ -75,7 +75,7 @@ const freeze = (page) => page.evaluate(() => { Object.defineProperty(document, "
   {
     const { ctx, page } = await open(phone);
     await freeze(page);
-    await page.evaluate(() => { window.__pasibus.map.setView([52.236, 21.012], 13, { animate: false }); });
+    await page.evaluate(() => { window.__waweye.map.setView([52.236, 21.012], 13, { animate: false }); });
     await settle(page);
     await shot(page, 'ekran-mapa');
     await ctx.close();
@@ -87,7 +87,7 @@ const freeze = (page) => page.evaluate(() => { Object.defineProperty(document, "
     const t = await pickTram(page, [52.2318, 21.0135]);
     console.log('tram', t);
     await page.evaluate((t) => {
-      const { map, select } = window.__pasibus;
+      const { map, select } = window.__waweye;
       map.setView([t.lat - 0.0016, t.lon + 0.0012], 16, { animate: false }); // vehicle in the upper half, panel below
       select(t.id);
     }, t);
@@ -101,10 +101,10 @@ const freeze = (page) => page.evaluate(() => { Object.defineProperty(document, "
   {
     const { ctx, page } = await open(phone);
     await page.click('#t-park');
-    await page.waitForFunction(() => window.__pasibus.state.parkings.length > 0, null, { timeout: 30000 });
+    await page.waitForFunction(() => window.__waweye.state.parkings.length > 0, null, { timeout: 30000 });
     await freeze(page);
     const p = await page.evaluate(() => {
-      const { state, map, selectPark } = window.__pasibus;
+      const { state, map, selectPark } = window.__waweye;
       const free = (p) => p.free.standard + p.free.disabled + p.free.electric;
       const best = state.parkings.filter((p) => Math.hypot(p.lat - 52.232, (p.lon - 21.01) * 0.61) < 0.03).sort((a, b) => free(b) - free(a))[0] || state.parkings[0];
       map.setView([best.lat - 0.012, best.lon + 0.004], 14, { animate: false });
@@ -120,10 +120,10 @@ const freeze = (page) => page.evaluate(() => { Object.defineProperty(document, "
   {
     const { ctx, page } = await open(phone);
     await page.click('#t-inc');
-    await page.waitForFunction(() => window.__pasibus.state.incidents.length > 0, null, { timeout: 30000 });
+    await page.waitForFunction(() => window.__waweye.state.incidents.length > 0, null, { timeout: 30000 });
     await freeze(page);
     const i = await page.evaluate(() => {
-      const { state, map, selectInc } = window.__pasibus;
+      const { state, map, selectInc } = window.__waweye;
       const lines = state.incidents.filter((i) => i.status === 'active' && i.shapes.some((s) => s.type === 'line'));
       const pick = lines.find((i) => /Stanów Zjednoczonych/.test(i.name)) || lines[0] || state.incidents[0];
       const pt = pick.shapes[0].points[Math.floor(pick.shapes[0].points.length / 2)];

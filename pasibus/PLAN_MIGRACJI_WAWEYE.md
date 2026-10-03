@@ -98,7 +98,7 @@ Wynik (2026-10-03):
 3. Opcjonalnie, **Claude:** `operacje Vercel → zmien-nazwe-projektu`, wartość `waweye`. Zmieni to adresy podglądów. Jeśli po zmianie nazwy zniknie którakolwiek domena, workflow od razu doda ją z powrotem.
 - Wycofanie: usuń nowy adres w panelu Vercel. Nic jeszcze od niego nie zależy.
 
-### Faza 3 – Monitoring obu adresów
+### Faza 3 – Monitoring obu adresów – zrobione 2026-10-03 (pacy2u/tst#29)
 1. **Claude (PR):**
    - `check-production.js`: domyślny adres `https://waweye.vercel.app`, zmienna `WAWEYE_URL`, na czas migracji z obsługą starej `PASIBUS_URL`.
    - Workflow monitoringu sprawdza oba adresy.
@@ -107,7 +107,10 @@ Wynik (2026-10-03):
 3. Sprawdzanie dwóch adresów wydłuża przebieg o około minutę, czyli około +360 min/mies. przy puli 2000. Wraca do jednego adresu w Fazie 9.
 - Weryfikacja: Actions → monitoring → Run workflow → zielony dla obu adresów. Wycofanie: revert PR.
 
-### Faza 4 – Nowy Worker obok starego
+### Faza 4 – Nowy Worker obok starego – zrobione 2026-10-03
+
+Wynik: `waweye-proxy` wdrożony 20:23 (pacy2u/tst#29). Sekrety ustawione. Test przez podgląd poprawny: 1310 rekordów, bez błędów. Przełączenie produkcji o 20:45 z `nowy_sekret`; oba adresy przeszły kontrolę. Krok 5 pominięty: stary `pasibus-proxy` ma `WARSAW_API_KEY` i `PROXY_SECRET` zapisane jako zwykłe zmienne tekstowe, a Cloudflare nie pozwala utworzyć sekretu o tej samej nazwie (błąd 10053). Nic się wtedy nie zmieniło. Instant Rollback do wdrożenia sprzed przełączenia przestał być możliwy po merge'u pacy2u/tst#31 (nowe wdrożenie produkcyjne; plan Hobby cofa tylko o jedno). Problemy z nowym Workerem naprawiamy więc w nim samym: ten sam kod, ponowne wdrożenie workflowem. Stary Worker czeka bezczynnie na Fazę 9.
+
 1. **Claude (PR):** w `wrangler.toml` zmień nazwę na `name = "waweye-proxy"` i zaktualizuj dokumentację. Po merge'u workflow wdroży **nowego** Workera. Stary `pasibus-proxy` zostaje nietknięty i dalej obsługuje produkcję.
 2. **Claude:** `operacje Cloudflare → ustaw-sekrety`, Worker `waweye-proxy`. Wpisuje `WARSAW_API_KEY` i `PROXY_SECRET` z sekretów repozytorium. Wdrożenie nigdy nie ustawia sekretów, więc bez tego kroku nowy Worker zwraca błędy. Dopóki nic na niego nie wskazuje, nikomu to nie szkodzi.
 3. **Claude, test bez ryzyka dla produkcji:**
@@ -119,13 +122,14 @@ Wynik (2026-10-03):
 6. Obserwuj przez co najmniej 7 dni. Usunięcie starego Workera jest w Fazie 9.
 - Wycofanie po kroku 5: `przelacz-workera` z adresem `pasibus-proxy`. Między krokami 4 i 5 stary Worker ma jeszcze stary sekret. Wtedy wycofaniem jest Instant Rollback w panelu Vercel (Deployments → poprzednie wdrożenie), bo poprzednie wdrożenie ma zapisaną starą parę zmiennych.
 
-### Faza 5 – Identyfikatory w kodzie
+### Faza 5 – Identyfikatory w kodzie – w PR po Fazie 4
 **Claude (PR), wszystko w jednym PR-ze, bo te identyfikatory nie mają zewnętrznych użytkowników:**
 - `window.__pasibus` → `window.__waweye` w `public/app.js`, `test/e2e.js` i `wideo-promocyjne/zrzuty-aplikacji.js`.
 - Zrzuty `pasibus-*.png` → `waweye-*.png` w `test/e2e.js` i ścieżka artefaktu w workflow testów. Obie zmiany muszą być w tym samym PR-ze.
 - Nazwa pakietu `waweye`: `npm pkg set name=waweye`, a potem `npm install --package-lock-only`. Plik lock generuje narzędzie, nie edycja ręczna.
 - Zmienna `PASIBUS_URL` → `WAWEYE_URL` w skryptach wideo, z obsługą starej nazwy do Fazy 9.
-- Nazwy katalogów tymczasowych w skryptach wideo.
+- Nazwy katalogów tymczasowych i User-Agent w skryptach wideo (`waweye-kafelki`, `waweye-promo-video`).
+- Wynik (2026-10-03): `npm test` 62/62, `npm run test:e2e` 65/65, zrzuty `waweye-*.png`. Nazwa w `package.json` zmieniona ręcznie, bo `npm pkg set` przeformatowałby cały plik; `package-lock.json` wygenerowany przez `npm install --package-lock-only`.
 - Weryfikacja: `npm test`, `npm run test:e2e`, zielone CI. Wycofanie: revert PR.
 
 ### Faza 6 – Folder `pasibus/` → `waweye/`

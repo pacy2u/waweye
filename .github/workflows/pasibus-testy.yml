@@ -43,5 +43,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: zrzuty-ekranu-e2e
-          path: ${{ runner.temp }}/pasibus-*.png
+          path: ${{ runner.temp }}/waweye-*.png
           retention-days: 7

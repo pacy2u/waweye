@@ -61,6 +61,12 @@ async function scripts(ctx) {
   return (await ctx.api('GET', `/accounts/${ctx.accountId}/workers/scripts`)) || [];
 }
 
+// Binding names and types from the script settings (secret_text, plain_text, ...); never their values.
+async function bindings(ctx, worker) {
+  const settings = await ctx.api('GET', `/accounts/${ctx.accountId}/workers/scripts/${worker}/settings`);
+  return ((settings && settings.bindings) || []).map((b) => ({ name: b.name, type: b.type }));
+}
+
 async function workerBase(ctx, worker) {
   const sub = await ctx.api('GET', `/accounts/${ctx.accountId}/workers/subdomain`);
   if (!sub || !sub.subdomain) throw new Error('Konto Cloudflare nie ma adresu workers.dev.');
@@ -112,6 +118,10 @@ async function stan(ctx, value) {
     let secrets = '–';
     if (s) {
       try { secrets = ((await ctx.api('GET', `/accounts/${ctx.accountId}/workers/scripts/${name}/secrets`)) || []).map((x) => x.name).sort().join(', ') || 'brak'; } catch (e) { secrets = `nie mogę odczytać (${e.message})`; }
+      try {
+        const plain = (await bindings(ctx, name)).filter((b) => b.type === 'plain_text').map((b) => b.name).sort();
+        if (plain.length) secrets += `; jawnym tekstem: ${plain.join(', ')}`;
+      } catch {}
     }
     const r = s ? await requests7d(ctx, name) : { requests: 0 };
     const roles = [name === active ? 'cel wdrożeń (wrangler.toml)' : '', isUsedBy(up.url, name) ? 'używany przez produkcję Vercel' : ''].filter(Boolean).join(', ');
@@ -188,6 +198,13 @@ async function ustawSekrety(ctx, value) {
   if (missing.length) throw new Error(`Brak sekretów ${missing.join(', ')} w repozytorium (Settings → Secrets and variables → Actions), patrz README.`);
   if (!(await scripts(ctx)).some((s) => s.id === worker)) {
     throw new Error(`Worker ${worker} nie istnieje. Najpierw go wdroż: zmerguj zmianę nazwy w worker/wrangler.toml (workflow wdrożenia Workera utworzy go sam).`);
+  }
+  // Cloudflare refuses a secret whose name is already a plain variable (error 10053), as on pasibus-proxy.
+  let existing = [];
+  try { existing = await bindings(ctx, worker); } catch {}
+  const clash = existing.filter((b) => SECRETS.includes(b.name) && b.type !== 'secret_text').map((b) => `${b.name} (${b.type})`);
+  if (clash.length) {
+    throw new Error(`Worker ${worker} ma już zwykłe zmienne ${clash.join(', ')}, a Cloudflare nie pozwala utworzyć sekretu o tej samej nazwie. Nic nie zmieniam. Aby zamienić je na sekrety, usuń te zmienne w panelu Cloudflare (Worker → Settings → Variables and Secrets) i uruchom operację ponownie.`);
   }
   for (const name of SECRETS) {
     await ctx.api('PUT', `/accounts/${ctx.accountId}/workers/scripts/${worker}/secrets`, { name, text: values[name], type: 'secret_text' });

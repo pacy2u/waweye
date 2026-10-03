@@ -7,7 +7,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 const Z = 12, BOX = { s: 52.06, n: 52.40, w: 20.82, e: 21.30 };
-const CACHE = process.env.TILE_CACHE || path.join(require('os').tmpdir(), 'pasibus-kafelki');
+const CACHE = process.env.TILE_CACHE || path.join(require('os').tmpdir(), 'waweye-kafelki');
 const OUT = path.join(__dirname, 'zasoby');
 const tx = (lon) => Math.floor((lon + 180) / 360 * 2 ** Z);
 const ty = (lat) => { const r = lat * Math.PI / 180; return Math.floor((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * 2 ** Z); };
@@ -23,7 +23,7 @@ const lat = (y) => { const n = Math.PI - 2 * Math.PI * y / 2 ** Z; return 180 / 
     for (let x = x0; x <= x1; x++) {
       const f = path.join(CACHE, `${Z}-${x}-${y}.png`);
       if (!fs.existsSync(f)) {
-        const r = await fetch(`https://tile.openstreetmap.org/${Z}/${x}/${y}.png`, { headers: { 'User-Agent': 'pasibus-promo-video (github.com/pacy2u/tst)' } });
+        const r = await fetch(`https://tile.openstreetmap.org/${Z}/${x}/${y}.png`, { headers: { 'User-Agent': 'waweye-promo-video (github.com/pacy2u/tst)' } });
         if (!r.ok) throw new Error(`kafelek ${x},${y}: HTTP ${r.status}`);
         fs.writeFileSync(f, Buffer.from(await r.arrayBuffer()));
         await new Promise((res) => setTimeout(res, 150));
