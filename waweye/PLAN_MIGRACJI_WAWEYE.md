@@ -154,7 +154,10 @@ Okno zmiany (kilka minut):
 - Wycofanie: przycisk Revert przy PR-ze na GitHubie, potem `ustaw-root-directory` z wartością `pasibus`.
 - Zmiana nazw plików workflowów tworzy w Actions nowe workflowy. Historia przebiegów zostaje pod starymi nazwami. Identyfikator zadania `testy` zostaje bez zmian, więc ewentualne reguły ochrony gałęzi nadal pasują.
 
-### Faza 7 – Repozytorium `pacy2u/tst` → `pacy2u/waweye` – w toku (2026-10-03)
+### Faza 7 – Repozytorium `pacy2u/tst` → `pacy2u/waweye` – zrobione 2026-10-03 (pacy2u/waweye#34)
+
+Wynik: zmiana nazwy około 21:30. Po niej `wdroz-produkcje` (21:34) wdrożył `main` z gita (`waweye-nuhfs47if-ampm10.vercel.app`), a oba adresy przeszły kontrolę: wszystkie zasoby OK, tabor 99,1% autobusów i 100% tramwajów. Sekrety repozytorium i workflowy na żądanie działają pod nową nazwą, a stare adresy `github.com/pacy2u/tst` przekierowują. `stan` w Vercel nadal pokazuje `pacy2u/tst`. To tylko zapisana nazwa: Vercel łączy projekt z repozytorium po identyfikatorze, który się nie zmienia, i właśnie dlatego wdrożenie przeszło. Rozłączanie i ponowne łączenie repo nie jest potrzebne, dopóki działają wdrożenia z gita: podgląd przy PR-ze i build produkcyjny po merge'u.
+
 1. **Właściciel:** sprawdź, czy nazwa `waweye` jest wolna, potem GitHub → Settings → General → Repository name → `waweye` → Rename. **Nigdy nie zakładaj później nowego repo o nazwie `tst`**, bo przestaną działać przekierowania.
 2. **Claude:** `operacje Vercel → stan` powinien pokazać repozytorium `pacy2u/waweye`. Następnie `wdroz-produkcje` potwierdza, że wdrożenia z gita działają. Jeśli nie działają, **właściciel** robi w Vercel → Settings → Git Disconnect i Connect tego samego repo. Produkcja działa w tym czasie bez przerwy.
 3. Sekrety i workflowy Actions przechodzą razem z repo. **Claude** sprawdza to, uruchamiając monitoring.
