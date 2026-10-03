@@ -469,7 +469,7 @@
   map.on('click', () => { if (state.selected) deselect(); if (state.selectedPark) deselectPark(); if (state.selectedInc !== null) deselectInc(); });
   map.on('zoomend moveend', refresh);
 
-  window.__pasibus = { state, me, map, poll, select, deselect, selectPark, deselectPark, selectInc, deselectInc };
+  window.__waweye = { state, me, map, poll, select, deselect, selectPark, deselectPark, selectInc, deselectInc };
   poll(); setInterval(poll, POLL_MS);
   // Polling and location tracking pause while the tab is hidden (saves requests, transfer and battery) and catch up when it is shown again.
   document.addEventListener('visibilitychange', () => {

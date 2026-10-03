@@ -221,6 +221,7 @@ function fakeCf(over = {}) {
   const s = {
     scripts: [{ id: 'pasibus-proxy', modified_on: '2026-10-02T20:00:00Z' }],
     secrets: { 'pasibus-proxy': [{ name: 'WARSAW_API_KEY' }, { name: 'PROXY_SECRET' }] },
+    plain: {}, // plain_text bindings per Worker, as the old pasibus-proxy has (2026-10-03)
     requests: { 'pasibus-proxy': 1200 },
     analyticsError: null,
     workerStatus: 200,
@@ -247,6 +248,8 @@ function fakeCf(over = {}) {
     const sec = p.match(/^\/accounts\/acc1\/workers\/scripts\/([^/]+)\/secrets$/);
     if (sec && method === 'GET') return ok(s.secrets[sec[1]] || []);
     if (sec && method === 'PUT') { (s.secrets[sec[1]] = (s.secrets[sec[1]] || []).filter((x) => x.name !== body.name)).push({ name: body.name, type: body.type }); return ok({ name: body.name }); }
+    const set = p.match(/^\/accounts\/acc1\/workers\/scripts\/([^/]+)\/settings$/);
+    if (set && method === 'GET') return ok({ bindings: [...(s.secrets[set[1]] || []).map((x) => ({ name: x.name, type: 'secret_text' })), ...(s.plain[set[1]] || []).map((n) => ({ name: n, type: 'plain_text', text: 'jawne-tajne' }))] });
     const del = p.match(/^\/accounts\/acc1\/workers\/scripts\/([^/]+)$/);
     if (del && method === 'DELETE') { s.scripts = s.scripts.filter((x) => x.id !== del[1]); return ok(null); }
     if (method === 'POST' && p === '/graphql') {
@@ -285,6 +288,16 @@ test('cloudflare ustaw-sekrety: needs the deployed Worker, writes both values, p
   const puts = s.calls.filter((c) => c.method === 'PUT').map((c) => c.body);
   assert.deepEqual(puts, [{ name: 'WARSAW_API_KEY', text: 'klucz-tajny', type: 'secret_text' }, { name: 'PROXY_SECRET', text: 'proxy-tajne', type: 'secret_text' }]);
   assert.doesNotMatch(md, /klucz-tajny|proxy-tajne/);
+});
+
+test('cloudflare ustaw-sekrety: a plain variable with the same name stops it before any write', async () => {
+  const env = { ...CF_ENV, ...ENV, WARSAW_API_KEY: 'klucz-tajny', PROXY_SECRET: 'proxy-tajne' };
+  const s = fakeCf({ secrets: {}, plain: { 'pasibus-proxy': ['WARSAW_API_KEY', 'PROXY_SECRET'] } });
+  await assert.rejects(cfOps.run('ustaw-sekrety', ['pasibus-proxy'], cdeps(s, env)), /ma już zwykłe zmienne WARSAW_API_KEY \(plain_text\), PROXY_SECRET \(plain_text\)[\s\S]*Nic nie zmieniam/);
+  assert.equal(s.calls.filter((c) => c.method === 'PUT').length, 0);
+  const md = await cfOps.run('stan', [], cdeps(s));
+  assert.match(md, /\| pasibus-proxy \|[^\n]*\| brak; jawnym tekstem: PROXY_SECRET, WARSAW_API_KEY \|/);
+  assert.doesNotMatch(md, /jawne-tajne/);
 });
 
 test('cloudflare test-workera: every resource with the secret and a 403 without it', async () => {

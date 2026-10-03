@@ -5,7 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const BASE = process.env.PASIBUS_URL || 'https://pasibus.vercel.app';
+const BASE = process.env.WAWEYE_URL || process.env.PASIBUS_URL || 'https://pasibus.vercel.app';
 const [dir, count = '100', every = '15'] = process.argv.slice(2);
 if (!dir) { console.error('użycie: node zbierz-migawki.js <katalog> [liczba] [odstęp_s]'); process.exit(1); }
 const get = async (p) => { const r = await fetch(BASE + p, { cache: 'no-store' }); if (!r.ok) throw new Error(`${p}: HTTP ${r.status}`); return r.text(); };
