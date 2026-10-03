@@ -36,6 +36,14 @@ function fakeVercel(over = {}) {
     const body = init.body ? JSON.parse(init.body) : undefined;
     s.calls.push({ method, path: u.pathname, query: Object.fromEntries(u.searchParams), body, auth: init.headers && init.headers.Authorization });
     const p = u.pathname;
+    if (u.hostname === 'pasibus-new.vercel.app') {
+      if (s.preview === 'protected') return new Response('<html>Authentication Required</html>', { status: 401, headers: { 'Content-Type': 'text/html' } });
+      if (s.preview === 'broken' && p === '/api/vehicles') return json({ error: 'HTTP 522' }, 502);
+      return json({
+        '/api/vehicles': { source: 'live', errors: [], received: 2, vehicles: [{ type: 'bus', vehicle: '1' }, { type: 'tram', vehicle: '2' }] },
+        '/api/parking': { parkings: [{}] }, '/api/incidents': { incidents: [] }, '/api/fleet': { vehicles: { 'bus:1': {}, 'tram:2': {} }, brands: {} },
+      }[p] || { error: 'not found' }, p.startsWith('/api/') ? 200 : 404);
+    }
     if (method === 'GET' && p === '/v9/projects/prj_1') return json(s.project);
     if (method === 'PATCH' && p === '/v9/projects/prj_1') {
       Object.assign(s.project, body);
@@ -166,6 +174,47 @@ test('vercel zmien-nazwe-projektu: a domain lost in the rename is added back', a
   await assert.rejects(vercelOps.run('zmien-nazwe-projektu', ['WawEye'], vdeps(fakeVercel())), /Niepoprawna nazwa/);
 });
 
+// As on the real project (stan, 2026-10-03): the Worker variables serve production only.
+const prodOnlyEnvs = () => [
+  { id: 'e1', key: 'UPSTREAM_URL', target: ['production'], type: 'sensitive', value: 'https://pasibus-proxy.konto.workers.dev' },
+  { id: 'e2', key: 'UPSTREAM_SECRET', target: ['production'], type: 'sensitive', value: 'tajne-stare' },
+];
+
+test('vercel przelacz-podglady: preview-only variables, a preview of main, production untouched', async () => {
+  const s = fakeVercel({ preview: 'protected', envs: prodOnlyEnvs() });
+  const env = { ...ENV, PROXY_SECRET: 'nowe-tajne' };
+  const r = await vercelOps.run('przelacz-podglady', ['https://waweye-proxy.konto.workers.dev'], vdeps(s, env));
+  const created = s.envs.filter((e) => e.target.length === 1 && e.target[0] === 'preview');
+  assert.deepEqual(created.map((e) => [e.key, e.value, e.type]), [['UPSTREAM_URL', 'https://waweye-proxy.konto.workers.dev', 'plain'], ['UPSTREAM_SECRET', 'nowe-tajne', 'encrypted']]);
+  assert.equal(s.envs.find((e) => e.id === 'e1').value, 'https://pasibus-proxy.konto.workers.dev');
+  assert.equal(s.envs.find((e) => e.id === 'e2').value, 'tajne-stare');
+  const dep = s.calls.find((c) => c.method === 'POST' && c.path === '/v13/deployments');
+  assert.deepEqual(dep.body, { name: 'pasibus', project: 'prj_1', gitSource: { type: 'github', repoId: '123', ref: 'main' } });
+  assert.match(r.md, /nie może sprawdzić podglądu sam \(HTTP 401[\s\S]*chroni podglądy logowaniem[\s\S]*https:\/\/pasibus-new\.vercel\.app/);
+  assert.doesNotMatch(r.md, /nowe-tajne/);
+  assert.deepEqual(r.check, []);
+  // A second run updates the preview records instead of adding new ones.
+  await vercelOps.run('przelacz-podglady', ['https://inny-proxy.konto.workers.dev'], vdeps(s, env));
+  assert.equal(s.envs.filter((e) => e.key === 'UPSTREAM_URL').length, 2);
+  assert.equal(s.envs.find((e) => e.key === 'UPSTREAM_URL' && e.target[0] === 'preview' && e.target.length === 1).value, 'https://inny-proxy.konto.workers.dev');
+});
+
+test('vercel przelacz-podglady: checks an unprotected preview and reports a broken one', async () => {
+  const env = { ...ENV, PROXY_SECRET: 'nowe-tajne' };
+  const ok = await vercelOps.run('przelacz-podglady', ['https://waweye-proxy.konto.workers.dev'], vdeps(fakeVercel({ preview: 'ok', envs: prodOnlyEnvs() }), env));
+  assert.match(ok.md, /Kontrola produkcji: wszystko działa[\s\S]*https:\/\/pasibus-new\.vercel\.app/);
+  await assert.rejects(vercelOps.run('przelacz-podglady', ['https://waweye-proxy.konto.workers.dev'], vdeps(fakeVercel({ preview: 'broken', envs: prodOnlyEnvs() }), env)),
+    /PROBLEM[\s\S]*HTTP 502 \(HTTP 522\)[\s\S]*Produkcja jest bez zmian/);
+});
+
+test('vercel przelacz-podglady: refuses shared production records and a missing secret', async () => {
+  const s = fakeVercel();
+  s.envs[0].target = ['production', 'preview'];
+  await assert.rejects(vercelOps.run('przelacz-podglady', ['https://waweye-proxy.konto.workers.dev'], vdeps(s, { ...ENV, PROXY_SECRET: 'x' })), /wspólna dla produkcji i podglądów/);
+  assert.equal(writes(s).length, 0);
+  await assert.rejects(vercelOps.run('przelacz-podglady', ['https://waweye-proxy.konto.workers.dev'], vdeps(fakeVercel({ envs: prodOnlyEnvs() }))), /Brak sekretu PROXY_SECRET/);
+});
+
 // ---- Fake Cloudflare API ----
 const CF_ENV = { CLOUDFLARE_API_TOKEN: 'ctok', CLOUDFLARE_ACCOUNT_ID: 'acc1' };
 function fakeCf(over = {}) {
@@ -247,6 +296,9 @@ test('cloudflare test-workera: every resource with the secret and a 403 without 
   assert.match(md, /\| Bez sekretu \(oczekiwane 403\) \| OK \| HTTP 403 \|/);
   assert.doesNotMatch(md, /proxy-tajne/);
   await assert.rejects(cfOps.run('test-workera', ['waweye-proxy'], cdeps(fakeCf({ workerStatus: 500 }), env)), /PROBLEM[\s\S]*HTTP 500 \(worker is missing WARSAW_API_KEY\)/);
+  // 522 everywhere while the secret works: explain the location problem and point to the preview test.
+  await assert.rejects(cfOps.run('test-workera', ['waweye-proxy'], cdeps(fakeCf({ workerStatus: 522 }), env)), /HTTP 522[\s\S]*Sekret działa[\s\S]*przelacz-podglady/);
+  await assert.rejects(cfOps.run('test-workera', ['waweye-proxy'], cdeps(fakeCf({ workerStatus: 500 }), env)), (e) => !/Sekret działa/.test(e.message));
   await assert.rejects(cfOps.run('test-workera', ['waweye-proxy'], cdeps(fakeCf(), CF_ENV)), /PROXY_SECRET/);
 });
 
