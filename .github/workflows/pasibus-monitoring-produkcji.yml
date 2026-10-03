@@ -1,8 +1,9 @@
 name: Pasibus – monitoring produkcji
 
-# Every 2 hours: checks vehicles, parkings, incidents and fleet on https://pasibus.vercel.app.
+# Every 2 hours: checks vehicles, parkings, incidents and fleet on both production addresses
+# (https://waweye.vercel.app and, until the end of the wawEye migration, https://pasibus.vercel.app).
 # On failure it opens one issue (GitHub e-mails the repository owner) and closes it after the next good check.
-# Budget: about 12 runs a day x 1 billed minute = ~360 of the 2000 free minutes a month of a private repository.
+# Budget: about 12 runs a day x 1-2 billed minutes = ~360-720 of the 2000 free minutes a month of a private repository.
 on:
   schedule:
     - cron: '7 */2 * * *' # UTC
@@ -19,11 +20,11 @@ permissions:
 jobs:
   kontrola:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10 # two addresses, each up to ~2.5 min with timeouts and the retry
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
-      TITLE: '[monitoring] pasibus.vercel.app nie działa poprawnie'
+      TITLE: '[monitoring] wawEye nie działa poprawnie'
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
       - uses: actions/checkout@v4
@@ -34,7 +35,10 @@ jobs:
         id: kontrola
         continue-on-error: true
         run: |
-          node pasibus/scripts/check-production.js https://pasibus.vercel.app > raport.md && status=0 || status=$?
+          status=0
+          for adres in https://waweye.vercel.app https://pasibus.vercel.app; do
+            node pasibus/scripts/check-production.js "$adres" >> raport.md || status=1
+          done
           cat raport.md >> "$GITHUB_STEP_SUMMARY"
           exit $status
       - name: Zgłoś problem (jedno otwarte zgłoszenie naraz)

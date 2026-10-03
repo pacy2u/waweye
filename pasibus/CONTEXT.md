@@ -32,9 +32,9 @@ przeglądarka (Leaflet, public/app.js)
 ## Zmienne / sekrety (tylko nazwy, wartości NIGDY w repo)
 | Gdzie | Nazwa | Uwagi |
 |---|---|---|
-| Cloudflare Worker `pasibus-proxy` (adres `https://pasibus-proxy.andrzejgpacek.workers.dev`) | `WARSAW_API_KEY` (Secret) | token z https://dane.um.warszawa.pl/key-api |
+| Cloudflare Worker `pasibus-proxy` (adres `https://pasibus-proxy.andrzejgpacek.workers.dev`; produkcja do Fazy 4 migracji), nowy `waweye-proxy` (cel wdrożeń od Fazy 4) | `WARSAW_API_KEY` (Secret) | token z https://dane.um.warszawa.pl/key-api |
 | Cloudflare Worker | `PROXY_SECRET` (Secret) | losowy ciąg, inny niż token |
-| Vercel (Production + Preview) | `UPSTREAM_URL` | adres Workera, bez końcowego `/` |
+| Vercel (Production; typ *sensitive*, wartości niewidoczne także przez API) | `UPSTREAM_URL` | adres Workera, bez końcowego `/` |
 | Vercel | `UPSTREAM_SECRET` | taki sam jak `PROXY_SECRET`; po zmianie zmiennych → Redeploy |
 Lokalnie: `pasibus/.env` (w `.gitignore`).
 
@@ -55,7 +55,7 @@ Linie utrudnień muszą używać tego samego renderera canvas co pojazdy (`rende
 - Rozkłady, trasy i przystanki: **tylko oficjalne zbiory miasta** (bez społecznościowego GTFS).
 - Budżet: **0 zł** (Vercel Hobby, darmowe progi, darmowa pula minut GitHub Actions dla prywatnego repo).
 - **Bez analityki** użytkowników, także bezciasteczkowej. Mierzymy tylko technicznie (monitoring).
-- Nazwa (2026-10-03): **wawEye**, pisane dokładnie tak (małe „waw”, wielkie „E”; logo bez zamiany na wielkie litery). Wcześniej Pasibus – kolizja z siecią burgerowni Pasibus. Identyfikatory techniczne zostają: folder `pasibus/`, https://pasibus.vercel.app, Worker `pasibus-proxy`, nazwy workflow, `window.__pasibus`. Dalsze kroki (domena, Worker, folder, repo, wideo) opisuje `PLAN_MIGRACJI_WAWEYE.md`. Operacje w Vercel i Cloudflare wykonuje Claude przez workflowy na żądanie (`waweye-operacje-vercel.yml`, `waweye-operacje-cloudflare.yml`, `waweye-kontrola-adresu.yml`; uruchamianie: narzędzia GitHub, np. actions_run_trigger, raport w podsumowaniu przebiegu). Tokeny tylko w sekretach repozytorium (`VERCEL_TOKEN`, `WARSAW_API_KEY`, `PROXY_SECRET`, `CLOUDFLARE_*`).
+- Nazwa (2026-10-03): **wawEye**, pisane dokładnie tak (małe „waw”, wielkie „E”; logo bez zamiany na wielkie litery). Wcześniej Pasibus – kolizja z siecią burgerowni Pasibus. Migracja według `PLAN_MIGRACJI_WAWEYE.md` (stan faz jest w planie). Fazy 0–2 skończone 2026-10-03: działa też https://waweye.vercel.app. Operacje w Vercel i Cloudflare robią workflowy na żądanie (`waweye-operacje-vercel.yml`, `waweye-operacje-cloudflare.yml`, `waweye-kontrola-adresu.yml`). **Claude nie może ich uruchamiać** (`actions_run_trigger` → 403; aplikacja GitHub nie ma uprawnienia do uruchamiania Actions). Claude podaje parametry, właściciel klika Run workflow, a Claude czyta wynik przez `actions_list` i `get_job_logs`. Uruchamiania komentarzami w zgłoszeniu właściciel nie chciał (#28 zamknięte). Tokeny tylko w sekretach repozytorium (`VERCEL_TOKEN`, `WARSAW_API_KEY`, `PROXY_SECRET`, `CLOUDFLARE_*`).
 
 ## Środowisko pracy (sesje w chmurze)
 - Dostęp sieciowy sesji ustawia się w edycji środowiska (`apck01`); **zmiany stosują się tylko do nowych sesji**. Potrzebne domeny: `dane.um.warszawa.pl` (czytanie opisów zbiorów i test API; użytkownik zgodził się ją dodać 2026-10-02), `tile.openstreetmap.org` (kafelki w testach), `api.um.warszawa.pl` (stary host). Produkcja `pasibus.vercel.app` jest osiągalna z sesji, więc żywe dane można sprawdzać przez `/api/*` albo `node scripts/check-production.js`.

@@ -14,7 +14,7 @@ Cel: wszędzie, gdzie to możliwe, zastąpić „pasibus” nazwą wawEye i prze
 6. **Identyfikatory techniczne piszemy małymi literami (`waweye`).** Domeny, foldery, Workery i nazwy pakietów npm nie rozróżniają wielkości liter albo jej nie dopuszczają. Zapis **wawEye** obowiązuje w tekstach i logo.
 
 Kto wykonuje kroki:
-- **Claude** – zmiany w repozytorium przez PR oraz operacje w Vercel i Cloudflare przez workflowy uruchamiane na żądanie (sekcja 4a). Claude uruchamia je z sesji i czyta ich raporty. Tokeny są w sekretach repozytorium i nie trafiają ani do sesji, ani do czatu.
+- **Claude** – zmiany w repozytorium przez PR oraz operacje w Vercel i Cloudflare przez workflowy uruchamiane na żądanie (sekcja 4a). Krok opisany jako „**Claude:** `operacje …`” wygląda tak: Claude podaje parametry, właściciel klika Run workflow, a Claude odczytuje wynik przebiegu i decyduje o następnym kroku. Aplikacja Claude na GitHubie może czytać Actions, ale nie może ich uruchamiać (`403 Resource not accessible by integration`). Tokeny są w sekretach repozytorium i nie trafiają ani do sesji, ani do czatu.
 - **Właściciel** – jednorazowe przygotowanie (Faza 0), zmiana nazwy repozytorium, ustawienia środowiska sesji, decyzje i merge PR-ów. Panele Vercel i Cloudflare są potrzebne tylko awaryjnie.
 
 ## 2. Inwentaryzacja
@@ -64,7 +64,7 @@ Kto wykonuje kroki:
 Kolejność ma znaczenie: faza N zakłada, że wcześniejsze fazy są zakończone i zweryfikowane. Fazy 7 i 8 nie zależą od siebie.
 
 ### 4a. Workflowy operacyjne
-Uruchamiane ręcznie (Actions → wybrany workflow → Run workflow) albo przez Claude. Logika jest w `scripts/vercel-ops.js` i `scripts/cloudflare-ops.js` i ma testy jednostkowe (`test/operacje.test.js`). Operacje, które coś zmieniają, najpierw sprawdzają warunki bezpieczeństwa, a po zmianie same weryfikują wynik.
+Uruchamia je właściciel (Actions → wybrany workflow → Run workflow) z parametrami od Claude. Logika jest w `scripts/vercel-ops.js` i `scripts/cloudflare-ops.js` i ma testy jednostkowe (`test/operacje.test.js`). Operacje, które coś zmieniają, najpierw sprawdzają warunki bezpieczeństwa, a po zmianie same weryfikują wynik.
 
 | Workflow | Operacje |
 |---|---|
@@ -72,7 +72,7 @@ Uruchamiane ręcznie (Actions → wybrany workflow → Run workflow) albo przez 
 | `wawEye – operacje Cloudflare` | `stan` (tylko odczyt), `test-workera`, `ustaw-sekrety`, `usun-workera`. Usunięcia odmawia, jeśli Worker jest celem wdrożeń, używa go produkcja Vercel albo miał ruch w ostatnich 7 dniach. |
 | `wawEye – kontrola adresu` | kontrola produkcji dowolnego adresu na serwerach GitHuba, bez zakładania zgłoszeń. Działa także wtedy, gdy sesja Claude nie ma dostępu do adresu. |
 
-### Faza 0 – Przygotowanie (jednorazowo, właściciel)
+### Faza 0 – Przygotowanie (jednorazowo, właściciel) – zrobione 2026-10-03
 1. Zmerguj PR z workflowami. Workflowy uruchamiane na żądanie działają dopiero z gałęzi `main`.
 2. **Token Vercel:** Vercel → Account Settings → Tokens → Create Token. Nazwa np. `github-actions-waweye`, zakres: zespół `ampm10`, ważność 90 dni.
 3. GitHub → `pacy2u/tst` → Settings → Secrets and variables → Actions → New repository secret. Dodaj trzy sekrety:
@@ -82,12 +82,17 @@ Uruchamiane ręcznie (Actions → wybrany workflow → Run workflow) albo przez 
 4. Opcjonalnie: do tokenu Cloudflare (`CLOUDFLARE_API_TOKEN`) dodaj uprawnienie Account Analytics: Read. Bez niego workflow nie pokaże ruchu Workera, ale usuwanie i tak sprawdza, czy produkcja go nie używa.
 5. **Claude:** `operacje Vercel → stan` i `operacje Cloudflare → stan` potwierdzają, że tokeny działają, i zapisują stan wyjściowy.
 
+Wynik (2026-10-03):
+- Oba tokeny działają. Token Cloudflare ma też dostęp do statystyk: `pasibus-proxy` obsłużył 3403 zapytania w 7 dni.
+- W Vercel wszystkie zmienne (`UPSTREAM_URL`, `UPSTREAM_SECRET`, `WARSAW_API_KEY`) mają typ *sensitive*: ich wartości są ukryte także przed API. Dlatego workflow nie widzi, którego Workera używa produkcja. `usun-workera` decyduje wtedy po braku ruchu.
+- `test-workera` dla `pasibus-proxy` dał 403, czyli `PROXY_SECRET` w GitHubie jest nowy, inny niż w obecnym Workerze. W Fazie 4 przełączamy więc z opcją `nowy_sekret`.
+
 ### Faza 1 – Nazwa w interfejsie i dokumentacji (zrobione na gałęzi)
 - Commit `3a8fb6b`: logo i tytuł aplikacji, komunikat o lokalizacji, komunikaty prasowe, README, ROADMAPA, CONTEXT.
 - Weryfikacja: testy jednostkowe 42/42, e2e 65/65, logo „wawEye” na zrzucie z telefonu.
 - Ryzyko: brak, bo zmienia się tylko tekst. Wycofanie: revert PR.
 
-### Faza 2 – Nowy adres obok starego
+### Faza 2 – Nowy adres obok starego – zrobione 2026-10-03
 1. **Claude:** `operacje Vercel → dodaj-domene`, wartość `waweye.vercel.app`. Domena dochodzi bez przekierowania, a workflow od razu uruchamia na niej kontrolę produkcji. Jeśli nazwa jest zajęta, workflow to zgłosi i nic nie zmieni. Wtedy wybieramy alternatywę z D1.
 2. Opcjonalnie, **właściciel:** ustawienia środowiska sesji (menu środowiska na pasku tytułu → Edit → Network access → Custom) → dodaj `waweye.vercel.app` do Allowed domains. Zmiana działa w nowych sesjach. Bez tego Claude sprawdza adres przez workflow `kontrola adresu`.
 3. Opcjonalnie, **Claude:** `operacje Vercel → zmien-nazwe-projektu`, wartość `waweye`. Zmieni to adresy podglądów. Jeśli po zmianie nazwy zniknie którakolwiek domena, workflow od razu doda ją z powrotem.
@@ -106,9 +111,10 @@ Uruchamiane ręcznie (Actions → wybrany workflow → Run workflow) albo przez 
 1. **Claude (PR):** w `wrangler.toml` zmień nazwę na `name = "waweye-proxy"` i zaktualizuj dokumentację. Po merge'u workflow wdroży **nowego** Workera. Stary `pasibus-proxy` zostaje nietknięty i dalej obsługuje produkcję.
 2. **Claude:** `operacje Cloudflare → ustaw-sekrety`, Worker `waweye-proxy`. Wpisuje `WARSAW_API_KEY` i `PROXY_SECRET` z sekretów repozytorium. Wdrożenie nigdy nie ustawia sekretów, więc bez tego kroku nowy Worker zwraca błędy. Dopóki nic na niego nie wskazuje, nikomu to nie szkodzi.
 3. **Claude, test bez ryzyka dla produkcji:** `operacje Cloudflare → test-workera`, Worker `waweye-proxy`. Workflow pyta nowego Workera bezpośrednio o autobusy, tramwaje, parkingi, utrudnienia i tabor, a także sprawdza, czy bez sekretu odpowiada 403. Produkcja dalej korzysta ze starego Workera.
-4. **Claude, przełączenie:** `operacje Vercel → przelacz-workera`, wartość `https://waweye-proxy.<konto>.workers.dev` (z opcją `nowy_sekret`, jeśli w Fazie 0 powstał nowy `PROXY_SECRET`). Workflow zmienia `UPSTREAM_URL`, wdraża `main` i uruchamia kontrolę produkcji na wszystkich domenach.
-5. Obserwuj przez co najmniej 7 dni. Usunięcie starego Workera jest w Fazie 9.
-- Wycofanie: `przelacz-workera` z adresem `pasibus-proxy`. Stary Worker działa przez cały okres obserwacji. Ostatecznie można też przywrócić poprzednie wdrożenie w panelu Vercel (Instant Rollback).
+4. **Claude, przełączenie:** `operacje Vercel → przelacz-workera`, wartość `https://waweye-proxy.<konto>.workers.dev`, **z opcją `nowy_sekret`** (`PROXY_SECRET` w GitHubie jest nowy, patrz wynik Fazy 0). Workflow ustawia `UPSTREAM_URL` i `UPSTREAM_SECRET` jednym wdrożeniem `main`, a potem uruchamia kontrolę produkcji na wszystkich domenach.
+5. **Claude, zaraz po udanym przełączeniu:** `operacje Cloudflare → ustaw-sekrety`, Worker `pasibus-proxy`. Stary Worker nie obsługuje już produkcji, więc można mu bezpiecznie wpisać nowy sekret. Od tej chwili oba Workery przyjmują tę samą parę, a powrót jest jedną operacją. Potem `test-workera` dla `pasibus-proxy`.
+6. Obserwuj przez co najmniej 7 dni. Usunięcie starego Workera jest w Fazie 9.
+- Wycofanie po kroku 5: `przelacz-workera` z adresem `pasibus-proxy`. Między krokami 4 i 5 stary Worker ma jeszcze stary sekret. Wtedy wycofaniem jest Instant Rollback w panelu Vercel (Deployments → poprzednie wdrożenie), bo poprzednie wdrożenie ma zapisaną starą parę zmiennych.
 
 ### Faza 5 – Identyfikatory w kodzie
 **Claude (PR), wszystko w jednym PR-ze, bo te identyfikatory nie mają zewnętrznych użytkowników:**
@@ -163,7 +169,7 @@ Okno zmiany (kilka minut):
    - Monitoring sprawdza tylko nowy adres, plus jeden krok sprawdzający, czy stary przekierowuje.
    - Usunięcie obsługi `PASIBUS_URL`.
    - Końcowa aktualizacja `CONTEXT.md` i `README.md`.
-3. **Claude:** `operacje Cloudflare → usun-workera`, Worker `pasibus-proxy`, z potwierdzeniem nazwą. Workflow odmówi, jeśli produkcja nadal go używa albo miał ruch w ostatnich 7 dniach.
+3. **Claude:** `operacje Cloudflare → usun-workera`, Worker `pasibus-proxy`, z potwierdzeniem nazwą. Workflow odmówi, jeśli Worker miał ruch w ostatnich 7 dniach (Vercel ukrywa `UPSTREAM_URL`, więc o bezpieczeństwie usunięcia decyduje ruch) albo jest celem wdrożeń.
 4. Opcjonalnie, **właściciel:**
    - Usuń zmergowane gałęzie z „pasibus” w nazwie.
    - Usuń `pasibus.vercel.app` z listy dozwolonych domen w środowisku sesji, gdy przekierowanie nie będzie już sprawdzane.

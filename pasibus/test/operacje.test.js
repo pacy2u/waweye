@@ -255,18 +255,36 @@ test('cloudflare usun-workera: refuses anything that could still serve productio
   const active = cfOps.deployedName();
   await assert.rejects(cfOps.run('usun-workera', ['stary-proxy', 'stary'], cdeps(s)), /wpisz w polu potwierdzenia/);
   await assert.rejects(cfOps.run('usun-workera', [active, active], cdeps(s)), /Nie usuwam go/);
-  const inUse = active === 'pasibus-proxy' ? 'stary-proxy' : 'pasibus-proxy';
-  s.vercel.envs[0].value = `https://${inUse}.konto.workers.dev`;
-  await assert.rejects(cfOps.run('usun-workera', [inUse, inUse], cdeps(s)), /nadal używa Workera/);
-  await assert.rejects(cfOps.run('usun-workera', [inUse, inUse], cdeps(s, CF_ENV)), /Nie mogę sprawdzić/);
+  const old = active === 'pasibus-proxy' ? 'stary-proxy' : 'pasibus-proxy';
+  // Vercel reveals UPSTREAM_URL: pointing at the Worker blocks even without traffic.
+  s.requests[old] = 0;
+  s.vercel.envs[0].value = `https://${old}.konto.workers.dev`;
+  await assert.rejects(cfOps.run('usun-workera', [old, old], cdeps(s)), /nadal używa Workera/);
   s.vercel.envs[0].value = 'https://waweye-proxy.konto.workers.dev';
-  s.requests[inUse] = 5;
-  await assert.rejects(cfOps.run('usun-workera', [inUse, inUse], cdeps(s)), /obsłużył 5 zapytań/);
-  s.requests[inUse] = 0;
-  const md = await cfOps.run('usun-workera', [inUse, inUse], cdeps(s));
-  assert.match(md, new RegExp(`usunięto Workera ${inUse}`));
-  assert.ok(!s.scripts.some((x) => x.id === inUse));
-  assert.match(await cfOps.run('usun-workera', [inUse, inUse], cdeps(s)), /nie istnieje, nic nie usuwam/);
+  s.requests[old] = 5;
+  await assert.rejects(cfOps.run('usun-workera', [old, old], cdeps(s)), /obsłużył 5 zapytań/);
+  s.requests[old] = 0;
+  const md = await cfOps.run('usun-workera', [old, old], cdeps(s));
+  assert.match(md, new RegExp(`usunięto Workera ${old}[\\s\\S]*Produkcja używa: https://waweye-proxy`));
+  assert.ok(!s.scripts.some((x) => x.id === old));
+  assert.match(await cfOps.run('usun-workera', [old, old], cdeps(s)), /nie istnieje, nic nie usuwam/);
+});
+
+test('cloudflare usun-workera: with UPSTREAM_URL hidden in Vercel only zero traffic allows deleting', async () => {
+  const s = fakeCf({ scripts: [{ id: 'pasibus-proxy' }, { id: 'waweye-proxy' }, { id: 'stary-proxy' }] });
+  const old = cfOps.deployedName() === 'pasibus-proxy' ? 'stary-proxy' : 'pasibus-proxy';
+  s.vercel.envs[0].type = 'sensitive'; // as on the real project (stan, 2026-10-03)
+  s.requests[old] = 1200;
+  await assert.rejects(cfOps.run('usun-workera', [old, old], cdeps(s)), /obsłużył 1200 zapytań/);
+  s.requests[old] = 0;
+  s.analyticsError = 'not authorized';
+  await assert.rejects(cfOps.run('usun-workera', [old, old], cdeps(s)), /Nie mogę sprawdzić[\s\S]*ukryta w Vercel[\s\S]*not authorized/);
+  await assert.rejects(cfOps.run('usun-workera', [old, old], cdeps(s, CF_ENV)), /Nie mogę sprawdzić[\s\S]*VERCEL_TOKEN/);
+  assert.ok(s.scripts.some((x) => x.id === old));
+  s.analyticsError = null;
+  const md = await cfOps.run('usun-workera', [old, old], cdeps(s, CF_ENV));
+  assert.match(md, /o usunięciu zdecydował brak ruchu[\s\S]*Ruch w ostatnich 7 dniach: 0/);
+  assert.ok(!s.scripts.some((x) => x.id === old));
 });
 
 test('cloudflare: analytics without permission does not break stan', async () => {
