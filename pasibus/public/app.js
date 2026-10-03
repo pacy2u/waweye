@@ -343,6 +343,115 @@
   $('iclose').onclick = deselectInc;
   setInterval(pollIncidents, 60000);
 
+  // ---- My location, after Google Maps: the button finds the user and zooms in; the map stays on them until they drag it ----
+  const ME_ZOOM = 16, ME_BLUE = '#1A73E8', WARSAW = L.latLngBounds([51.9, 20.5], [52.6, 21.6]); // same box as lib/warsaw.js
+  const ORIENT_EVT = 'ondeviceorientationabsolute' in window ? 'deviceorientationabsolute' : 'deviceorientation';
+  const LOC_ERR = { 1: 'Brak dostępu do lokalizacji. Zezwól na nią w ustawieniach przeglądarki.',
+    2: 'Nie udało się ustalić Twojej lokalizacji.', 3: 'Ustalanie lokalizacji trwa zbyt długo. Spróbuj ponownie.' };
+  const me = { active: false, watch: null, pos: null, acc: 0, busy: false, centered: false, flying: false, lost: false, denied: false,
+    compass: null, gps: null, rot: 0, raf: 0, marker: null, circle: null };
+
+  let toastTimer = 0;
+  function toast(msg) {
+    const t = $('toast'); t.textContent = msg; t.hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 5000);
+  }
+
+  function renderLocate() {
+    $('locate').className = 'locate' + (me.busy ? ' busy' : me.centered ? ' on' : me.pos ? ' found' : me.denied ? ' off' : '');
+    if (!me.marker) return;
+    const box = me.marker.getElement().firstChild, h = me.compass != null ? me.compass : me.gps;
+    box.classList.toggle('lost', me.lost); box.classList.toggle('heading', h != null);
+    if (h == null) return;
+    me.rot += (((h - me.rot) % 360) + 540) % 360 - 180; // shortest turn: 359° -> 1° must not spin the beam all the way round
+    box.firstChild.style.transform = `rotate(${me.rot}deg)`;
+  }
+
+  // While centred, zooming keeps the user in the middle (as in Google Maps) instead of zooming around the cursor or fingers.
+  function setCentered(on) {
+    me.centered = on;
+    for (const k of ['scrollWheelZoom', 'touchZoom', 'doubleClickZoom']) map.options[k] = on ? 'center' : true;
+    renderLocate();
+  }
+
+  function centerOnMe() {
+    const zoom = Math.min(Math.max(map.getZoom(), ME_ZOOM), map.getBoundsZoom(me.pos.toBounds(Math.max(me.acc, 10) * 2)));
+    setCentered(true); me.flying = true;
+    map.once('moveend', () => { me.flying = false; });
+    map.flyTo(me.pos, zoom, { duration: 0.8 });
+    if (!WARSAW.contains(me.pos)) toast('Jesteś poza Warszawą – Pasibus pokazuje pojazdy tylko w Warszawie.');
+  }
+
+  function onPosition(p) {
+    const ll = L.latLng(p.coords.latitude, p.coords.longitude);
+    me.pos = ll; me.acc = p.coords.accuracy || 0; me.lost = false; me.denied = false;
+    me.gps = p.coords.speed > 1 && Number.isFinite(p.coords.heading) ? p.coords.heading : null; // GPS heading only means something while moving
+    if (!me.marker) {
+      // Same canvas as the vehicles (a second canvas would swallow their clicks); non-interactive and at the back.
+      me.circle = L.circle(ll, { radius: me.acc, renderer: canvas, interactive: false, color: ME_BLUE, weight: 1, opacity: 0.4, fillColor: ME_BLUE, fillOpacity: 0.12 }).addTo(map);
+      me.circle.bringToBack();
+      me.marker = L.marker(ll, { interactive: false, keyboard: false, zIndexOffset: 900, icon: L.divIcon({ className: '', iconSize: [22, 22], iconAnchor: [11, 11],
+        html: '<div class="me"><div class="me-beam"></div><div class="me-pulse"></div><div class="me-dot"></div></div>' }) }).addTo(map);
+    } else { me.marker.setLatLng(ll); me.circle.setLatLng(ll).setRadius(me.acc); }
+    if (me.busy) { me.busy = false; centerOnMe(); } else if (me.centered && !me.flying) map.panTo(ll);
+    renderLocate();
+  }
+
+  function onPositionError(e) {
+    const asked = me.busy; me.busy = false;
+    if (e.code === 1) { // permission denied (or revoked): forget the position
+      stopWatch(); me.active = false; me.denied = true; me.pos = null; setCentered(false);
+      if (me.marker) { me.marker.remove(); me.circle.remove(); me.marker = me.circle = null; }
+    } else if (me.pos && e.code === 2) me.lost = true; // keep the last position, greyed out, while the watch keeps trying
+    // (a timeout alone is not "lost": some browsers report it while a phone stands still and the position does not change)
+    if (asked || e.code === 1) toast(LOC_ERR[e.code] || LOC_ERR[2]);
+    renderLocate();
+  }
+
+  function onOrientation(e) {
+    let h = null;
+    if (typeof e.webkitCompassHeading === 'number' && e.webkitCompassHeading >= 0) h = e.webkitCompassHeading; // iOS: clockwise from north
+    else if (e.absolute && e.alpha != null) h = 360 - e.alpha + ((screen.orientation && screen.orientation.angle) || 0); // alpha is counter-clockwise, device frame
+    if (h == null) return;
+    me.compass = ((h % 360) + 360) % 360;
+    if (!me.raf) me.raf = requestAnimationFrame(() => { me.raf = 0; renderLocate(); });
+  }
+
+  function startWatch() {
+    if (me.watch != null || document.hidden) return;
+    me.watch = navigator.geolocation.watchPosition(onPosition, onPositionError, { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 });
+    window.addEventListener(ORIENT_EVT, onOrientation);
+  }
+  function stopWatch() {
+    if (me.watch == null) return;
+    navigator.geolocation.clearWatch(me.watch); me.watch = null;
+    window.removeEventListener(ORIENT_EVT, onOrientation);
+  }
+
+  function locate() {
+    if (!navigator.geolocation) { toast('Ta przeglądarka nie udostępnia lokalizacji.'); return; }
+    if (state.follow) { state.follow = false; $('follow').classList.remove('on'); } // one thing at a time drives the map
+    me.active = true;
+    if (me.pos) centerOnMe(); else { me.busy = true; renderLocate(); }
+    startWatch();
+  }
+  $('locate').onclick = locate;
+  map.on('dragstart', () => { if (me.centered) setCentered(false); });
+  // Permission given earlier: show the dot straight away (without moving the map), like Google Maps does.
+  if (navigator.geolocation && navigator.permissions) {
+    navigator.permissions.query({ name: 'geolocation' }).then((p) => { if (p.state === 'granted') { me.active = true; startWatch(); } }).catch(() => {});
+  }
+
+  // Like Google's button riding on top of the bottom sheet: lift it above an open panel that covers it (phones).
+  function liftLocate() {
+    const b = $('locate'), br = b.getBoundingClientRect();
+    const tops = ['panel', 'ppanel', 'ipanel'].map($).filter((p) => !p.hidden).map((p) => p.getBoundingClientRect())
+      .filter((r) => r.right > br.left && r.left < br.right).map((r) => r.top);
+    b.style.bottom = tops.length ? `${document.documentElement.clientHeight - Math.min(...tops) + 10}px` : '';
+  }
+  if (window.ResizeObserver) { const ro = new ResizeObserver(liftLocate); for (const id of ['panel', 'ppanel', 'ipanel']) ro.observe($(id)); }
+  window.addEventListener('resize', liftLocate);
+
   function toggleType(key, btn) {
     state.types[key] = !state.types[key];
     btn.classList.toggle('on', state.types[key]); btn.setAttribute('aria-pressed', state.types[key]);
@@ -354,14 +463,18 @@
   $('close').onclick = deselect;
   $('follow').onclick = (e) => {
     state.follow = !state.follow; e.currentTarget.classList.toggle('on', state.follow);
+    if (state.follow && me.centered) setCentered(false); // following a vehicle takes the map off the user
     const s = state.markers.get(state.selected); if (state.follow && s) map.setView(s.mk.getLatLng(), Math.max(map.getZoom(), 15));
   };
   map.on('click', () => { if (state.selected) deselect(); if (state.selectedPark) deselectPark(); if (state.selectedInc !== null) deselectInc(); });
   map.on('zoomend moveend', refresh);
 
-  window.__pasibus = { state, map, poll, select, deselect, selectPark, deselectPark, selectInc, deselectInc };
+  window.__pasibus = { state, me, map, poll, select, deselect, selectPark, deselectPark, selectInc, deselectInc };
   poll(); setInterval(poll, POLL_MS);
-  // Polling pauses while the tab is hidden (saves requests, transfer and battery) and catches up when it is shown again.
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) { poll(); pollParkings(); pollIncidents(); } });
+  // Polling and location tracking pause while the tab is hidden (saves requests, transfer and battery) and catch up when it is shown again.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) stopWatch();
+    else { poll(); pollParkings(); pollIncidents(); if (me.active) startWatch(); }
+  });
   requestAnimationFrame(frame);
 })();

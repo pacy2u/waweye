@@ -113,7 +113,7 @@ Cel: aplikację da się zainstalować na telefonie i używać codziennie do spra
 |---|---|---|
 | PWA: manifest, ikony, service worker dla powłoki aplikacji | instalacja na ekranie głównym, szybszy start | S |
 | Ulubione linie i przystanki (localStorage) + szybki filtr | codzienne użycie w jednym kliknięciu | S |
-| „Pokaż mnie” (geolokalizacja) + najbliższe przystanki | naturalny start na telefonie | S |
+| „Pokaż mnie” (geolokalizacja) + najbliższe przystanki | naturalny start na telefonie | S – lokalizacja zrobiona (przycisk jak w Google Maps, gałąź `feat/lokalizacja-uzytkownika-na-mapie`); najbliższe przystanki po warstwie przystanków z Fazy 1 |
 | Odjazdy z przystanku: rozkład + pojazdy na żywo zbliżające się do przystanku | odpowiedź na „kiedy przyjedzie” | L |
 | Szacowanie opóźnienia pojazdu (dopasowanie linii i brygady do rozkładu) | najczęściej oczekiwana informacja | L |
 | Filtr dostępności z danych o taborze: niskopodłogowe, klimatyzacja, miejsca na wózek | wartość dla osób z niepełnosprawnościami i z wózkami; dane już są | S |
