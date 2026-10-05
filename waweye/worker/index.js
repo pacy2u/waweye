@@ -8,6 +8,7 @@ const RESOURCES = {
   parking: 'https://dane.um.warszawa.pl/api/action/get_m_parkingi_wolne_miejsca',
   fleet: 'https://dane.um.warszawa.pl/api/action/get_ztm_pojazdy',
   incidents: 'https://dane.um.warszawa.pl/api/action/get_bin_utrudnienia_drogowe',
+  sport: 'https://dane.um.warszawa.pl/api/action/get_bmm_zajecia_sportowe',
 };
 
 export async function handle(request, env, fetchImpl) {

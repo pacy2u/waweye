@@ -27,7 +27,7 @@ a.brand:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .chip.on { background: var(--orange); border-color: var(--orange); color: #fff; }
 .chip:focus-visible, #close:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 
-@media (max-width: 699px) { .leaflet-top.leaflet-right { margin-top: 150px; } }
+@media (max-width: 699px) { .leaflet-top.leaflet-right { margin-top: 150px; } body.sport-on .leaflet-top.leaflet-right { margin-top: 190px; } }
 #status { position: fixed; left: 10px; bottom: max(10px, env(safe-area-inset-bottom)); z-index: 1000;
   display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: var(--panel);
   border-radius: 999px; font-size: 12px; color: var(--muted); max-width: calc(100% - 80px); }
@@ -162,3 +162,35 @@ a.brand:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 #zpanel .p-rows dd { white-space: pre-line; }
 @media (min-width: 700px) { #zpanel { left: 10px; right: auto; } }
 @media (max-height: 480px) { #zpanel { max-height: 40vh; } }
+/* Sport classes ("Zajęcia sportowe"): violet, a colour no other layer uses. */
+:root { --sport: #7B5CFF; }
+#t-sport.on { background: var(--sport); border-color: var(--sport); --picon-bg: var(--sport); }
+#sfilter { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
+#sfilter[hidden] { display: none; }
+#sfilter span { font-weight: 600; margin-right: 4px; }
+#sfilter button { background: #34343a; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 5px 11px;
+  font: 600 12px/1.2 inherit; cursor: pointer; }
+#sfilter button.on { background: #fff; border-color: #fff; color: var(--charcoal); }
+#sfilter button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.sp { display: inline-flex; align-items: center; gap: 3px; height: 24px; padding: 0 7px 0 5px; border-radius: 12px; background: var(--sport); color: #fff;
+  border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,.5); font-weight: 800; font-size: 12px; white-space: nowrap; }
+.sp svg { width: 14px; height: 14px; flex: none; }
+.sp.sel { background: var(--orange); outline: 3px solid rgba(252,76,2,.4); }
+#spanel { position: fixed; z-index: 1000; left: 10px; right: 10px; bottom: calc(max(10px, env(safe-area-inset-bottom)) + 40px);
+  max-width: 420px; max-height: 55vh; overflow: auto; padding: 12px 40px 12px 12px; background: var(--panel);
+  border-radius: 14px; box-shadow: 0 4px 16px rgba(0,0,0,.4); }
+#spanel[hidden] { display: none; }
+#sclose { position: absolute; top: 4px; right: 6px; width: 32px; height: 32px; border: 0; background: none; color: var(--muted); font-size: 24px; cursor: pointer; }
+.s-badge { min-width: 44px; height: 44px; border-radius: 10px; display: grid; place-items: center; background: var(--sport); color: #fff; }
+.s-badge svg { width: 26px; height: 26px; }
+.s-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 10px; }
+.s-list li { padding-top: 10px; border-top: 1px solid var(--line); display: grid; gap: 4px; }
+.s-when { font-weight: 800; color: #B9A8FF; font-size: 13px; }
+.s-title { font-weight: 700; }
+.s-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.s-tags span { font-size: 11px; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.s-desc { font-size: 12px; color: var(--muted); }
+.s-list a { color: #fff; font-size: 13px; }
+.s-note { margin-top: 10px; font-size: 11px; color: var(--muted); }
+@media (min-width: 700px) { #spanel { left: 10px; right: auto; } }
+@media (max-height: 480px) { #spanel { max-height: 40vh; } }
