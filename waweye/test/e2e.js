@@ -320,6 +320,31 @@ function findChromium() {
     });
     await step(`${label}: no JS errors`, async () => assert.deepEqual(errors, []));
     await page.screenshot({ path: `${SHOTS}/waweye-${label}.png` });
+
+    await step(`${label}: the wawEye logo opens the "O serwisie" page`, async () => {
+      await page.click('#bar .brand');
+      await page.waitForURL(/\/o-serwisie$/);
+      assert.match(await page.title(), /O serwisie/);
+      assert.match(await page.textContent('h1'), /na żywo/);
+      assert.match(await page.textContent('#prasa'), /Andrzej Pacek/);
+    });
+    await step(`${label}: "O serwisie": video waits for a click, media files load, no horizontal overflow`, async () => {
+      const v = await page.evaluate(() => { const el = document.querySelector('video'); return { preload: el.preload, autoplay: el.autoplay, poster: el.poster, src: el.querySelector('source').src }; });
+      assert.equal(v.preload, 'none'); assert.equal(v.autoplay, false);
+      for (const src of [v.poster, v.src, ...await page.$$eval('img', (els) => els.map((i) => i.src))]) {
+        const r = await page.request.get(src);
+        assert.equal(r.status(), 200, src);
+      }
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)); await page.waitForTimeout(300);
+      assert.ok(await page.$$eval('img', (els) => els.every((i) => i.complete && i.naturalWidth > 0)), 'screenshots render');
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+      await page.screenshot({ path: `${SHOTS}/waweye-o-serwisie-${label}.png`, fullPage: true });
+    });
+    await step(`${label}: "Mapa" goes back to the map`, async () => {
+      await page.click('.top .back');
+      await page.waitForFunction(() => window.__waweye && window.__waweye.state.markers.size > 50);
+      assert.deepEqual(errors, []);
+    });
     await ctx.close();
   }
 

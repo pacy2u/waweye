@@ -12,6 +12,12 @@ html, body { margin: 0; height: 100%; background: var(--charcoal); color: var(--
   display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 10px;
   background: var(--panel); border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,.3); max-width: 720px; }
 .brand { font-weight: 800; letter-spacing: .5px; color: var(--orange); font-size: 18px; }
+/* The logo links to the "O serwisie" page; the small (i) hints that it is clickable. */
+a.brand { display: inline-flex; align-items: center; gap: 5px; text-decoration: none; border-radius: 6px; padding: 2px 4px; margin: -2px -4px;
+  -webkit-tap-highlight-color: transparent; }
+a.brand svg { width: 15px; height: 15px; flex: none; opacity: .85; }
+a.brand:hover { background: rgba(252,76,2,.15); }
+a.brand:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 #search { flex: 1 1 140px; min-width: 140px; background: #34343a; color: var(--ink); border: 1px solid var(--line);
   border-radius: 8px; padding: 8px 10px; font-size: 16px; }
 #search:focus { outline: 2px solid var(--orange); border-color: var(--orange); }
