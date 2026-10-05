@@ -3,8 +3,8 @@
 // 1. Clean Transport Zone (SCT): the boundary from OpenStreetMap (relation 17792822, boundary=low_emission_zone)
 //    -> public/data/strefa-czystego-transportu.geojson, checked for plausibility before it is written.
 // 2. Paid parking zone (SPPN): the city publishes it only as a map layer (WMS, drawn as a fill), so its outline comes
-//    from OpenStreetMap: relations zone=parking in Warsaw -> public/data/strefa-platnego-parkowania.geojson, checked
-//    like the SCT. The report also lists the zone layers of the city's WMS services.
+//    from OpenStreetMap: relation 3533124 (boundary=zone, zone=parking, operator ZDM; the only such relation in Warsaw
+//    on 2026-10-05) -> public/data/strefa-platnego-parkowania.geojson, checked like the SCT. The report also lists the zone layers of the city's WMS services.
 // Run: node scripts/strefy.js  (prints a Markdown report in Polish; exit code 1 when the SCT boundary is not usable)
 
 const fs = require('fs');
@@ -19,7 +19,7 @@ const HEADERS = { 'User-Agent': 'wawEye/1.0 (+https://github.com/pacy2u/waweye)'
 const WMS = ['https://wms.um.warszawa.pl/serwis', 'https://wms2.um.warszawa.pl/geoserver/wms/wms'];
 const ZONE_RE = /parkow|sppn|p[łl]atn|czyst|\bsct\b|emisj/i;
 const SPPN_FILE = path.join(__dirname, '..', 'public', 'data', 'strefa-platnego-parkowania.geojson');
-const WARSAW_BBOX = '52.09,20.85,52.37,21.28'; // south, west, north, east
+const SPPN_RELATION = 3533124;
 // Points that must be in the SPPN: Śródmieście, Praga (Ząbkowska), Stary Mokotów (since 2026-02, Park Dreszera).
 const SPPN_INSIDE = { 'Pałac Kultury': [52.2318, 21.0060], 'Praga (Ząbkowska)': [52.2513, 21.0420], 'Stary Mokotów (od 2026-02)': [52.1995, 21.0090] };
 const SPPN_OUTSIDE = { 'Wilanów': [52.1650, 21.0900], 'Bemowo': [52.2540, 20.9120] };
@@ -189,33 +189,17 @@ async function sct(log) {
 
 async function sppn(log) {
   log('## Strefa Płatnego Parkowania Niestrzeżonego (OpenStreetMap)\n');
-  const query = `[out:json][timeout:90];(relation["zone"="parking"](${WARSAW_BBOX});relation["boundary"="parking_zone"](${WARSAW_BBOX}););out geom;`;
-  let data, via, errors = [];
-  for (const url of OVERPASS) {
-    try {
-      const res = await fetch(url, { method: 'POST', headers: HEADERS, body: new URLSearchParams({ data: query }), signal: AbortSignal.timeout(TIMEOUT_MS) });
-      if (!res.ok) throw new Error(`HTTP ${res.status} ${(await res.text()).slice(0, 120)}`);
-      data = await res.json(); via = url; break;
-    } catch (e) { errors.push(`${url}: ${e.message}`); }
-  }
-  if (!data) throw new Error(errors.join('; '));
-  const rels = (data.elements || []).filter((e) => e.type === 'relation');
-  log(`Relacji zone=parking w Warszawie: ${rels.length} (z ${via}, stan OSM ${data.osm3s && data.osm3s.timestamp_osm_base}).\n`);
-  const features = [];
-  for (const rel of rels) {
-    const t = rel.tags || {};
-    let f = null, err = '';
-    try { f = relationToFeature(rel, { name: t.name || '', osm_id: rel.id }); } catch (e) { err = e.message; }
-    const where = f ? Object.entries(SPPN_INSIDE).filter(([, pt]) => containsLatLng(f, pt)).map(([n]) => n).join(', ') || 'żaden punkt kontrolny' : '';
-    log(`- [${rel.id}](https://www.openstreetmap.org/relation/${rel.id}) ${t.name || '(bez nazwy)'} · ${Object.entries(t).filter(([k]) => k !== 'name').map(([k, v]) => `${k}=${v}`).join(' ').slice(0, 300)}${f ? ` · ${featureArea(f).toFixed(1)} km², zawiera: ${where}` : ` · BŁĄD: ${err}`}`);
-    if (f) features.push(f);
-  }
-  log('');
-  const problems = checkSppn(features);
+  const { rel, stamp, via } = await osmRelation(SPPN_RELATION);
+  const t = rel.tags || {};
+  log(`Relacja [${SPPN_RELATION}](https://www.openstreetmap.org/relation/${SPPN_RELATION}) (z ${via}): ${t.name || '(bez nazwy)'}, zone=${t.zone || '?'}, operator=${t.operator || '?'}, członków: ${rel.members.length}.`);
+  const f = relationToFeature(rel, { name: t.name || 'Strefa Płatnego Parkowania Niestrzeżonego', source: `OpenStreetMap, relacja ${SPPN_RELATION}`,
+    license: 'ODbL 1.0, © współtwórcy OpenStreetMap', osm_timestamp: stamp });
+  const problems = checkSppn([f]);
+  const points = polygonsOf(f).reduce((s, p) => s + p.reduce((n, r) => n + r.length, 0), 0);
+  log(`Powierzchnia ${featureArea(f).toFixed(1).replace('.', ',')} km², ${polygonsOf(f).length} wielokąt(y), ${points} punktów.`);
   if (problems.length) throw new Error('granica nie przeszła kontroli: ' + problems.join('; '));
-  const props = { source: `OpenStreetMap, relacje ${features.map((f) => f.properties.osm_id).join(', ')}`, license: 'ODbL 1.0, © współtwórcy OpenStreetMap', osm_timestamp: data.osm3s && data.osm3s.timestamp_osm_base };
   fs.mkdirSync(path.dirname(SPPN_FILE), { recursive: true });
-  fs.writeFileSync(SPPN_FILE, JSON.stringify({ type: 'FeatureCollection', properties: props, features }) + '\n');
+  fs.writeFileSync(SPPN_FILE, JSON.stringify({ type: 'FeatureCollection', features: [f] }) + '\n');
   log(`Zapisano \`public/data/${path.basename(SPPN_FILE)}\` (${Math.round(fs.statSync(SPPN_FILE).size / 1024)} KB).\n`);
 }
 

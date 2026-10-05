@@ -35,11 +35,11 @@ jobs:
       - name: Zapis granic stref w repozytorium
         shell: bash
         run: |
+          git config user.name "github-actions[bot]"; git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A waweye/public/data/
           if git diff --cached --quiet; then echo "Granice stref bez zmian." | tee -a "$GITHUB_STEP_SUMMARY"
           else
-            git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-              commit -m "Dane: granice stref SCT i SPPN z OpenStreetMap"
+            git commit -m "Dane: granice stref SCT i SPPN z OpenStreetMap"
             git pull --rebase origin "${GITHUB_REF_NAME}" # the branch may have moved while the data was downloading
             git push origin "HEAD:${GITHUB_REF_NAME}"
             echo "Zapisano zmienione granice stref na gałęzi ${GITHUB_REF_NAME}." | tee -a "$GITHUB_STEP_SUMMARY"

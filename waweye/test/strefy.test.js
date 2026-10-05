@@ -65,9 +65,9 @@ test('committed SCT boundary is plausible', { skip: !fs.existsSync(SCT_FILE) && 
 const SPPN_FILE = path.join(__dirname, '..', 'public', 'data', 'strefa-platnego-parkowania.geojson');
 test('committed SPPN boundary is plausible', { skip: !fs.existsSync(SPPN_FILE) && 'brak pliku – uruchom workflow waweye-dane-stref.yml' }, () => {
   const fc = JSON.parse(fs.readFileSync(SPPN_FILE, 'utf8'));
-  assert.equal(fc.type, 'FeatureCollection'); assert.ok(fc.features.length >= 1);
+  assert.equal(fc.type, 'FeatureCollection'); assert.equal(fc.features.length, 1);
   assert.deepEqual(checkSppn(fc.features), []);
-  assert.match(fc.properties.license, /OpenStreetMap/);
+  assert.match(fc.features[0].properties.license, /OpenStreetMap/);
 });
 
 test('checkSppn: the zone must cover the centre, Praga and Stary Mokotów, not Wilanów or Bemowo, at a sane size', () => {
