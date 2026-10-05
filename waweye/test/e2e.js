@@ -540,6 +540,30 @@ function findChromium() {
       assert.equal(await page.locator('.ev').count(), 0);
       await page.click('#t-sport');
     });
+    await step(`${label}: the search box filters sport, events and incidents by words, ignoring case and Polish letters`, async () => {
+      await page.click('#t-events'); await page.waitForFunction(() => window.__waweye.state.eventMarkers.size > 0);
+      await page.click('#t-inc'); await page.waitForFunction(() => window.__waweye.state.incLayers.size > 0);
+      const C = () => page.evaluate(() => { const { state, map } = window.__waweye;
+        return { sport: [...state.sportMarkers.values()].flatMap((m) => m.place.entries.map((e) => e.it.title)).sort(),
+          events: [...new Set([...state.eventMarkers.values()].flatMap((m) => m.place.entries.map((e) => e.it.title)))], eventMarkers: state.eventMarkers.size,
+          inc: state.incidents.filter((i) => state.incLayers.has(i.id)).map((i) => i.name),
+          vehicles: [...state.markers.values()].filter((m) => map.hasLayer(m.mk)).length, status: document.getElementById('status-text').textContent }; });
+      const all = await C();
+      await page.fill('#search', 'SENIOROW'); let c = await C();
+      assert.deepEqual(c.sport, ['Taneczne piątki dla seniorów', 'Tenisowe środy dla Seniorów']);
+      assert.deepEqual(c.events, []); assert.deepEqual(c.inc, []); assert.equal(c.vehicles, 0);
+      assert.match(c.status, /^0 pojazdów .*sport: 2 dziś · DziejeSię: 0 dziś/);
+      await page.fill('#search', 'litewska festiwal'); c = await C(); // every word, anywhere in the text (here: title and address)
+      assert.deepEqual(c.events, ['Festiwal na dwóch scenach']); assert.equal(c.eventMarkers, 2, 'both places of the festival stay');
+      assert.deepEqual(c.sport, []);
+      await page.fill('#search', 'marszalkowskiej'); c = await C();
+      assert.deepEqual(c.inc, ['Remont ulicy Marszałkowskiej']);
+      await page.fill('#search', '175'); c = await C();
+      assert.ok(c.vehicles > 0, 'a line number still filters the vehicles');
+      await page.fill('#search', ''); c = await C();
+      assert.deepEqual([c.sport, c.events, c.eventMarkers, c.inc], [all.sport, all.events, all.eventMarkers, all.inc]);
+      await page.click('#t-events'); await page.click('#t-inc');
+    });
     await step(`${label}: Sport button off hides markers, panel and filter`, async () => {
       await page.click('#t-sport');
       assert.equal(await page.locator('.sp').count(), 0);
