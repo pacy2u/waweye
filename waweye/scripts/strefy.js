@@ -12,6 +12,9 @@ const path = require('path');
 const SCT_RELATION = 17792822;
 const SCT_FILE = path.join(__dirname, '..', 'public', 'data', 'strefa-czystego-transportu.geojson');
 const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
+const OSM_API = 'https://api.openstreetmap.org/api/0.6';
+// OSM services refuse requests without an identifying User-Agent (overpass-api.de answered 406 to Node's default).
+const HEADERS = { 'User-Agent': 'wawEye/1.0 (+https://github.com/pacy2u/waweye)', Accept: 'application/json' };
 const WMS = ['https://wms.um.warszawa.pl/serwis', 'https://wms2.um.warszawa.pl/geoserver/wms/wms'];
 const ZONE_RE = /parkow|sppn|p[łl]atn|czyst|\bsct\b|emisj/i;
 const INSIDE = [52.2318, 21.0060]; // Palace of Culture: in the middle of the SCT
@@ -76,6 +79,16 @@ function relationToFeature(rel, props = {}) {
   return { type: 'Feature', properties: { ...props }, geometry };
 }
 
+// OSM API ".../relation/<id>/full.json" (relation, its ways and their nodes) -> the Overpass "out geom" shape.
+function fullToGeom(full, id) {
+  const nodes = new Map(), ways = new Map();
+  for (const e of full.elements) { if (e.type === 'node') nodes.set(e.id, e); else if (e.type === 'way') ways.set(e.id, e); }
+  const rel = full.elements.find((e) => e.type === 'relation' && e.id === id);
+  if (!rel) return null;
+  return { ...rel, members: rel.members.map((m) => (m.type !== 'way' || !ways.has(m.ref) ? m
+    : { ...m, geometry: ways.get(m.ref).nodes.map((n) => nodes.get(n)).filter(Boolean).map((n) => ({ lat: n.lat, lon: n.lon })) })) };
+}
+
 const polygonsOf = (f) => (f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates);
 const containsLatLng = (f, [lat, lon]) => polygonsOf(f).some((p) => inRing([lon, lat], p[0]) && !p.slice(1).some((h) => inRing([lon, lat], h)));
 const featureArea = (f) => polygonsOf(f).reduce((s, p) => s + ringArea(p[0]) - p.slice(1).reduce((h, r) => h + ringArea(r), 0), 0);
@@ -118,27 +131,37 @@ function wmsLayers(xml) {
 
 // ---- Network part ----
 
-async function overpass(query, fetchImpl = fetch) {
+// The relation with way geometries: Overpass first, the main OSM API as the fallback.
+async function osmRelation(id, fetchImpl = fetch) {
   const errors = [];
+  const get = async (url, opts = {}) => {
+    const res = await fetchImpl(url, { ...opts, headers: HEADERS, signal: AbortSignal.timeout(TIMEOUT_MS) });
+    if (!res.ok) throw new Error(`HTTP ${res.status} ${(await res.text()).slice(0, 120)}`);
+    return res.json();
+  };
   for (const url of OVERPASS) {
     try {
-      const res = await fetchImpl(url, { method: 'POST', body: new URLSearchParams({ data: query }), signal: AbortSignal.timeout(TIMEOUT_MS) });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      return await res.json();
+      const data = await get(url, { method: 'POST', body: new URLSearchParams({ data: `[out:json][timeout:60];relation(${id});out geom;` }) });
+      const rel = data.elements && data.elements.find((e) => e.type === 'relation');
+      if (rel) return { rel, stamp: data.osm3s && data.osm3s.timestamp_osm_base, via: url };
+      throw new Error('brak relacji w odpowiedzi');
     } catch (e) { errors.push(`${url}: ${e.message}`); }
   }
+  try {
+    const rel = fullToGeom(await get(`${OSM_API}/relation/${id}/full.json`), id);
+    if (rel) return { rel, stamp: rel.timestamp, via: OSM_API };
+    throw new Error('brak relacji w odpowiedzi');
+  } catch (e) { errors.push(`${OSM_API}: ${e.message}`); }
   throw new Error(errors.join('; '));
 }
 
 async function sct(log) {
   log('## Strefa Czystego Transportu (OpenStreetMap)\n');
-  const data = await overpass(`[out:json][timeout:60];relation(${SCT_RELATION});out geom;`);
-  const rel = data.elements && data.elements.find((e) => e.type === 'relation');
-  if (!rel) throw new Error(`Overpass nie zwrócił relacji ${SCT_RELATION}`);
+  const { rel, stamp, via } = await osmRelation(SCT_RELATION);
   const t = rel.tags || {};
-  log(`Relacja [${SCT_RELATION}](https://www.openstreetmap.org/relation/${SCT_RELATION}): ${t.name || '(bez nazwy)'}, boundary=${t.boundary || '?'}, członków: ${rel.members.length}.`);
+  log(`Relacja [${SCT_RELATION}](https://www.openstreetmap.org/relation/${SCT_RELATION}) (z ${via}): ${t.name || '(bez nazwy)'}, boundary=${t.boundary || '?'}, członków: ${rel.members.length}.`);
   const f = relationToFeature(rel, { name: t.name || 'Strefa Czystego Transportu', source: `OpenStreetMap, relacja ${SCT_RELATION}`,
-    license: 'ODbL 1.0, © współtwórcy OpenStreetMap', osm_timestamp: data.osm3s && data.osm3s.timestamp_osm_base });
+    license: 'ODbL 1.0, © współtwórcy OpenStreetMap', osm_timestamp: stamp });
   const problems = checkSct(f);
   const points = polygonsOf(f).reduce((s, p) => s + p.reduce((n, r) => n + r.length, 0), 0);
   log(`Powierzchnia ${featureArea(f).toFixed(1).replace('.', ',')} km², ${polygonsOf(f).length} wielokąt(y), ${points} punktów.`);
@@ -153,7 +176,7 @@ async function wms(log) {
   for (const base of WMS) {
     const url = `${base}?SERVICE=WMS&REQUEST=GetCapabilities&VERSION=1.3.0`;
     try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+      const res = await fetch(url, { headers: { 'User-Agent': HEADERS['User-Agent'] }, signal: AbortSignal.timeout(TIMEOUT_MS) });
       const xml = await res.text();
       if (!res.ok) throw new Error(`HTTP ${res.status}: ${xml.slice(0, 200)}`);
       const layers = wmsLayers(xml), hits = layers.filter((l) => ZONE_RE.test(l.name + ' ' + l.title));
@@ -161,7 +184,7 @@ async function wms(log) {
       for (const l of hits) log(`- \`${l.name}\` – ${l.title} (EPSG:3857: ${l.crs.includes('EPSG:3857') ? 'tak' : 'nie'}; ${l.crs.slice(0, 6).join(', ')})`);
       log(`\n<details><summary>Wszystkie warstwy</summary>\n\n${layers.map((l) => `- \`${l.name}\` – ${l.title}`).join('\n')}\n</details>\n`);
     } catch (e) {
-      log(`### ${base}\n\nBrak odpowiedzi: ${e.message}\n`);
+      log(`### ${base}\n\nBrak odpowiedzi: ${e.message}${e.cause ? ` (${e.cause.code || e.cause.message})` : ''}\n`);
     }
   }
 }
@@ -176,4 +199,4 @@ if (require.main === module) {
   })();
 }
 
-module.exports = { stitch, inRing, ringArea, relationToFeature, containsLatLng, featureArea, checkSct, wmsLayers };
+module.exports = { stitch, inRing, ringArea, relationToFeature, fullToGeom, osmRelation, containsLatLng, featureArea, checkSct, wmsLayers };

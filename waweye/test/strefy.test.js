@@ -3,7 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { stitch, relationToFeature, containsLatLng, featureArea, checkSct, wmsLayers } = require('../scripts/strefy');
+const { stitch, relationToFeature, fullToGeom, osmRelation, containsLatLng, featureArea, checkSct, wmsLayers } = require('../scripts/strefy');
 
 // A square of about 6 x 6.7 km around the centre of Warsaw, split into ways the way OSM does it (one way reversed).
 const g = (pts) => pts.map(([lat, lon]) => ({ lat, lon }));
@@ -60,4 +60,26 @@ test('committed SCT boundary is plausible', { skip: !fs.existsSync(SCT_FILE) && 
   assert.equal(fc.type, 'FeatureCollection'); assert.equal(fc.features.length, 1);
   assert.deepEqual(checkSct(fc.features[0]), []);
   assert.match(fc.features[0].properties.license, /OpenStreetMap/);
+});
+
+test('fullToGeom turns an OSM API "full" answer into way geometries', () => {
+  const full = { elements: [{ type: 'node', id: 1, lat: 52.2, lon: 21.0 }, { type: 'node', id: 2, lat: 52.3, lon: 21.1 },
+    { type: 'way', id: 10, nodes: [1, 2] }, { type: 'relation', id: 5, tags: { name: 'Z' }, members: [{ type: 'way', ref: 10, role: 'outer' }, { type: 'node', ref: 1, role: 'label' }] }] };
+  const rel = fullToGeom(full, 5);
+  assert.equal(rel.tags.name, 'Z');
+  assert.deepEqual(rel.members[0].geometry, [{ lat: 52.2, lon: 21.0 }, { lat: 52.3, lon: 21.1 }]);
+  assert.equal(rel.members[1].geometry, undefined);
+  assert.equal(fullToGeom(full, 6), null);
+});
+test('osmRelation sends a User-Agent and falls back to the OSM API when Overpass refuses', async () => {
+  const calls = [];
+  const f = async (url, opts) => {
+    calls.push({ url, ua: opts.headers['User-Agent'] });
+    if (url.includes('interpreter')) return { ok: false, status: 429, text: async () => 'Too Many Requests' };
+    return { ok: true, status: 200, json: async () => ({ elements: [{ type: 'relation', id: 7, members: [], timestamp: 't' }] }) };
+  };
+  const r = await osmRelation(7, f);
+  assert.equal(r.rel.id, 7); assert.match(r.via, /api\.openstreetmap\.org/);
+  assert.equal(calls.length, 3); assert.ok(calls.every((c) => /wawEye/.test(c.ua)));
+  assert.match(calls[2].url, /relation\/7\/full\.json$/);
 });
