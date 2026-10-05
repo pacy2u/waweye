@@ -129,6 +129,39 @@ a.brand:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
   box-shadow: 0 4px 16px rgba(0,0,0,.4); font-size: 13px; }
 #toast[hidden] { display: none; }
 
+/* Zone layers: a button under the zoom control with a menu of switches, and a panel with the zone's rules. */
+.zones { position: relative; margin-top: 10px; }
+#zones-btn { display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 2px solid rgba(0,0,0,.2); border-radius: 6px;
+  background: #fff; color: #5F6368; cursor: pointer; background-clip: padding-box; -webkit-tap-highlight-color: transparent; }
+#zones-btn svg { width: 20px; height: 20px; }
+#zones-btn.on { color: var(--orange); }
+#zones-btn:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
+#zmenu { position: absolute; top: 0; right: 42px; width: 250px; max-width: calc(100vw - 72px); padding: 10px 12px; background: var(--panel); color: var(--ink);
+  border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.4); font-size: 13px; }
+#zmenu[hidden] { display: none; }
+.z-title { font-weight: 700; margin-bottom: 6px; }
+.z-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+.z-row label { flex: 1; display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.z-row input { width: 18px; height: 18px; margin: 0; accent-color: var(--orange); flex: none; }
+.z-sw { width: 18px; height: 12px; border-radius: 3px; flex: none; }
+.z-sw.sppn { background: #FDD8DA; border: 2px solid #D64550; } /* as the city's WMS draws it */
+.z-sw.sct { background: rgba(0,168,120,.2); border: 2px dashed #00A878; }
+.z-info { width: 26px; height: 26px; flex: none; border-radius: 50%; border: 1px solid var(--line); background: #34343a; color: #fff;
+  font: italic 700 14px Georgia, serif; cursor: pointer; }
+.z-info:focus-visible, #zclose:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.z-note { margin-top: 6px; color: var(--muted); font-size: 12px; }
+
+#zpanel { position: fixed; z-index: 1000; left: 10px; right: 10px; bottom: calc(max(10px, env(safe-area-inset-bottom)) + 40px);
+  max-width: 420px; max-height: 55vh; overflow: auto; padding: 12px 40px 12px 12px; background: var(--panel);
+  border-radius: 14px; box-shadow: 0 4px 16px rgba(0,0,0,.4); }
+#zpanel[hidden] { display: none; }
+#zclose { position: absolute; top: 4px; right: 6px; width: 32px; height: 32px; border: 0; background: none; color: var(--muted); font-size: 24px; cursor: pointer; }
+.z-badge { min-width: 44px; height: 44px; padding: 0 6px; border-radius: 10px; display: grid; place-items: center; font-weight: 800; font-size: 15px; }
+.z-badge.sppn { background: #D64550; } .z-badge.sct { background: #00A878; }
+.z-foot { margin: 10px 0 6px; color: var(--muted); font-size: 12px; }
+#zpanel .p-rows dd { white-space: pre-line; }
+@media (min-width: 700px) { #zpanel { left: 10px; right: auto; } }
+@media (max-height: 480px) { #zpanel { max-height: 40vh; } }
 /* Sport classes ("Zajęcia sportowe"): violet, a colour no other layer uses. */
 :root { --sport: #7B5CFF; }
 #t-sport.on { background: var(--sport); border-color: var(--sport); --picon-bg: var(--sport); }

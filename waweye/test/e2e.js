@@ -6,6 +6,9 @@ const fs = require('fs');
 const { createServer } = require('../dev-server');
 
 const SHOTS = process.env.SHOTS || '/tmp';
+// The SPPN layer comes from the city's WMS; tests answer its tile requests with a transparent pixel (no outside traffic).
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
+const wmsTiles = (ctx) => ctx.route('**/wms.um.warszawa.pl/**', (r) => { r.fulfill({ status: 200, contentType: 'image/png', body: PNG }); });
 function findChromium() {
   if (process.env.CHROME_PATH) return process.env.CHROME_PATH; // e.g. Google Chrome preinstalled on GitHub runners
   const base = process.env.PLAYWRIGHT_BROWSERS_PATH || '/opt/pw-browsers';
@@ -28,6 +31,7 @@ function findChromium() {
   for (const [label, ctxOpts] of [['desktop', { viewport: { width: 1280, height: 800 } }],
     ['mobile', { viewport: { width: 390, height: 780 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 }]]) {
     const ctx = await browser.newContext(ctxOpts);
+    await wmsTiles(ctx);
     const page = await ctx.newPage();
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
@@ -234,6 +238,86 @@ function findChromium() {
       await page.click('#t-park'); await page.waitForTimeout(200);
       assert.equal(await page.locator('.pk').count(), 0);
       assert.ok(await page.evaluate(() => document.getElementById('ppanel').hidden));
+    });
+    // ---- Zones: paid parking (WMS layer, on with the parkings) and the Clean Transport Zone (GeoJSON) ----
+    const Z = () => page.evaluate(() => { const { zones } = window.__waweye; let prefs = null; try { prefs = JSON.parse(localStorage.getItem('waweye.strefy')); } catch {}
+      return { sppn: zones.sppn, sct: zones.sct, sppnBox: document.getElementById('z-sppn').checked, sctBox: document.getElementById('z-sct').checked,
+        btn: document.getElementById('zones-btn').classList.contains('on'), prefs, panel: !document.getElementById('zpanel').hidden }; });
+    const menu = async (open) => { if ((await page.isHidden('#zmenu')) === open) await page.click('#zones-btn'); };
+    await step(`${label}: the paid parking zone (SPPN) appears with the parkings and can be hidden`, async () => {
+      assert.ok(!(await Z()).sppn, 'parking off hides the zone it showed');
+      await page.click('#t-park'); await page.waitForSelector('.pk');
+      let z = await Z(); assert.ok(z.sppn && z.sppnBox && z.btn);
+      await page.waitForFunction(() => document.querySelectorAll('.leaflet-zones-pane img').length > 0);
+      // Read the tile address from the page: tiles loaded in an earlier step come from the browser's memory cache
+      // without a new request, so the routed requests may stay empty (failed CI twice).
+      const q = new URL(await page.evaluate(() => document.querySelector('.leaflet-zones-pane img').src)).searchParams;
+      assert.equal(q.get('request'), 'GetMap'); assert.equal(q.get('layers'), 'KOMUNIKACJA_STREFA_PLATNEGO_PARKOWANIA');
+      assert.equal(q.get('crs'), 'EPSG:2178'); // the server has no EPSG:3857 and pads CRS:84 tiles
+      const [s, w, n, e] = q.get('bbox').split(',').map(Number); // EPSG:2178 in WMS 1.3.0: northing, easting
+      assert.ok(s > 5.7e6 && s < 5.9e6 && w > 7.4e6 && w < 7.6e6 && n > s && e > w, q.get('bbox'));
+      assert.ok(Math.abs((n - s) / (e - w) - 1) < 0.01, 'a map tile is a square in EPSG:2178: ' + q.get('bbox'));
+      await menu(true); await page.uncheck('#z-sppn');
+      z = await Z(); assert.ok(!z.sppn && !z.btn); assert.equal(z.prefs.sppnHidden, true);
+      assert.equal(await page.locator('.leaflet-zones-pane img').count(), 0);
+      await page.click('#t-park'); await page.click('#t-park'); await page.waitForSelector('.pk');
+      assert.ok(!(await Z()).sppn, 'a hidden zone stays hidden when the parkings come back');
+      await menu(true); await page.check('#z-sppn');
+      z = await Z(); assert.ok(z.sppn); assert.equal(z.prefs.sppnHidden, false);
+      await page.click('#t-park'); await page.click('#t-park'); await page.waitForSelector('.pk');
+      assert.ok((await Z()).sppn, 'shown again by default with the parkings');
+      await page.screenshot({ path: `${SHOTS}/waweye-${label}-sppn.png` });
+      await page.click('#t-park'); assert.ok(!(await Z()).sppn);
+    });
+    await step(`${label}: the Clean Transport Zone (SCT) is drawn under the vehicles, which stay clickable`, async () => {
+      await page.evaluate(() => { window.__waweye.map.setView([52.2318, 21.0060], 13, { animate: false }); });
+      await menu(true); await page.check('#z-sct');
+      await page.waitForFunction(() => window.__waweye.zones.sctData);
+      let z = await Z(); assert.ok(z.sct && z.btn); assert.equal(z.prefs.sct, true);
+      const shape = await page.evaluate(() => { const { map, zones } = window.__waweye; let n = 0, inside = false;
+        map.eachLayer((l) => { if (l instanceof L.Polygon && !l.options.interactive) { n++; inside = inside || l.getBounds().contains([52.2318, 21.0060]); } });
+        return { n, inside, err: zones.sctError }; });
+      assert.ok(shape.n >= 1 && shape.inside, JSON.stringify(shape)); assert.equal(shape.err, null);
+      assert.equal(await page.locator('.leaflet-overlay-pane canvas').count(), 1, 'the zone shares the vehicles canvas');
+      await page.screenshot({ path: `${SHOTS}/waweye-${label}-sct.png` });
+      await page.click('#zones-btn'); // close the menu, it covers part of the map
+      await page.evaluate(() => Object.defineProperty(document, 'hidden', { configurable: true, get: () => true })); // freeze vehicles, as above
+      try {
+        await page.waitForTimeout(200);
+        await page.waitForFunction(() => [...window.__waweye.state.markers.values()].every((m) => !m.to));
+        const pts = await page.evaluate(() => { const { map, state } = window.__waweye; const r = map.getContainer().getBoundingClientRect(), sz = map.getSize();
+          return [...state.markers.values()].filter((m) => map.hasLayer(m.mk)).map((m) => { const p = map.latLngToContainerPoint(m.mk.getLatLng()); return { x: r.left + p.x, y: r.top + p.y, cx: p.x, cy: p.y, id: m.v.id }; })
+            .filter((p, _, all) => p.cy > 170 && p.cy < sz.y - 120 && p.cx > 40 && p.cx < sz.x - 80 && all.every((q) => q === p || Math.hypot(q.cx - p.cx, q.cy - p.cy) > 20)).slice(0, 3); });
+        assert.ok(pts.length >= 2);
+        for (const p of pts) {
+          await page.mouse.click(p.x, p.y); await page.waitForTimeout(80);
+          assert.equal(await page.evaluate(() => window.__waweye.state.selected), p.id, 'vehicle not selectable with the SCT on');
+          await page.evaluate(() => window.__waweye.deselect());
+        }
+      } finally {
+        await page.evaluate(() => { delete document.hidden; });
+      }
+    });
+    await step(`${label}: zone rules panels open from the menu and exclude the other panels`, async () => {
+      const hidden = () => page.evaluate(() => ['panel', 'ppanel', 'ipanel', 'zpanel'].map((id) => document.getElementById(id).hidden));
+      await menu(true); await page.click('.z-info[data-zone="sct"]');
+      assert.ok(await page.isHidden('#zmenu'), 'the menu closes');
+      assert.deepEqual(await hidden(), [true, true, true, false]);
+      const t = await page.textContent('#zpanel');
+      for (const x of ['Strefa Czystego Transportu', 'Euro 5', 'OpenStreetMap']) assert.ok(t.includes(x), 'missing ' + x);
+      assert.match(await page.getAttribute('#zp-link', 'href'), /^https:\/\/transport\.um\.warszawa\.pl\//);
+      await page.screenshot({ path: `${SHOTS}/waweye-${label}-sct-zasady.png` });
+      await menu(true); await page.click('.z-info[data-zone="sppn"]');
+      assert.match(await page.textContent('#zpanel'), /Płatnego Parkowania[\s\S]*8:00–20:00[\s\S]*4,50 zł/);
+      assert.match(await page.getAttribute('#zp-link', 'href'), /^https:\/\/zdm\.waw\.pl\//);
+      await page.evaluate(() => { const { state, select } = window.__waweye; select([...state.markers.keys()][0]); });
+      assert.deepEqual(await hidden(), [false, true, true, true]);
+      await page.evaluate(() => window.__waweye.openZone('sppn'));
+      assert.deepEqual(await hidden(), [true, true, true, false]);
+      await page.click('#zclose'); assert.deepEqual(await hidden(), [true, true, true, true]);
+      await menu(true); await page.uncheck('#z-sct');
+      const z = await Z(); assert.ok(!z.sct && !z.btn); assert.equal(z.prefs.sct, false);
+      await page.click('#zones-btn'); assert.ok(await page.isHidden('#zmenu'));
     });
     await step(`${label}: incidents button draws points and lines, panel shows details`, async () => {
       await page.evaluate(() => { window.__waweye.map.setView([52.2297, 21.0122], 13, { animate: false }); });
@@ -446,7 +530,8 @@ function findChromium() {
   const half = createServer({ env: { MOCK: '1' } });
   half.on('request', () => {});
   await new Promise((r) => half.listen(0, r));
-  const pg = await (await browser.newContext()).newPage();
+  const pctx = await browser.newContext(); await wmsTiles(pctx);
+  const pg = await pctx.newPage();
   await pg.route('**/api/parking', (route) => route.fulfill({ status: 502, contentType: 'application/json', body: '{"error":"HTTP 403 (forbidden)"}' }));
   await pg.goto(`http://localhost:${half.address().port}/`);
   await step('parking API failure is reported, vehicles stay visible', async () => {
@@ -470,6 +555,13 @@ function findChromium() {
   await step('incidents API failure is reported, vehicles stay visible', async () => {
     await pg.click('#t-inc');
     await pg.waitForFunction(() => /utrudnienia: brak danych/.test(document.getElementById('status-text').textContent));
+    assert.ok(await pg.evaluate(() => window.__waweye.state.markers.size > 50));
+  });
+
+  await pg.route('**/data/strefa-czystego-transportu.geojson', (route) => route.fulfill({ status: 404, body: 'Not found' }));
+  await step('SCT data failure is reported, vehicles stay visible', async () => {
+    await pg.click('#zones-btn'); await pg.check('#z-sct');
+    await pg.waitForFunction(() => /strefa czystego transportu: brak danych \(HTTP 404\)/.test(document.getElementById('status-text').textContent));
     assert.ok(await pg.evaluate(() => window.__waweye.state.markers.size > 50));
   });
 
