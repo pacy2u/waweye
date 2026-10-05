@@ -377,9 +377,9 @@
   try { zonePrefs = { ...zonePrefs, ...JSON.parse(localStorage.getItem('waweye.strefy') || '{}') }; } catch {}
   const saveZonePrefs = () => { try { localStorage.setItem('waweye.strefy', JSON.stringify(zonePrefs)); } catch {} };
 
-  map.createPane('zones').style.zIndex = 250; // above the base map, below vehicles and markers
+  map.createPane('zones').style.zIndex = 250; // above the base map, below vehicles and markers; the WMS fills the zone solid pink, hence the low opacity
   const sppnLayer = L.tileLayer.wms(SPPN_WMS.url, { layers: SPPN_WMS.layers, crs: SPPN_WMS.crs, format: 'image/png', transparent: true, version: '1.3.0',
-    pane: 'zones', opacity: 0.75, maxZoom: 19, attribution: 'SPPN: m.st. Warszawa' });
+    pane: 'zones', opacity: 0.55, maxZoom: 19, attribution: 'SPPN: m.st. Warszawa' });
   const sctLayer = L.layerGroup();
 
   function renderZoneControls() {
