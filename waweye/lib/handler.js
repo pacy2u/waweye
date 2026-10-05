@@ -2,6 +2,9 @@
 const { fetchVehicles, fetchParkings, fetchIncidents, fetchFleet, fetchSport, fetchEvents, normalizeFleet, normalizeParkings, normalizeIncidents, normalizeSport, normalizeEvents } = require('./warsaw');
 const { mockVehicles, mockParkings, mockIncidents, mockFleet, mockSport, mockEvents, MOCK_GEOCODES } = require('./mock');
 const { createGeocoder } = require('./geocoding');
+// Vercel's waitUntil (what @vercel/functions does, without its dependencies): keeps the function alive for work that
+// goes on after the reply. Outside Vercel (dev server, tests) there is no context and the promise just runs.
+const waitUntil = (p) => globalThis[Symbol.for('@vercel/request-context')]?.get?.()?.waitUntil?.(p);
 
 // Read-only API: anything but GET/HEAD gets 405. Returns true when the request was rejected.
 function rejectUnlessRead(req, res) {
@@ -123,7 +126,18 @@ const mockGeocoder = createGeocoder({ minGapMs: 0, fetchImpl: async (url) => {
   return new Response(JSON.stringify(hit ? [{ lat: String(hit.lat), lon: String(hit.lon) }] : []), { status: 200 });
 } });
 
-async function sportHandler(req, res, { env = process.env, fetchImpl = fetch, geo, geoBudgetMs = 5000 } = {}) {
+// A reply waits at most geoBudgetMs for address lookups; whatever is left goes on in the background for up to
+// backgroundMs (within the functions' 60 s limit), so places fill in within minutes, not one batch per request.
+async function locate(geo, items, { geoBudgetMs, backgroundMs, background }) {
+  const pending = await geo.locate(items, { budgetMs: geoBudgetMs });
+  if (pending && geo.locateLater) {
+    const later = geo.locateLater(items, { budgetMs: backgroundMs });
+    if (later) background(later);
+  }
+  return pending;
+}
+
+async function sportHandler(req, res, { env = process.env, fetchImpl = fetch, geo, geoBudgetMs = 3000, backgroundMs = 45000, background = waitUntil } = {}) {
   if (rejectUnlessRead(req, res)) return;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   try {
@@ -136,10 +150,10 @@ async function sportHandler(req, res, { env = process.env, fetchImpl = fetch, ge
       });
     }
     const all = normalizeSport(raw);
-    const pending = await (geo || (source === 'mock' ? mockGeocoder : geocoder)).locate(all, { budgetMs: geoBudgetMs });
+    const pending = await locate(geo || (source === 'mock' ? mockGeocoder : geocoder), all, { geoBudgetMs, backgroundMs, background });
     const items = all.filter((i) => i.lat != null).map(({ queries, ...i }) => i);
-    // Each reply spends at most ~5 s on lookups (about 4 addresses), so nobody waits long; while some are left,
-    // the CDN keeps the reply for 15 s only and the next request carries on. The dataset itself changes every 2 h.
+    // While addresses are still being looked up (in the background, see locate), the CDN keeps the reply for 15 s
+    // only, so the next request shows the newly found places. The dataset itself changes every 2 h.
     res.setHeader('Cache-Control', pending ? 's-maxage=15' : 's-maxage=1800, stale-while-revalidate=3600');
     res.statusCode = 200;
     res.end(JSON.stringify({ updated: Date.now(), source, received: raw.length, pending, unlocated: all.length - items.length - pending, items }));
@@ -150,7 +164,7 @@ async function sportHandler(req, res, { env = process.env, fetchImpl = fetch, ge
   }
 }
 
-async function eventsHandler(req, res, { env = process.env, fetchImpl = fetch, geo, geoBudgetMs = 5000 } = {}) {
+async function eventsHandler(req, res, { env = process.env, fetchImpl = fetch, geo, geoBudgetMs = 3000, backgroundMs = 45000, background = waitUntil } = {}) {
   if (rejectUnlessRead(req, res)) return;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   try {
@@ -163,7 +177,7 @@ async function eventsHandler(req, res, { env = process.env, fetchImpl = fetch, g
       });
     }
     const all = normalizeEvents(raw);
-    const pending = await (geo || (source === 'mock' ? mockGeocoder : geocoder)).locate(all, { budgetMs: geoBudgetMs });
+    const pending = await locate(geo || (source === 'mock' ? mockGeocoder : geocoder), all, { geoBudgetMs, backgroundMs, background });
     const items = [];
     for (const { queries, lat, lon, ...it } of all) {
       if (!it.points.length && lat != null) { it.points = [{ lat, lon, label: it.venue || it.address, street: it.address, district: it.district }]; it.located = 'address'; }
