@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#242428">
-<meta name="description" content="wawEye: autobusy i tramwaje Warszawy na jednej mapie, na żywo. Jak działa, skąd są dane i co dalej.">
+<meta name="description" content="wawEye: autobusy i tramwaje Warszawy na jednej mapie, na żywo, a obok parkingi, utrudnienia, strefy, zajęcia sportowe i wydarzenia. Jak działa, skąd są dane i co dalej.">
 <title>O serwisie – wawEye</title>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <style>
@@ -72,6 +72,12 @@ h2 { font-size: clamp(24px, 1.2vw + 18px, 32px); line-height: 1.15; font-weight:
 .feature h3 { font-size: 18px; font-weight: 800; display: flex; align-items: center; gap: 8px; }
 .feature p { font-size: 15px; color: var(--fg-muted); }
 .ico { width: 22px; height: 22px; border-radius: 6px; display: inline-grid; place-items: center; color: #fff; font-size: 13px; font-weight: 800; flex: none; }
+.ico svg { width: 15px; height: 15px; }
+
+/* Kolejne funkcje: karty bez zrzutu ekranu */
+.more { margin-top: 22px; display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+.more .feature { grid-template-rows: auto; }
+.more .feature .txt { padding: 16px 18px 18px; }
 
 /* Zasady */
 .pledges { margin-top: 26px; display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
@@ -143,7 +149,7 @@ body > footer a { color: inherit; }
     <div>
       <span class="eyebrow"><i aria-hidden="true"></i>pozycje pojazdów co 10 s</span>
       <h1>Autobusy i tramwaje Warszawy na jednej mapie, <em>na żywo</em></h1>
-      <p class="lead">wawEye pokazuje, gdzie w tej chwili jest każdy warszawski autobus i tramwaj, a na tej samej mapie wolne miejsca na parkingach i utrudnienia w ruchu. Działa w przeglądarce na telefonie i komputerze. Bez instalacji, bez konta, bez reklam.</p>
+      <p class="lead">wawEye pokazuje, gdzie w tej chwili jest każdy warszawski autobus i tramwaj, a na tej samej mapie wolne miejsca na parkingach, utrudnienia w ruchu, strefy płatnego parkowania i czystego transportu oraz zajęcia sportowe i wydarzenia z miejskich kalendarzy. Działa w przeglądarce na telefonie i komputerze. Bez instalacji, bez konta, bez reklam.</p>
       <div class="cta">
         <a class="btn" href="/">Otwórz mapę
           <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10h11M10 4l6 6-6 6"/></svg></a>
@@ -185,6 +191,24 @@ body > footer a { color: inherit; }
         <div class="shot"><img width="480" height="1039" src="/media/ekran-utrudnienia.webp" alt="Utrudnienia drogowe na mapie" loading="lazy"></div>
         <div class="txt"><h3><span class="ico" style="background:var(--inc);color:#242428">!</span>Utrudnienia</h3>
           <p>Punkty i odcinki ulic: trwa, zaplanowane, zakończone. Opis, daty i link do infoulice.um.warszawa.pl. Co minutę.</p></div>
+      </article>
+    </div>
+    <div class="more">
+      <article class="feature">
+        <div class="txt"><h3><span class="ico" style="background:#1A73E8">◎</span>Moja lokalizacja</h3>
+          <p>Niebieska kropka z okręgiem dokładności, jak w Google Maps. Mapa podąża za Tobą, dopóki jej nie przesuniesz. Na telefonach z kompasem widać też kierunek. Pozycja nie opuszcza przeglądarki.</p></div>
+      </article>
+      <article class="feature">
+        <div class="txt"><h3><span class="ico" style="background:var(--charcoal)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2.5 8 12 13l9.5-5z" fill="currentColor"/><path d="m4.4 12-1.9 1L12 18l9.5-5-1.9-1L12 16z" fill="currentColor" opacity=".7"/></svg></span>Strefy</h3>
+          <p>Strefa płatnego parkowania (SPPN) z mapy miasta pojawia się razem z parkingami. Strefa czystego transportu (SCT) w centrum zaznaczona jest zieloną granicą. Przy każdej strefie: godziny, opłaty, wymagania, zwolnienia i kary.</p></div>
+      </article>
+      <article class="feature">
+        <div class="txt"><h3><span class="ico" style="background:#7B5CFF"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="14.5" cy="4" r="2.2" fill="currentColor"/><path d="M7 21l3.5-5 2.5 2V22M10.5 16l1.5-6-3 1.5L7.5 14M12 10l3 2.5 3 .5M12 10l2.5-.8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Sport</h3>
+          <p>Zajęcia sportowe z miejskiego kalendarza: jeden znacznik na miejsce z liczbą zajęć, lista godzin i link do zapisów. Filtr Dziś, Jutro, 7 dni. Co 2 h.</p></div>
+      </article>
+      <article class="feature">
+        <div class="txt"><h3><span class="ico" style="background:#0B8A8F"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 7.5A1.5 1.5 0 0 1 4 6h16a1.5 1.5 0 0 1 1.5 1.5V10a2 2 0 0 0 0 4v2.5A1.5 1.5 0 0 1 20 18H4a1.5 1.5 0 0 1-1.5-1.5V14a2 2 0 0 0 0-4z" fill="currentColor"/></svg></span>DziejeSię</h3>
+          <p>Wydarzenia z miejskiego Kalendarza wydarzeń: termin, opis, organizator i link do um.warszawa.pl. Ten sam filtr Dziś, Jutro, 7 dni co w Sporcie. Co 2 h.</p></div>
       </article>
     </div>
   </div></section>
