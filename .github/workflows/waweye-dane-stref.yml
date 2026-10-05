@@ -40,6 +40,7 @@ jobs:
           else
             git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
               commit -m "Dane: granice stref SCT i SPPN z OpenStreetMap"
+            git pull --rebase origin "${GITHUB_REF_NAME}" # the branch may have moved while the data was downloading
             git push origin "HEAD:${GITHUB_REF_NAME}"
             echo "Zapisano zmienione granice stref na gałęzi ${GITHUB_REF_NAME}." | tee -a "$GITHUB_STEP_SUMMARY"
           fi
