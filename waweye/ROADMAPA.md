@@ -88,7 +88,7 @@ Cel: każda zmiana jest testowana i wdrażana automatycznie, a awaria jest widoc
 | Potwierdzić unieważnienie starego tokenu | token jest w historii gita | S (właściciel) | zrobione (właściciel) |
 | Zweryfikować dane o taborze na żywym API (D8) | ostatnia funkcja może nie działać | S | zrobione: 99,5% / 99,6% |
 | CI w GitHub Actions: `npm test` + `npm run test:e2e` przy każdym PR | koniec regresji na `main` (D2) | S | zrobione (`waweye-testy.yml`, do 2026-10 `pasibus-testy.yml`) |
-| Automatyczne wdrażanie Workera (`wrangler deploy` w Actions) | koniec ręcznego wklejania (D1); użytkownik nie ma CLI | S | zrobione; czeka na sekrety `CLOUDFLARE_API_TOKEN` i `CLOUDFLARE_ACCOUNT_ID` |
+| Automatyczne wdrażanie Workera (`wrangler deploy` w Actions) | koniec ręcznego wklejania (D1); użytkownik nie ma CLI | S | zrobione; sekrety `CLOUDFLARE_API_TOKEN` i `CLOUDFLARE_ACCOUNT_ID` ustawione, działa (m.in. wdrożenie z magazynem tras 2026-10-05); ręczne wklejanie kodu niepotrzebne |
 | Monitoring syntetyczny co 2 h: wszystkie `/api/*` + dopasowanie pojazdów do taboru; przy awarii issue i e-mail | wykrycie awarii (D3) w 0 zł | S | zrobione (`waweye-monitoring-produkcji.yml`) |
 | Porządek w dokumentacji (D6), `maxDuration` dla wszystkich funkcji (D9) | następne sesje startują z poprawnego stanu | S | zrobione (`README1st` usunięty na prośbę właściciela) |
 | Pauza odpytywania w ukrytej karcie (D7) | mniej żądań i transferu, oszczędność baterii | S | zrobione |
