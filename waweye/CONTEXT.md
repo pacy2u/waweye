@@ -29,6 +29,7 @@ Aplikacja webowa (komputer + telefon) pokazująca na mapie Warszawy w czasie rze
 - Monitoring: co 2 h `scripts/check-production.js` w Actions; przy awarii otwiera issue „[monitoring] …” i zamyka je po powrocie do normy.
 
 ## Architektura
+Pełny opis z diagramami: `ARCHITEKTURA.md` (aktualizuj go przy zmianach komponentów, źródeł danych albo infrastruktury).
 ```
 przeglądarka (Leaflet, public/app.js)
    └─ /api/vehicles | /api/parking | /api/incidents | /api/fleet   (funkcje Vercel, region fra1, maxDuration 60)

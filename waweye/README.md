@@ -84,6 +84,7 @@ Opcjonalnie dodaj do tokenu Cloudflare uprawnienie Account Analytics: Read, wted
 - `scripts/metro.js` – dane warstwy metra z OpenStreetMap (testy w `test/metro.test.js`); `scripts/strefy.js` – granica SCT; `public/data/` – pliki tych warstw
 - `scripts/trasy.js` – trasy linii z GTFS ZTM do `public/data/trasy/`; `public/trasa.js` – wybór wariantu trasy (kierunek) w przeglądarce; testy w `test/trasy.test.js`
 - `scripts/check-production.js` – kontrola produkcji (monitoring); `scripts/vercel-ops.js`, `scripts/cloudflare-ops.js` – operacje wywoływane przez workflowy na żądanie
+- `ARCHITEKTURA.md` – architektura: komponenty i ich lokalizacja, przepływy danych (diagramy), infrastruktura, CI/CD, monitoring, sekrety
 - `ROADMAPA.md` – analiza produktu i plan rozwoju; `CONTEXT.md` – notatki dla kolejnych sesji
 - `wideo-promocyjne/` – 30-sekundowy film promocyjny (`waweye-showreel.mp4`) i kod, który go generuje z prawdziwych danych; wykluczony z wdrożenia przez `.vercelignore`
 - `PLAN_MIGRACJI_WAWEYE.md` – plan migracji nazwy z „pasibus” na wawEye (domena, Worker, folder, repo) bez przerwy w działaniu
