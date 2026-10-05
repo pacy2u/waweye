@@ -418,6 +418,17 @@ function findChromium() {
     assert.ok(await pg.evaluate(() => window.__waweye.state.markers.size > 50));
   });
   await pg.route('**/api/incidents', (route) => route.fulfill({ status: 502, contentType: 'application/json', body: '{"error":"HTTP 403 (forbidden)"}' }));
+  await step('sport API failure is reported and retried a minute later', async () => {
+    let fail = true;
+    await pg.route('**/api/sport', (route) => (fail ? route.fulfill({ status: 502, contentType: 'application/json', body: '{"error":"HTTP 522"}' }) : route.continue()));
+    await pg.evaluate(() => { window.__sportTimers = []; const st = window.setTimeout; window.setTimeout = (f, ms, ...a) => { if (ms === 60000) window.__sportTimers.push(f); return st(f, ms, ...a); }; });
+    await pg.click('#t-sport');
+    await pg.waitForFunction(() => /sport: brak danych \(HTTP 522\)/.test(document.getElementById('status-text').textContent));
+    fail = false;
+    await pg.evaluate(() => window.__sportTimers.pop()());
+    await pg.waitForFunction(() => window.__waweye.state.sportMarkers.size > 0 && !/sport: brak danych/.test(document.getElementById('status-text').textContent));
+    await pg.click('#t-sport');
+  });
   await step('incidents API failure is reported, vehicles stay visible', async () => {
     await pg.click('#t-inc');
     await pg.waitForFunction(() => /utrudnienia: brak danych/.test(document.getElementById('status-text').textContent));
