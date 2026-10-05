@@ -250,6 +250,9 @@ function findChromium() {
       await page.click('#t-park'); await page.waitForSelector('.pk');
       let z = await Z(); assert.ok(z.sppn && z.sppnBox && z.btn);
       await page.waitForFunction(() => document.querySelectorAll('.leaflet-zones-pane img').length > 0);
+      // The <img> is in the page before the routed request is recorded: wait for the request itself (failed CI once).
+      for (let t = Date.now(); !wms.length && Date.now() - t < 5000;) await page.waitForTimeout(50);
+      assert.ok(wms.length, 'no WMS tile request');
       const q = new URL(wms[0]).searchParams;
       assert.equal(q.get('request'), 'GetMap'); assert.equal(q.get('layers'), 'KOMUNIKACJA_STREFA_PLATNEGO_PARKOWANIA');
       assert.equal(q.get('crs'), 'CRS:84'); // the server has no EPSG:3857
