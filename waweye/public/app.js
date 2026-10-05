@@ -67,6 +67,7 @@
   }
 
   function select(id) {
+    closeZone();
     if (state.selectedPark) deselectPark();
     if (state.selectedInc) deselectInc();
     state.selected = id;
@@ -155,7 +156,7 @@
     if (!state.error && !state.lastOk) return; // still on the initial load
     const n = [...state.markers.values()].filter((m) => visible(m.v)).length; // computed now, never cached
     if (state.error) { el.className = 'err'; t.textContent = state.error; }
-    else if (state.lastOk) { el.className = 'ok'; t.textContent = `${n} pojazdów · ${new Date(state.lastOk).toLocaleTimeString('pl-PL')}${state.source === 'mock' ? ' · dane testowe' : ''}${state.parkError ? ' · parkingi: ' + state.parkError : ''}${state.incError ? ' · utrudnienia: ' + state.incError : ''}${state.data.length === 0 && state.received > 0 ? ` · API zwróciło ${state.received}, wszystkie odrzucone (nieaktualne/poza Warszawą)` : state.data.length === 0 && state.received === 0 ? ' · API zwróciło pustą listę' : ''}`; }
+    else if (state.lastOk) { el.className = 'ok'; t.textContent = `${n} pojazdów · ${new Date(state.lastOk).toLocaleTimeString('pl-PL')}${state.source === 'mock' ? ' · dane testowe' : ''}${state.parkError ? ' · parkingi: ' + state.parkError : ''}${state.incError ? ' · utrudnienia: ' + state.incError : ''}${zones.sctError ? ' · strefa czystego transportu: ' + zones.sctError : ''}${state.data.length === 0 && state.received > 0 ? ` · API zwróciło ${state.received}, wszystkie odrzucone (nieaktualne/poza Warszawą)` : state.data.length === 0 && state.received === 0 ? ' · API zwróciło pustą listę' : ''}`; }
   }
 
   // Smooth movement between polls.
@@ -244,6 +245,7 @@
     const p = state.parkings.find((x) => x.id === id); if (!p) return;
     if (state.selected) deselect();
     if (state.selectedInc) deselectInc();
+    closeZone();
     state.selectedPark = id; fillParkPanel(p); $('ppanel').hidden = false; renderParkings();
   }
   function deselectPark() {
@@ -265,8 +267,8 @@
   function toggleParking(btn) {
     state.park = !state.park;
     btn.classList.toggle('on', state.park); btn.setAttribute('aria-pressed', state.park);
-    if (state.park) { parkLayer.addTo(map); pollParkings(); }
-    else { map.removeLayer(parkLayer); if (state.selectedPark) deselectPark(); state.parkError = null; renderStatus(); }
+    if (state.park) { parkLayer.addTo(map); pollParkings(); if (!zonePrefs.sppnHidden) setSppn(true, true); }
+    else { map.removeLayer(parkLayer); if (state.selectedPark) deselectPark(); if (zones.sppnAuto) setSppn(false); state.parkError = null; renderStatus(); }
   }
   $('t-park').onclick = (e) => toggleParking(e.currentTarget);
   $('pclose').onclick = deselectPark;
@@ -316,6 +318,7 @@
     const i = state.incidents.find((x) => x.id === id); if (!i) return;
     if (state.selected) deselect();
     if (state.selectedPark) deselectPark();
+    closeZone();
     state.selectedInc = id; fillIncPanel(i); $('ipanel').hidden = false; renderIncidents();
   }
   function deselectInc() {
@@ -342,6 +345,109 @@
   $('t-inc').onclick = (e) => toggleIncidents(e.currentTarget);
   $('iclose').onclick = deselectInc;
   setInterval(pollIncidents, 60000);
+
+  // ---- Zones: paid parking (SPPN, the city's WMS layer) and the Clean Transport Zone (SCT, boundary from OpenStreetMap) ----
+  // SPPN comes and goes with the parkings unless the user has hidden it (switched on without the parkings, it stays until switched off);
+  // both switches are remembered in this browser only.
+  const SPPN_WMS = { url: 'https://wms.um.warszawa.pl/serwis', layers: 'SPPN' };
+  const SCT_URL = '/data/strefa-czystego-transportu.geojson', SCT_COLOR = '#00A878';
+  const ZONE_INFO = {
+    sppn: { badge: 'SPPN', name: 'Strefa Płatnego Parkowania Niestrzeżonego', sub: 'Zarząd Dróg Miejskich · stan na październik 2026',
+      rows: [['Kiedy płatne', 'pon.–pt. 8:00–20:00\nweekendy i święta bezpłatnie'],
+        ['Opłaty', '1. godzina 4,50 zł\n2. godzina 5,40 zł\n3. godzina 6,40 zł\n4. i kolejne 4,50 zł'],
+        ['Jak zapłacić', 'parkomat albo aplikacja mobilna'],
+        ['Brak opłaty', 'opłata dodatkowa 300 zł (niższa przy szybkiej wpłacie)'],
+        ['Mieszkańcy', 'abonament mieszkańca – zasady na stronie ZDM']],
+      note: 'Granice strefy z mapy m.st. Warszawy. Na miejscu obowiązują znaki D-44 (strefa parkowania) i D-45 (koniec strefy).',
+      link: ['https://zdm.waw.pl/sprawy/parkowanie/oplata-za-postoj/', 'Opłaty i zasady na zdm.waw.pl'] },
+    sct: { badge: 'SCT', name: 'Strefa Czystego Transportu', sub: 'ok. 37 km² w centrum · stan na październik 2026',
+      rows: [['Kiedy', 'całą dobę, codziennie'],
+        ['Wjazd od 2026', 'benzyna, LPG, hybrydy: co najmniej Euro 3\ndiesel: co najmniej Euro 5\n(albo odpowiednio nowy rocznik)'],
+        ['Bez ograniczeń', 'samochody elektryczne, wodorowe i na CNG'],
+        ['Zwolnienia', 'm.in. do końca 2027 r. mieszkańcy płacący podatki w Warszawie, seniorzy 70+, osoby z niepełnosprawnościami, pojazdy zabytkowe'],
+        ['Kara', 'mandat do 500 zł']],
+      note: 'Ulice graniczne leżą poza strefą. Granica z OpenStreetMap (© współtwórcy OSM, ODbL).',
+      link: ['https://transport.um.warszawa.pl/sct', 'Wymagania i zwolnienia na transport.um.warszawa.pl'] },
+  };
+  const zones = { sppn: false, sppnAuto: false, sct: false, sctData: null, sctLoading: false, sctError: null, open: null };
+  let zonePrefs = { sppnHidden: false, sct: false };
+  try { zonePrefs = { ...zonePrefs, ...JSON.parse(localStorage.getItem('waweye.strefy') || '{}') }; } catch {}
+  const saveZonePrefs = () => { try { localStorage.setItem('waweye.strefy', JSON.stringify(zonePrefs)); } catch {} };
+
+  map.createPane('zones').style.zIndex = 250; // above the base map, below vehicles and markers
+  const sppnLayer = L.tileLayer.wms(SPPN_WMS.url, { layers: SPPN_WMS.layers, format: 'image/png', transparent: true, version: '1.3.0',
+    pane: 'zones', opacity: 0.75, maxZoom: 19, attribution: 'SPPN: m.st. Warszawa' });
+  const sctLayer = L.layerGroup();
+
+  function renderZoneControls() {
+    $('z-sppn').checked = zones.sppn; $('z-sct').checked = zones.sct;
+    $('zones-btn').classList.toggle('on', zones.sppn || zones.sct);
+  }
+  function setSppn(on, auto = false) {
+    zones.sppn = on; zones.sppnAuto = on && auto;
+    if (on) sppnLayer.addTo(map); else map.removeLayer(sppnLayer);
+    renderZoneControls();
+  }
+  async function loadSct() {
+    if (zones.sctData || zones.sctLoading) return;
+    zones.sctLoading = true;
+    try {
+      const res = await fetch(SCT_URL);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      zones.sctData = await res.json(); zones.sctError = null;
+    } catch (e) {
+      zones.sctError = 'brak danych (' + e.message + ')';
+    }
+    zones.sctLoading = false;
+    drawSct(); renderStatus();
+  }
+  function drawSct() {
+    sctLayer.clearLayers();
+    if (!zones.sct || !zones.sctData) return;
+    // Same canvas as the vehicles (a second canvas would swallow their clicks); not interactive and at the back.
+    L.geoJSON(zones.sctData, { renderer: canvas, interactive: false, attribution: 'SCT: © współtwórcy OpenStreetMap',
+      style: { color: SCT_COLOR, weight: 3, dashArray: '10 6', fillColor: SCT_COLOR, fillOpacity: 0.08 } })
+      .eachLayer((l) => { l.addTo(sctLayer); l.bringToBack(); });
+  }
+  function setSct(on) {
+    zones.sct = on;
+    if (on) { sctLayer.addTo(map); loadSct(); drawSct(); }
+    else { map.removeLayer(sctLayer); zones.sctError = null; renderStatus(); }
+    renderZoneControls();
+  }
+
+  function openZone(kind) {
+    const z = ZONE_INFO[kind];
+    if (state.selected) deselect();
+    if (state.selectedPark) deselectPark();
+    if (state.selectedInc !== null) deselectInc();
+    zones.open = kind;
+    $('zp-badge').className = 'z-badge ' + kind; $('zp-badge').textContent = z.badge;
+    $('zp-name').textContent = z.name; $('zp-sub').textContent = z.sub;
+    const dl = $('zp-rows'); dl.textContent = '';
+    for (const [k, v] of z.rows) row(dl, k, v);
+    $('zp-note').textContent = z.note;
+    $('zp-link').href = z.link[0]; $('zp-link').textContent = z.link[1];
+    $('zpanel').hidden = false; showZoneMenu(false);
+  }
+  function closeZone() {
+    if (!zones.open) return;
+    zones.open = null; $('zpanel').hidden = true;
+  }
+  function showZoneMenu(show) {
+    $('zmenu').hidden = !show; $('zones-btn').setAttribute('aria-expanded', show);
+  }
+
+  const ZoneControl = L.Control.extend({ options: { position: 'topright' },
+    onAdd() { const el = $('zones'); L.DomEvent.disableClickPropagation(el); L.DomEvent.disableScrollPropagation(el); return el; } });
+  new ZoneControl().addTo(map);
+  $('zones-btn').onclick = () => showZoneMenu($('zmenu').hidden);
+  $('z-sppn').onchange = (e) => { setSppn(e.target.checked, state.park); zonePrefs.sppnHidden = !e.target.checked; saveZonePrefs(); };
+  $('z-sct').onchange = (e) => { setSct(e.target.checked); zonePrefs.sct = e.target.checked; saveZonePrefs(); };
+  for (const b of document.querySelectorAll('.z-info')) b.onclick = () => openZone(b.dataset.zone);
+  $('zclose').onclick = closeZone;
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('zmenu').hidden) { showZoneMenu(false); $('zones-btn').focus(); } });
+  if (zonePrefs.sct) setSct(true);
 
   // ---- My location, after Google Maps: the button finds the user and zooms in; the map stays on them until they drag it ----
   const ME_ZOOM = 16, ME_BLUE = '#1A73E8', WARSAW = L.latLngBounds([51.9, 20.5], [52.6, 21.6]); // same box as lib/warsaw.js
@@ -445,11 +551,11 @@
   // Like Google's button riding on top of the bottom sheet: lift it above an open panel that covers it (phones).
   function liftLocate() {
     const b = $('locate'), br = b.getBoundingClientRect();
-    const tops = ['panel', 'ppanel', 'ipanel'].map($).filter((p) => !p.hidden).map((p) => p.getBoundingClientRect())
+    const tops = ['panel', 'ppanel', 'ipanel', 'zpanel'].map($).filter((p) => !p.hidden).map((p) => p.getBoundingClientRect())
       .filter((r) => r.right > br.left && r.left < br.right).map((r) => r.top);
     b.style.bottom = tops.length ? `${document.documentElement.clientHeight - Math.min(...tops) + 10}px` : '';
   }
-  if (window.ResizeObserver) { const ro = new ResizeObserver(liftLocate); for (const id of ['panel', 'ppanel', 'ipanel']) ro.observe($(id)); }
+  if (window.ResizeObserver) { const ro = new ResizeObserver(liftLocate); for (const id of ['panel', 'ppanel', 'ipanel', 'zpanel']) ro.observe($(id)); }
   window.addEventListener('resize', liftLocate);
 
   function toggleType(key, btn) {
@@ -466,10 +572,10 @@
     if (state.follow && me.centered) setCentered(false); // following a vehicle takes the map off the user
     const s = state.markers.get(state.selected); if (state.follow && s) map.setView(s.mk.getLatLng(), Math.max(map.getZoom(), 15));
   };
-  map.on('click', () => { if (state.selected) deselect(); if (state.selectedPark) deselectPark(); if (state.selectedInc !== null) deselectInc(); });
+  map.on('click', () => { if (state.selected) deselect(); if (state.selectedPark) deselectPark(); if (state.selectedInc !== null) deselectInc(); closeZone(); showZoneMenu(false); });
   map.on('zoomend moveend', refresh);
 
-  window.__waweye = { state, me, map, poll, select, deselect, selectPark, deselectPark, selectInc, deselectInc };
+  window.__waweye = { state, zones, me, map, poll, select, deselect, selectPark, deselectPark, selectInc, deselectInc, openZone, closeZone };
   poll(); setInterval(poll, POLL_MS);
   // Polling and location tracking pause while the tab is hidden (saves requests, transfer and battery) and catch up when it is shown again.
   document.addEventListener('visibilitychange', () => {

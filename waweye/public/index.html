@@ -34,6 +34,25 @@
 </button>
 <div id="toast" role="alert" hidden></div>
 
+<!-- Zone layers: moved into a Leaflet control under the zoom buttons by app.js. -->
+<div id="zones" class="zones">
+  <button id="zones-btn" type="button" title="Strefy: płatne parkowanie i czysty transport" aria-label="Strefy" aria-expanded="false" aria-controls="zmenu">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2.5 8 12 13l9.5-5z" fill="currentColor"/><path d="m4.4 12-1.9 1L12 18l9.5-5-1.9-1L12 16z" fill="currentColor" opacity=".7"/></svg>
+  </button>
+  <div id="zmenu" hidden>
+    <div class="z-title">Strefy</div>
+    <div class="z-row">
+      <label><input type="checkbox" id="z-sppn"><span class="z-sw sppn" aria-hidden="true"></span>Płatne parkowanie (SPPN)</label>
+      <button type="button" class="z-info" data-zone="sppn" aria-label="Zasady strefy płatnego parkowania">i</button>
+    </div>
+    <div class="z-row">
+      <label><input type="checkbox" id="z-sct"><span class="z-sw sct" aria-hidden="true"></span>Czysty transport (SCT)</label>
+      <button type="button" class="z-info" data-zone="sct" aria-label="Zasady strefy czystego transportu">i</button>
+    </div>
+    <div class="z-note">Strefa płatnego parkowania pojawia się razem z parkingami.</div>
+  </div>
+</div>
+
 <aside id="panel" hidden>
   <button id="close" aria-label="Odznacz pojazd">×</button>
   <div class="line-badge" id="p-line"></div>
@@ -64,6 +83,17 @@
   <div id="ip-status" class="i-status"></div>
   <div id="ip-body" class="i-body"></div>
   <a id="ip-link" class="i-link" target="_blank" rel="noopener noreferrer" hidden>Więcej na infoulice.um.warszawa.pl</a>
+</aside>
+
+<aside id="zpanel" hidden>
+  <button id="zclose" aria-label="Zamknij zasady strefy">×</button>
+  <div class="p-head">
+    <div class="z-badge" id="zp-badge"></div>
+    <div class="meta"><div id="zp-name" class="p-name"></div><div id="zp-sub" class="p-addr"></div></div>
+  </div>
+  <dl id="zp-rows" class="p-rows"></dl>
+  <p id="zp-note" class="z-foot"></p>
+  <a id="zp-link" class="i-link" target="_blank" rel="noopener noreferrer"></a>
 </aside>
 
 <script src="vendor/leaflet.js"></script>
