@@ -1,8 +1,8 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { normalize, fetchVehicles, fetchParkings, normalizeParkings, fetchIncidents, normalizeIncidents, fetchFleet, normalizeFleet, fetchSport, normalizeSport, plainText, streetQuery, warsawDate } = require('../lib/warsaw');
-const { vehiclesHandler, parkingHandler, incidentsHandler, fleetHandler, sportHandler } = require('../lib/handler');
+const { normalize, fetchVehicles, fetchParkings, normalizeParkings, fetchIncidents, normalizeIncidents, fetchFleet, normalizeFleet, fetchSport, normalizeSport, fetchEvents, normalizeEvents, organizer, plainText, streetQuery, warsawDate } = require('../lib/warsaw');
+const { vehiclesHandler, parkingHandler, incidentsHandler, fleetHandler, sportHandler, eventsHandler } = require('../lib/handler');
 const { createGeocoder } = require('../lib/geocoding');
 
 const NOW = Date.parse('2026-10-01T12:00:30+02:00');
@@ -336,7 +336,7 @@ test('handler: rejects invalid types with 400 and non-GET methods with 405', asy
   assert.equal(mixed.status, 400);
   const dup = await call('/api/vehicles?types=1,1', { env: { MOCK: '1' } });
   assert.equal(dup.status, 200);
-  for (const handler of [vehiclesHandler, parkingHandler, incidentsHandler, fleetHandler, sportHandler]) {
+  for (const handler of [vehiclesHandler, parkingHandler, incidentsHandler, fleetHandler, sportHandler, eventsHandler]) {
     const r = await new Promise((resolve) => {
       const res = { headers: {}, statusCode: 200, setHeader(k, v) { this.headers[k] = v; }, end(b) { resolve({ status: this.statusCode, headers: this.headers, body: JSON.parse(b) }); } };
       handler({ url: '/x', method: 'POST' }, res, { env: { MOCK: '1' } });
@@ -575,4 +575,81 @@ test('worker: sport resource', async () => {
   const ok = await handle(new Request('https://w.dev/?resource=sport', { headers: { 'x-proxy-secret': 's' } }), { PROXY_SECRET: 's', WARSAW_API_KEY: 'TOK' },
     async (u, init) => { seen = { u, init }; return new Response('[]', { status: 200 }); });
   assert.equal(ok.status, 200); assert.equal(seen.u, 'https://dane.um.warszawa.pl/api/action/get_bmm_zajecia_sportowe'); assert.equal(seen.init.method, 'POST');
+});
+
+// ---- City events ("Kalendarz wydarzeń", layer "DziejeSię") ----
+// Records as the live API returned them on 2026-10-05 (text shortened), plus the example from the docs.
+const pt = (lon, lat, properties = {}) => ({ geometry: { coordinates: [lon, lat], type: 'Point' }, properties, type: 'Feature' });
+const LIVE_EVENTS = [
+  { address: [{ name: 'OCH-Teatr' }], availableLanguages: ['pl_PL'], category: [{ id: '34057', name: 'Kultura' }], image: { small: { path: 'http://um.warszawa.pl/x.png' } },
+    language: 'pl_PL', lead: 'Och-Teatr zaprasza na popremierowe spektakle „Oskarżonego” Jeffreya Archera.', localization: [{ id: '33974', name: 'Ochota' }],
+    map: { type: 'FeatureCollection', features: [pt(20.9799983868717, 52.2141938100175, { district: 'Ochota', fullStreetName: 'ulica Grójecka', shortStreetName: 'ul. Grójecka', streetNumber: '65' })] },
+    occurrence: [{ daily: false, from: '2027-01-29T19:00:00+01', to: '2027-01-29T21:00:00+01' }, { daily: false, from: '2026-01-29T19:00:00+01', to: '2026-01-29T21:00:00+01' }],
+    text: '<p>Zeznania świadków, podejrzenie romansu…</p>', title: 'Oskarżony – popremierowe spektakle', url: 'https://kultura.um.warszawa.pl/-/oskarzony-popremierowe-w-och-teatrze' },
+  { address: [{ name: 'Plac Czerwca 1976 roku' }], category: [{ id: '15731396', name: 'Historia' }, { id: '34079', name: 'Dla seniorów' }], localization: [{ id: '33987', name: 'Ursus' }],
+    map: { type: 'FeatureCollection', features: [pt(20.8941954845309, 52.1999348114248, {})] },
+    occurrence: [{ daily: true, from: '2026-12-14T00:00:00+01', to: '2026-12-14T23:59:59+01' }],
+    text: '<p>Na placu Czerwca 1976 roku odbędą się uroczystości.</p>', title: '45. rocznica ogłoszenia stanu wojennego', url: 'https://ursus.um.warszawa.pl/-/45-rocznica' },
+  { address: [{ name: 'Dom Kultury Zacisze', postCodeAndOffice: 'Warszawa', street: 'ul. Blokowa 1' }], title: 'Niepodległościowy Bal Kostiumowy',
+    occurrence: [{ daily: false, from: '2026-11-11T11:00:00+01', to: '2026-11-11T11:00:00+01' }],
+    map: { type: 'FeatureCollection', features: [1, 2, 3, 4, 5, 6].map(() => pt(21.071652391045, 52.2834103762377, { district: 'Targówek', shortStreetName: 'ul. Blokowa', streetNumber: '1' })) } },
+  { address: [{ name: 'Teatr Syrena', street: 'Litewska 3' }], language: 'pl_PL', title: 'Starzyński. Prezydent z pomnika', url: 'https://um.warszawa.pl/waw/80-rocznica/-/starzynski-prezydent-z-pomnika',
+    map: { type: 'FeatureCollection', features: [pt(21.038453, 52.252014, { district: 'Praga-Północ', shortStreetName: 'ul. Targowa', streetNumber: '56' }), pt(21.049415, 52.272562, { district: 'Targówek', shortStreetName: 'ul. Kołowa', streetNumber: '20' }), pt(21.022151, 52.216486, { district: 'Śródmieście', shortStreetName: 'ul. Litewska', streetNumber: '3' })] },
+    occurrence: [{ daily: true, from: '2026-02-26T00:00:00+01', to: '2027-02-26T23:59:59+01' }],
+    text: '<p>Legendarny prezydent Warszawy Stefan Starzyński w&nbsp;Teatrze Syrena.</p><p>Organizator: <a href="https://teatrsyrena.pl/" target="_blank">Teatr Syrena</a></p>' },
+  { address: [{ name: 'Szkoła Podstawowa nr 218', street: 'Michała Kajki 80/82' }], title: 'Bez punktu', occurrence: [{ daily: false, from: '2026-10-20T17:00:00+02', to: '2026-10-20T18:30:00+02' }] },
+  { title: 'Po terminie', occurrence: [{ daily: false, from: '2023-07-05T09:00:00+02', to: '2023-07-05T10:00:00+02' }], map: { type: 'FeatureCollection', features: [pt(21, 52.23)] } },
+  { title: 'Bez terminu', occurrence: [], map: { type: 'FeatureCollection', features: [pt(21, 52.23)] } },
+];
+
+test('events: live records normalise; times read from "+01" strings; past occurrences and events dropped', () => {
+  const out = normalizeEvents(LIVE_EVENTS, '2026-10-05');
+  assert.deepEqual(out.map((e) => e.title), ['Oskarżony – popremierowe spektakle', '45. rocznica ogłoszenia stanu wojennego', 'Niepodległościowy Bal Kostiumowy', 'Starzyński. Prezydent z pomnika', 'Bez punktu']);
+  const [och, ursus, bal, syrena, bez] = out;
+  assert.deepEqual(och.occurrences, [{ from: '2027-01-29', to: '2027-01-29', start: '19:00', end: '21:00' }]);
+  assert.equal(och.text, 'Och-Teatr zaprasza na popremierowe spektakle „Oskarżonego” Jeffreya Archera.'); // the lead
+  assert.deepEqual(och.points, [{ lat: 52.2141938100175, lon: 20.9799983868717, label: 'OCH-Teatr', street: 'ul. Grójecka 65', district: 'Ochota' }]);
+  assert.equal(och.district, 'Ochota'); assert.deepEqual(och.categories, ['Kultura']); assert.equal(och.located, 'map');
+  assert.deepEqual(ursus.occurrences, [{ from: '2026-12-14', to: '2026-12-14', start: '', end: '' }]); // daily: all day
+  assert.deepEqual(bal.occurrences[0], { from: '2026-11-11', to: '2026-11-11', start: '11:00', end: '' });
+  assert.equal(bal.points.length, 1); assert.equal(bal.points[0].label, 'Dom Kultury Zacisze'); // six copies of one point
+  assert.deepEqual(syrena.points.map((p) => p.label), ['ul. Targowa 56', 'ul. Kołowa 20', 'ul. Litewska 3']); // venue name only fits one place
+  assert.deepEqual(syrena.occurrences, [{ from: '2026-02-26', to: '2027-02-26', start: '', end: '' }]);
+  assert.equal(syrena.organizer, 'Teatr Syrena'); assert.equal(syrena.text, 'Legendarny prezydent Warszawy Stefan Starzyński w Teatrze Syrena.');
+  assert.deepEqual(bez.points, []); assert.deepEqual(bez.queries, ['Michała Kajki 80, Warszawa', 'Szkoła Podstawowa nr 218, Warszawa']);
+  assert.equal(organizer('<p>x</p><p>Organizatorzy: Dom Kultury, <b>OSiR</b>.</p>'), 'Dom Kultury, OSiR');
+  assert.equal(organizer('<p>bez</p>'), '');
+});
+
+test('events: direct POST to get_bmm_kalendarz_wydarzen; relay uses resource=wydarzenia; worker knows it', async () => {
+  let seen;
+  const f = async (url, opts) => { seen = { url, opts }; return { ok: true, json: async () => LIVE_EVENTS }; };
+  await fetchEvents({ apiKey: 'TOK', fetchImpl: f });
+  assert.equal(seen.url, 'https://dane.um.warszawa.pl/api/action/get_bmm_kalendarz_wydarzen'); assert.equal(seen.opts.method, 'POST');
+  await fetchEvents({ fetchImpl: f, upstream: { url: 'https://w.dev', secret: 's' } });
+  assert.equal(seen.url, 'https://w.dev?resource=wydarzenia');
+  const { handle } = await import('../worker/index.js');
+  let w;
+  const ok = await handle(new Request('https://w.dev/?resource=wydarzenia', { headers: { 'x-proxy-secret': 's' } }), { PROXY_SECRET: 's', WARSAW_API_KEY: 'T' },
+    async (u) => { w = u; return new Response('[]', { status: 200 }); });
+  assert.equal(ok.status, 200); assert.equal(w, 'https://dane.um.warszawa.pl/api/action/get_bmm_kalendarz_wydarzen');
+});
+
+test('events handler: mock mode places events (one from an address), drops the unplaceable; short cache while pending', async () => {
+  const call = (opts) => new Promise((resolve) => {
+    const res = { headers: {}, statusCode: 200, setHeader(k, v) { this.headers[k] = v; }, end(b) { resolve({ status: this.statusCode, body: JSON.parse(b), headers: this.headers }); } };
+    eventsHandler({ url: '/api/wydarzenia' }, res, opts);
+  });
+  const ok = await call({ env: { MOCK: '1' } });
+  assert.equal(ok.status, 200); assert.equal(ok.body.pending, 0); assert.equal(ok.body.unlocated, 1);
+  assert.ok(ok.body.items.every((e) => e.points.length && !('queries' in e) && !('lat' in e)));
+  const addr = ok.body.items.find((e) => e.located === 'address');
+  assert.equal(addr.title, 'Koncert w SP 218'); assert.equal(addr.points[0].label, 'Szkoła Podstawowa nr 218');
+  assert.ok(!JSON.stringify(ok.body).includes('<script'));
+  assert.match(ok.headers['Cache-Control'], /s-maxage=1800/);
+  let budget;
+  const live = await call({ env: { UPSTREAM_URL: 'https://w.dev' }, fetchImpl: async () => ({ ok: true, json: async () => LIVE_EVENTS }),
+    geo: { locate: async (items, o) => { budget = o.budgetMs; return 1; } } });
+  assert.equal(live.body.pending, 1); assert.equal(live.headers['Cache-Control'], 's-maxage=15'); assert.equal(budget, 5000);
+  assert.equal((await call({ env: {} })).status, 502);
 });

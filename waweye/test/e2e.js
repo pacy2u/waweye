@@ -419,6 +419,44 @@ function findChromium() {
       await page.screenshot({ path: `${SHOTS}/waweye-${label}-sport.png` });
       await page.click('#sfilter [data-range="today"]');
     });
+    await step(`${label}: DziejeSię shows today's events; one event in two places has a marker in each`, async () => {
+      await page.evaluate(() => { window.__waweye.map.setView([52.235, 21.02], 13, { animate: false }); });
+      await page.click('#t-events');
+      await page.waitForFunction(() => window.__waweye.state.eventMarkers.size > 0);
+      assert.equal(await page.getAttribute('#t-events', 'aria-pressed'), 'true');
+      const titles = await page.evaluate(() => [...window.__waweye.state.eventMarkers.values()].map((m) => m.place.entries.map((e) => e.it.title)));
+      assert.equal(titles.filter((t) => t.includes('Festiwal na dwóch scenach')).length, 2);
+      assert.ok(titles.flat().includes('Koncert w SP 218')); // placed from its address
+      assert.ok(!titles.flat().includes('Niepodległościowy Bal Kostiumowy')); // in 3 days
+      assert.match(await page.textContent('#status-text'), /DziejeSię: 4 dziś/);
+    });
+    await step(`${label}: event panel: term, organizer, "także w"; it excludes the sport panel`, async () => {
+      await page.evaluate(() => { const s = window.__waweye.state; window.__waweye.selectSport([...s.sportMarkers.keys()][0]); });
+      await page.evaluate(() => { const s = window.__waweye.state; window.__waweye.selectEvent([...s.eventMarkers.values()].find((m) => m.place.entries.some((e) => e.it.title.startsWith('Festiwal'))).place.id); });
+      assert.equal(await page.isVisible('#epanel'), true); assert.equal(await page.isVisible('#spanel'), false);
+      assert.equal(await page.textContent('#ep-list .s-title'), 'Festiwal na dwóch scenach');
+      const desc = await page.$$eval('#ep-list .s-desc', (els) => els.map((e) => e.textContent));
+      assert.ok(desc.includes('Organizator: Teatr Syrena')); assert.ok(desc.some((d) => /^Także w: ul\. (Litewska 3|Targowa 56)$/.test(d)));
+      assert.match(await page.getAttribute('#ep-list a', 'href'), /^https:\/\/um\.warszawa\.pl\//);
+      await page.evaluate(() => { const s = window.__waweye.state; window.__waweye.selectEvent([...s.eventMarkers.values()].find((m) => m.place.entries.some((e) => e.it.title.startsWith('Oskarżony'))).place.id); });
+      assert.equal(await page.textContent('#ep-list .s-when'), 'Dziś, 19:00–21:00'); // tomorrow's show is outside "Dziś"
+      await page.click('#eclose'); assert.equal(await page.isVisible('#epanel'), false);
+    });
+    await step(`${label}: one "Kiedy" row drives both layers; it stays while either layer is on`, async () => {
+      const count = () => page.evaluate(() => new Set([...window.__waweye.state.eventMarkers.values()].flatMap((m) => m.place.entries.map((e) => e.it.title))).size);
+      await page.click('#sfilter [data-range="week"]');
+      assert.equal(await count(), 5); // + the ball in 3 days
+      const wystawa = await page.evaluate(() => { const s = window.__waweye.state; window.__waweye.selectEvent([...s.eventMarkers.values()].find((m) => m.place.entries.some((e) => e.it.title.startsWith('Wystawa'))).place.id); return document.querySelector('#ep-list .s-when').textContent; });
+      assert.match(wystawa, /^do \d{1,2} [a-zżźćńółęąś]+\.?$/);
+      await page.click('#sfilter [data-range="tomorrow"]');
+      assert.equal(await count(), 2); // the play's second night and the running exhibition
+      assert.match(await page.textContent('#status-text'), /sport: 6 jutro · DziejeSię: 2 jutro/);
+      await page.click('#sfilter [data-range="today"]');
+      await page.click('#t-sport'); assert.equal(await page.isVisible('#sfilter'), true); // DziejeSię still on
+      await page.click('#t-events'); assert.equal(await page.isVisible('#sfilter'), false);
+      assert.equal(await page.locator('.ev').count(), 0);
+      await page.click('#t-sport');
+    });
     await step(`${label}: Sport button off hides markers, panel and filter`, async () => {
       await page.click('#t-sport');
       assert.equal(await page.locator('.sp').count(), 0);

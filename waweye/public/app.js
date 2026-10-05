@@ -2,7 +2,7 @@
 (function () {
   const POLL_MS = 10000, ANIM_MS = 900, LABEL_ZOOM = 14;
   const COLORS = { bus: '#2B2B33', tram: '#0073E6', sel: '#FC4C02' };
-  const state = { sport: false, sportItems: [], sportRange: 'today', selectedSport: null, sportMarkers: new Map(), sportError: null, sportMeta: null, inc: false, incidents: [], selectedInc: null, incLayers: new Map(), incError: null, park: false, parkings: [], selectedPark: null, parkMarkers: new Map(), parkError: null, types: { bus: true, tram: true }, query: '', selected: null, follow: false, markers: new Map(), lastOk: 0, data: [] };
+  const state = { range: 'today', events: false, eventItems: [], selectedEvent: null, eventMarkers: new Map(), eventError: null, eventMeta: null, sport: false, sportItems: [], selectedSport: null, sportMarkers: new Map(), sportError: null, sportMeta: null, inc: false, incidents: [], selectedInc: null, incLayers: new Map(), incError: null, park: false, parkings: [], selectedPark: null, parkMarkers: new Map(), parkError: null, types: { bus: true, tram: true }, query: '', selected: null, follow: false, markers: new Map(), lastOk: 0, data: [] };
 
   const map = L.map('map', { zoomControl: false, preferCanvas: true, minZoom: 9, maxZoom: 19 }).setView([52.2297, 21.0122], 12);
   L.control.zoom({ position: 'topright' }).addTo(map);
@@ -16,6 +16,7 @@
   const parkLayer = L.layerGroup();
   const incLayer = L.layerGroup();
   const sportLayer = L.layerGroup();
+  const eventLayer = L.layerGroup();
   const $ = (id) => document.getElementById(id);
 
   const radius = () => Math.max(4, Math.min(11, map.getZoom() - 6));
@@ -72,6 +73,7 @@
     if (state.selectedPark) deselectPark();
     if (state.selectedInc) deselectInc();
     if (state.selectedSport) deselectSport();
+    if (state.selectedEvent) deselectEvent();
     state.selected = id;
     const m = state.markers.get(id);
     if (!m) return;
@@ -158,14 +160,21 @@
     if (state.sportError) return ' · sport: ' + state.sportError;
     if (!state.sportMeta) return '';
     const n = state.sportMarkers.size ? [...state.sportMarkers.values()].reduce((k, m) => k + m.place.entries.length, 0) : 0;
-    return ` · sport: ${n} ${RANGE_TXT[state.sportRange]}${state.sportMeta.pending ? ', ustalanie adresów…' : ''}`;
+    return ` · sport: ${n} ${RANGE_TXT[state.range]}${state.sportMeta.pending ? ', ustalanie adresów…' : ''}`;
+  }
+  function eventStatus() {
+    if (!state.events) return '';
+    if (state.eventError) return ' · DziejeSię: ' + state.eventError;
+    if (!state.eventMeta) return '';
+    const n = new Set([...state.eventMarkers.values()].flatMap((m) => m.place.entries.map((e) => e.it.id))).size;
+    return ` · DziejeSię: ${n} ${RANGE_TXT[state.range]}${state.eventMeta.pending ? ', ustalanie adresów…' : ''}`;
   }
   function renderStatus() {
     const el = $('status'), t = $('status-text');
     if (!state.error && !state.lastOk) return; // still on the initial load
     const n = [...state.markers.values()].filter((m) => visible(m.v)).length; // computed now, never cached
     if (state.error) { el.className = 'err'; t.textContent = state.error; }
-    else if (state.lastOk) { el.className = 'ok'; t.textContent = `${n} pojazdów · ${new Date(state.lastOk).toLocaleTimeString('pl-PL')}${state.source === 'mock' ? ' · dane testowe' : ''}${state.parkError ? ' · parkingi: ' + state.parkError : ''}${state.incError ? ' · utrudnienia: ' + state.incError : ''}${sportStatus()}${zones.sctError ? ' · strefa czystego transportu: ' + zones.sctError : ''}${state.data.length === 0 && state.received > 0 ? ` · API zwróciło ${state.received}, wszystkie odrzucone (nieaktualne/poza Warszawą)` : state.data.length === 0 && state.received === 0 ? ' · API zwróciło pustą listę' : ''}`; }
+    else if (state.lastOk) { el.className = 'ok'; t.textContent = `${n} pojazdów · ${new Date(state.lastOk).toLocaleTimeString('pl-PL')}${state.source === 'mock' ? ' · dane testowe' : ''}${state.parkError ? ' · parkingi: ' + state.parkError : ''}${state.incError ? ' · utrudnienia: ' + state.incError : ''}${sportStatus()}${eventStatus()}${zones.sctError ? ' · strefa czystego transportu: ' + zones.sctError : ''}${state.data.length === 0 && state.received > 0 ? ` · API zwróciło ${state.received}, wszystkie odrzucone (nieaktualne/poza Warszawą)` : state.data.length === 0 && state.received === 0 ? ' · API zwróciło pustą listę' : ''}`; }
   }
 
   // Smooth movement between polls.
@@ -256,6 +265,7 @@
     if (state.selectedInc) deselectInc();
     closeZone();
     if (state.selectedSport) deselectSport();
+    if (state.selectedEvent) deselectEvent();
     state.selectedPark = id; fillParkPanel(p); $('ppanel').hidden = false; renderParkings();
   }
   function deselectPark() {
@@ -330,6 +340,7 @@
     if (state.selectedPark) deselectPark();
     closeZone();
     if (state.selectedSport) deselectSport();
+    if (state.selectedEvent) deselectEvent();
     state.selectedInc = id; fillIncPanel(i); $('ipanel').hidden = false; renderIncidents();
   }
   function deselectInc() {
@@ -437,6 +448,7 @@
     if (state.selectedPark) deselectPark();
     if (state.selectedInc !== null) deselectInc();
     if (state.selectedSport) deselectSport();
+    if (state.selectedEvent) deselectEvent();
     zones.open = kind;
     $('zp-badge').className = 'z-badge ' + kind; $('zp-badge').textContent = z.badge;
     $('zp-name').textContent = z.name; $('zp-sub').textContent = z.sub;
@@ -475,7 +487,7 @@
   const plural = (n, one, few, many) => (n === 1 ? one : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? few : many);
   function rangeDays() {
     const t = warsawToday();
-    return state.sportRange === 'today' ? [t] : state.sportRange === 'tomorrow' ? [addDays(t, 1)] : [0, 1, 2, 3, 4, 5, 6].map((n) => addDays(t, n));
+    return state.range === 'today' ? [t] : state.range === 'tomorrow' ? [addDays(t, 1)] : [0, 1, 2, 3, 4, 5, 6].map((n) => addDays(t, n));
   }
   // Dated classes happen on their dates; the others every week on their weekdays.
   const occurrences = (it, days) => days.filter((d) => (it.dates.length ? it.dates.includes(d) : it.days.includes(weekday(d))));
@@ -520,7 +532,7 @@
     const name = first.place || first.address || first.district || 'Zajęcia sportowe';
     $('sp-name').textContent = name;
     const n = p.entries.length;
-    const count = n === 1 ? `zajęcia ${RANGE_TXT[state.sportRange]}` : `${n} ${plural(n, '', 'zajęcia', 'zajęć')} ${RANGE_TXT[state.sportRange]}`;
+    const count = n === 1 ? `zajęcia ${RANGE_TXT[state.range]}` : `${n} ${plural(n, '', 'zajęcia', 'zajęć')} ${RANGE_TXT[state.range]}`;
     $('sp-addr').textContent = [first.address !== name && first.address, first.district !== name && first.district, count].filter(Boolean).join(' · ');
     const ul = $('sp-list'); ul.textContent = '';
     const span = (cls, txt) => { const e = document.createElement('span'); e.className = cls; e.textContent = txt; return e; };
@@ -547,6 +559,7 @@
     if (state.selectedPark) deselectPark();
     if (state.selectedInc !== null) deselectInc();
     closeZone();
+    if (state.selectedEvent) deselectEvent();
     state.selectedSport = id; fillSportPanel(m.place); $('spanel').hidden = false; $('spanel').scrollTop = 0; renderSport();
   }
   function deselectSport() {
@@ -573,20 +586,137 @@
   function toggleSport(btn) {
     state.sport = !state.sport;
     btn.classList.toggle('on', state.sport); btn.setAttribute('aria-pressed', state.sport);
-    $('sfilter').hidden = !state.sport; document.body.classList.toggle('sport-on', state.sport);
+    showWhen();
     if (state.sport) { sportLayer.addTo(map); pollSport(); }
     else { map.removeLayer(sportLayer); if (state.selectedSport) deselectSport(); state.sportError = null; clearTimeout(sportRetry); renderStatus(); }
   }
   $('t-sport').onclick = (e) => toggleSport(e.currentTarget);
   for (const b of document.querySelectorAll('#sfilter button')) {
     b.onclick = () => {
-      state.sportRange = b.dataset.range;
+      state.range = b.dataset.range;
       for (const x of document.querySelectorAll('#sfilter button')) { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b); }
-      renderSport(); renderStatus();
+      renderSport(); renderEvents(); renderStatus();
     };
   }
   $('sclose').onclick = deselectSport;
+  // One "Kiedy" row (Dziś / Jutro / 7 dni) serves both Sport and DziejeSię.
+  function showWhen() {
+    const on = state.sport || state.events;
+    $('sfilter').hidden = !on; document.body.classList.toggle('when-on', on);
+  }
   setInterval(pollSport, 30 * 60000); // the dataset is updated every 2 h
+
+
+  // ---- City events ("DziejeSię", dataset "Kalendarz wydarzeń"); an event held in several places has a marker in each ----
+  const TICKET_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 7.5A1.5 1.5 0 0 1 4 6h16a1.5 1.5 0 0 1 1.5 1.5V10a2 2 0 0 0 0 4v2.5A1.5 1.5 0 0 1 20 18H4a1.5 1.5 0 0 1-1.5-1.5V14a2 2 0 0 0 0-4z" fill="currentColor"/><path d="M15 7.5v9" stroke="var(--picon-bg)" stroke-width="1.8" stroke-dasharray="1.8 1.6"/></svg>';
+  const shortDate = (d) => new Date(d + 'T12:00:00Z').toLocaleDateString('pl-PL', { timeZone: 'UTC', day: 'numeric', month: 'short' });
+  // Occurrences that touch the chosen days (by date only; times are shown, not filtered on).
+  const eventOcc = (it, days) => it.occurrences.filter((o) => o.from <= days[days.length - 1] && o.to >= days[0]);
+  function occLabel(o) {
+    const t = warsawToday();
+    if (o.from !== o.to) return o.from <= t ? `do ${shortDate(o.to)}` : `${shortDate(o.from)} – ${shortDate(o.to)}`;
+    const day = dayLabel(o.from);
+    return `${day}${o.start ? ', ' + o.start + (o.end ? '–' + o.end : '') : ''}`;
+  }
+  function eventPlaces() {
+    const days = rangeDays(), places = new Map();
+    for (const it of state.eventItems) {
+      const occ = eventOcc(it, days); if (!occ.length) continue;
+      for (const pt of it.points) {
+        const key = `ev-${pt.lat.toFixed(4)},${pt.lon.toFixed(4)}`;
+        let p = places.get(key);
+        if (!p) places.set(key, (p = { id: key, lat: pt.lat, lon: pt.lon, entries: [] }));
+        if (!p.entries.some((e) => e.it === it)) p.entries.push({ it, occ, pt });
+      }
+    }
+    for (const p of places.values()) p.entries.sort((a, b) => (a.occ[0].from + a.occ[0].start).localeCompare(b.occ[0].from + b.occ[0].start));
+    return places;
+  }
+  const evIcon = (p) => L.divIcon({ className: '', iconSize: null, iconAnchor: [16, 12],
+    html: `<div class="ev ${state.selectedEvent === p.id ? 'sel' : ''}">${TICKET_ICON}${p.entries.length > 1 ? p.entries.length : ''}</div>` });
+
+  function renderEvents() {
+    const places = eventPlaces();
+    for (const [id, m] of state.eventMarkers) if (!places.has(id)) { eventLayer.removeLayer(m); state.eventMarkers.delete(id); }
+    for (const p of places.values()) {
+      let m = state.eventMarkers.get(p.id);
+      if (!m) {
+        m = L.marker([p.lat, p.lon], { icon: evIcon(p), zIndexOffset: 760, keyboard: false, title: p.entries.map((e) => e.it.title).join(', ') });
+        m.on('click', (e) => { L.DomEvent.stopPropagation(e); selectEvent(p.id); });
+        m.addTo(eventLayer); state.eventMarkers.set(p.id, m);
+      } else m.setIcon(evIcon(p));
+      m.place = p;
+    }
+    if (state.selectedEvent) { const p = places.get(state.selectedEvent); if (p) fillEventPanel(p); else deselectEvent(); }
+  }
+
+  function fillEventPanel(p) {
+    const { it: first, pt } = p.entries[0];
+    const name = pt.label || first.venue || pt.street || first.district || 'Wydarzenie';
+    const district = pt.district || first.district;
+    $('ep-name').textContent = name;
+    const n = p.entries.length;
+    $('ep-addr').textContent = [pt.street !== name && pt.street, district !== name && district,
+      `${n === 1 ? 'wydarzenie' : `${n} ${plural(n, '', 'wydarzenia', 'wydarzeń')}`} ${RANGE_TXT[state.range]}`].filter(Boolean).join(' · ');
+    const ul = $('ep-list'); ul.textContent = '';
+    const span = (cls, txt) => { const e = document.createElement('span'); e.className = cls; e.textContent = txt; return e; };
+    for (const { it, occ } of p.entries) {
+      const li = document.createElement('li');
+      const more = occ.length > 1 ? ` (+${occ.length - 1} ${plural(occ.length - 1, 'termin', 'terminy', 'terminów')})` : '';
+      li.append(span('s-when', occLabel(occ[0]) + more), span('s-title', it.title));
+      if (it.categories.length) { const t = span('s-tags', ''); for (const x of it.categories) t.appendChild(span('', x)); li.appendChild(t); }
+      if (it.text) li.appendChild(span('s-desc', it.text.length > 160 ? it.text.slice(0, 157).replace(/\s+\S*$/, '') + '…' : it.text));
+      if (it.organizer) li.appendChild(span('s-desc', 'Organizator: ' + it.organizer));
+      const here = (x) => x.lat.toFixed(4) === p.lat.toFixed(4) && x.lon.toFixed(4) === p.lon.toFixed(4);
+      const others = [...new Set(it.points.filter((x) => !here(x)).map((x) => x.label || x.street).filter(Boolean))];
+      if (others.length) li.appendChild(span('s-desc', 'Także w: ' + others.join(', ')));
+      if (it.url) {
+        const a = document.createElement('a'); a.href = it.url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+        a.textContent = 'Więcej na ' + new URL(it.url).hostname.replace(/^www\./, '') + ' ↗'; li.appendChild(a);
+      }
+      ul.appendChild(li);
+    }
+  }
+  function selectEvent(id) {
+    const m = state.eventMarkers.get(id); if (!m) return;
+    if (state.selected) deselect();
+    if (state.selectedPark) deselectPark();
+    if (state.selectedInc !== null) deselectInc();
+    if (state.selectedSport) deselectSport();
+    closeZone();
+    state.selectedEvent = id; fillEventPanel(m.place); $('epanel').hidden = false; $('epanel').scrollTop = 0; renderEvents();
+  }
+  function deselectEvent() {
+    state.selectedEvent = null; $('epanel').hidden = true; renderEvents();
+  }
+
+  let eventRetry = 0;
+  async function pollEvents() {
+    if (!state.events || document.hidden) return;
+    clearTimeout(eventRetry);
+    try {
+      const res = await fetch('/api/wydarzenia', { cache: 'no-store' });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || 'HTTP ' + res.status);
+      state.eventError = null; state.eventItems = body.items; state.eventMeta = { pending: body.pending, unlocated: body.unlocated };
+      renderEvents();
+      if (body.pending) eventRetry = setTimeout(pollEvents, 20000); // the server is still looking up addresses
+    } catch (e) {
+      state.eventError = 'brak danych (' + e.message + ')';
+      eventRetry = setTimeout(pollEvents, 60000); // a passing upstream error should not leave the layer empty for 30 min
+    }
+    renderStatus();
+  }
+  function toggleEvents(btn) {
+    state.events = !state.events;
+    btn.classList.toggle('on', state.events); btn.setAttribute('aria-pressed', state.events);
+    showWhen();
+    if (state.events) { eventLayer.addTo(map); pollEvents(); }
+    else { map.removeLayer(eventLayer); if (state.selectedEvent) deselectEvent(); state.eventError = null; clearTimeout(eventRetry); renderStatus(); }
+  }
+  $('t-events').onclick = (e) => toggleEvents(e.currentTarget);
+  $('eclose').onclick = deselectEvent;
+  setInterval(pollEvents, 30 * 60000); // the dataset is updated every 2 h
 
   // ---- My location, after Google Maps: the button finds the user and zooms in; the map stays on them until they drag it ----
   const ME_ZOOM = 16, ME_BLUE = '#1A73E8', WARSAW = L.latLngBounds([51.9, 20.5], [52.6, 21.6]); // same box as lib/warsaw.js
@@ -690,11 +820,11 @@
   // Like Google's button riding on top of the bottom sheet: lift it above an open panel that covers it (phones).
   function liftLocate() {
     const b = $('locate'), br = b.getBoundingClientRect();
-    const tops = ['panel', 'ppanel', 'ipanel', 'spanel', 'zpanel'].map($).filter((p) => !p.hidden).map((p) => p.getBoundingClientRect())
+    const tops = ['panel', 'ppanel', 'ipanel', 'spanel', 'epanel', 'zpanel'].map($).filter((p) => !p.hidden).map((p) => p.getBoundingClientRect())
       .filter((r) => r.right > br.left && r.left < br.right).map((r) => r.top);
     b.style.bottom = tops.length ? `${document.documentElement.clientHeight - Math.min(...tops) + 10}px` : '';
   }
-  if (window.ResizeObserver) { const ro = new ResizeObserver(liftLocate); for (const id of ['panel', 'ppanel', 'ipanel', 'spanel', 'zpanel']) ro.observe($(id)); }
+  if (window.ResizeObserver) { const ro = new ResizeObserver(liftLocate); for (const id of ['panel', 'ppanel', 'ipanel', 'spanel', 'epanel', 'zpanel']) ro.observe($(id)); }
   window.addEventListener('resize', liftLocate);
 
   function toggleType(key, btn) {
@@ -711,15 +841,15 @@
     if (state.follow && me.centered) setCentered(false); // following a vehicle takes the map off the user
     const s = state.markers.get(state.selected); if (state.follow && s) map.setView(s.mk.getLatLng(), Math.max(map.getZoom(), 15));
   };
-  map.on('click', () => { if (state.selected) deselect(); if (state.selectedPark) deselectPark(); if (state.selectedInc !== null) deselectInc(); if (state.selectedSport) deselectSport(); closeZone(); showZoneMenu(false); });
+  map.on('click', () => { if (state.selected) deselect(); if (state.selectedPark) deselectPark(); if (state.selectedInc !== null) deselectInc(); if (state.selectedSport) deselectSport(); if (state.selectedEvent) deselectEvent(); closeZone(); showZoneMenu(false); });
   map.on('zoomend moveend', refresh);
 
-  window.__waweye = { state, zones, me, map, poll, select, deselect, selectPark, deselectPark, selectInc, deselectInc, selectSport, deselectSport, openZone, closeZone };
+  window.__waweye = { state, zones, me, map, poll, select, deselect, selectPark, deselectPark, selectInc, deselectInc, selectSport, deselectSport, selectEvent, deselectEvent, openZone, closeZone };
   poll(); setInterval(poll, POLL_MS);
   // Polling and location tracking pause while the tab is hidden (saves requests, transfer and battery) and catch up when it is shown again.
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) stopWatch();
-    else { poll(); pollParkings(); pollIncidents(); pollSport(); if (me.active) startWatch(); }
+    else { poll(); pollParkings(); pollIncidents(); pollSport(); pollEvents(); if (me.active) startWatch(); }
   });
   requestAnimationFrame(frame);
 })();

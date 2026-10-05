@@ -6,6 +6,7 @@ const INCIDENTS_ENDPOINT = 'https://dane.um.warszawa.pl/api/action/get_bin_utrud
 const FLEET_ENDPOINT = 'https://dane.um.warszawa.pl/api/action/get_ztm_pojazdy';
 const PARKING_ENDPOINT = 'https://dane.um.warszawa.pl/api/action/get_m_parkingi_wolne_miejsca';
 const SPORT_ENDPOINT = 'https://dane.um.warszawa.pl/api/action/get_bmm_zajecia_sportowe';
+const EVENTS_ENDPOINT = 'https://dane.um.warszawa.pl/api/action/get_bmm_kalendarz_wydarzen';
 const TYPES = { 1: 'bus', 2: 'tram' };
 const MAX_AGE_MS = 5 * 60 * 1000;
 const BBOX = { minLat: 51.9, maxLat: 52.6, minLon: 20.5, maxLon: 21.6 };
@@ -321,6 +322,72 @@ async function fetchSport({ apiKey, fetchImpl = fetch, upstream }) {
   return requestList({ endpoint: SPORT_ENDPOINT, relayQuery: 'resource=sport', extract: extractIncidents, apiKey, fetchImpl, upstream });
 }
 
+// ---- City events ("Kalendarz wydarzeń", calendar of um.warszawa.pl, updated every 2 h), layer "DziejeSię" ----
+// Like the sport classes, but: "occurrence" lists {from, to, daily} with times as "2027-01-29T19:00:00+01" (Warsaw
+// local time with a short offset, which Date.parse rejects, so dates and times are read from the string); "map" may
+// hold several points, often the same one repeated; "lead" is a short plain summary.
+const OCC_RE = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/;
+function normalizeOccurrence(o) {
+  const f = OCC_RE.exec(str(o && o.from)), t = OCC_RE.exec(str(o && o.to)) || f;
+  if (!f) return null;
+  const allDay = o.daily === true || (f[2] === '00:00' && t[2] === '23:59');
+  const [from, to] = f[1] <= t[1] ? [f[1], t[1]] : [t[1], f[1]];
+  return { from, to, start: allDay ? '' : f[2], end: allDay || t[2] === f[2] ? '' : t[2] };
+}
+
+// "Organizator: <a …>Teatr Syrena</a>" at the end of the description.
+function organizer(html) {
+  const m = /Organizator(?:zy|ów)?\s*:\s*([\s\S]*?)(?:<\/p>|<br\s*\/?>|$)/i.exec(String(html || ''));
+  return m ? plainText(m[1]).replace(/[.;,\s]+$/, '').slice(0, 120) : '';
+}
+
+function normalizeEvents(raw, today = warsawDate()) {
+  const out = [];
+  raw.forEach((r, i) => {
+    if (!r || typeof r !== 'object') return;
+    const occurrences = (Array.isArray(r.occurrence) ? r.occurrence : Array.isArray(r.occurence) ? r.occurence : [])
+      .map(normalizeOccurrence).filter((o) => o && o.to >= today)
+      .sort((a, b) => (a.from + a.start).localeCompare(b.from + b.start)).slice(0, 40);
+    if (!occurrences.length) return; // over, or no date at all
+    const addr = (Array.isArray(r.address) ? r.address : [r.address]).find((a) => a && typeof a === 'object') || {};
+    const seen = new Set(), points = [];
+    for (const f of (r.map && Array.isArray(r.map.features)) ? r.map.features : []) {
+      const c = f && f.geometry && f.geometry.type === 'Point' && Array.isArray(f.geometry.coordinates) ? f.geometry.coordinates : null;
+      const lat = c && Number(c[1]), lon = c && Number(c[0]);
+      if (!c || !inBox(lat, lon)) continue;
+      const key = `${lat.toFixed(5)},${lon.toFixed(5)}`;
+      if (seen.has(key)) continue; // the same point is often listed several times
+      seen.add(key);
+      const p = f.properties || {};
+      points.push({ lat, lon, street: [str(p.shortStreetName), str(p.streetNumber)].filter(Boolean).join(' '), details: str(p.details), district: str(p.district) });
+    }
+    const one = points.length === 1;
+    const item = {
+      id: `e-${i}-${str(r.url).split('/').pop() || i}`.slice(0, 120),
+      title: str(r.title) || 'Wydarzenie',
+      url: httpUrl(r.url),
+      categories: names(r.category),
+      district: names(r.localization)[0] || (points[0] && points[0].district) || '',
+      venue: str(addr.name),
+      address: [str(addr.street), str(addr.postCodeAndOffice).replace(/\s*,\s*/, ' ').replace(/^Warszawa$/, '')].filter(Boolean).join(', '),
+      organizer: organizer(r.text),
+      text: (str(r.lead) ? plainText(r.lead) : plainText(String(r.text || '').replace(/<p>\s*Organizator[\s\S]*?<\/p>/gi, ' '))).slice(0, 400),
+      occurrences,
+      // One entry per place on the map; the venue name only fits when there is a single place.
+      points: points.map((p) => ({ lat: p.lat, lon: p.lon, label: p.details || (one && str(addr.name)) || p.street || str(addr.name), street: p.street, district: p.district })),
+      located: points.length ? 'map' : '',
+    };
+    if (!points.length) item.queries = [...new Set([streetQuery(addr.street), str(addr.name) && `${str(addr.name)}, Warszawa`].filter(Boolean))];
+    out.push(item);
+  });
+  return out;
+}
+
+async function fetchEvents({ apiKey, fetchImpl = fetch, upstream }) {
+  if (!apiKey && !upstream) throw new Error('Missing WARSAW_API_KEY');
+  return requestList({ endpoint: EVENTS_ENDPOINT, relayQuery: 'resource=wydarzenia', extract: extractIncidents, apiKey, fetchImpl, upstream });
+}
+
 async function fetchVehicles({ apiKey, types = [1, 2], fetchImpl = fetch, upstream }) {
   if (!apiKey && !upstream) throw new Error('Missing WARSAW_API_KEY');
   const settled = await Promise.allSettled(types.map((t) => fetchType(t, apiKey, fetchImpl, upstream)));
@@ -334,4 +401,4 @@ async function fetchVehicles({ apiKey, types = [1, 2], fetchImpl = fetch, upstre
   return { vehicles, errors, received };
 }
 
-module.exports = { fetchVehicles, fetchParkings, fetchIncidents, fetchFleet, fetchSport, normalize, normalizeFleet, normalizeParkings, normalizeIncidents, normalizeSport, plainText, streetQuery, warsawDate, TYPES };
+module.exports = { fetchVehicles, fetchParkings, fetchIncidents, fetchFleet, fetchSport, fetchEvents, normalize, normalizeFleet, normalizeParkings, normalizeIncidents, normalizeSport, normalizeEvents, organizer, plainText, streetQuery, warsawDate, TYPES };
