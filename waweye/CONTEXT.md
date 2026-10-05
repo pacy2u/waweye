@@ -41,7 +41,7 @@ przeglądarka (Leaflet, public/app.js)
 ```
 - `lib/warsaw.js` – pobieranie, normalizacja (pojazdy, parkingi, utrudnienia, zajęcia sportowe); `lib/geocoding.js` – adres → współrzędne (Nominatim), parsowanie czasu Europe/Warsaw, ponowienia, czytelne błędy.
 - `lib/handler.js` – handlery wspólne dla Vercel i `dev-server.js`; `lib/mock.js` – dane symulowane (`MOCK=1`).
-- `worker/index.js` – kod Workera. **Po każdej zmianie tego pliku trzeba ręcznie wkleić go w Cloudflare (Edit code → Deploy)**; Vercel go nie wdraża.
+- `worker/index.js` – kod Workera. Wdraża go workflow `waweye-wdrozenie-workera.yml` po merge'u zmian w `worker/` do `main` (albo Run workflow); Vercel go nie wdraża. **Nie wkleja się go ręcznie i nie klika Deploy w edytorze Cloudflare** (nadpisałoby wersję z repo). 2026-10-05 automatyczne uruchomienia dwa razy utknęły w kolejce GitHub Actions i zostały anulowane po 15 min; pomogło Re-run all jobs.
 - `public/` – front bez bundlera; Leaflet lokalnie w `public/vendor/`.
 
 ## Zmienne / sekrety (tylko nazwy, wartości NIGDY w repo)
