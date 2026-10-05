@@ -85,7 +85,81 @@
     for (const x of state.markers.values()) if (x.label) { x.label.remove(); x.label = null; }
     loadFleet();
     fillFleet(v);
+    showRoute(v);
     refresh();
+  }
+
+  // ---- Route of the selected vehicle's line (public/data/trasy/<line>.json from the ZTM GTFS, scripts/trasy.js) ----
+  // Drawn on the vehicles' canvas under them: the line in the selection colour, stops as small circles (tap or hover shows
+  // the name). The variant follows the vehicle's movement (public/trasa.js); until it moves, both directions are shown.
+  const route = { vehicle: null, line: null, data: null, error: null, track: [], shown: [], known: false, cache: new Map() };
+  const routeLayer = L.layerGroup().addTo(map);
+  const routeDate = (ymd) => new Date(ymd + 'T12:00:00Z').toLocaleDateString('pl-PL', { day: 'numeric', month: 'numeric', year: 'numeric', timeZone: 'UTC' });
+  async function loadRoute(line) {
+    if (route.cache.has(line)) return route.cache.get(line);
+    const p = fetch('/data/trasy/' + encodeURIComponent(line) + '.json').then((res) => {
+      if (res.status === 404) return null; // the line is not in the timetable (e.g. a new or replacement line)
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json();
+    });
+    route.cache.set(line, p);
+    p.catch(() => route.cache.delete(line)); // try again on the next selection
+    return p;
+  }
+  function showRoute(v) {
+    if (route.vehicle !== v.id) { route.vehicle = v.id; route.track = [[v.lat, v.lon]]; route.shown = []; }
+    route.line = v.line; route.data = null; route.error = null;
+    routeLayer.clearLayers(); renderRoutePanel();
+    loadRoute(v.line).then((data) => {
+      if (route.vehicle !== v.id) return;
+      route.data = data; route.error = data ? null : 'brak trasy tej linii w rozkładzie ZTM';
+      if (data) updateRoute(true); else renderRoutePanel();
+    }, (e) => { if (route.vehicle === v.id) { route.error = 'nie udało się wczytać trasy (' + e.message + ')'; renderRoutePanel(); } });
+  }
+  function updateRoute(force = false) {
+    const m = route.vehicle && state.markers.get(route.vehicle);
+    if (!m) return;
+    const last = route.track[route.track.length - 1];
+    if (!last || last[0] !== m.v.lat || last[1] !== m.v.lon) { route.track.push([m.v.lat, m.v.lon]); if (route.track.length > 6) route.track.shift(); }
+    if (!route.data) return;
+    const pick = wawTrasa.chooseVariants(route.data.variants, route.track);
+    const same = pick.variants.length === route.shown.length && pick.variants.every((v, i) => v === route.shown[i]);
+    route.known = pick.known;
+    if (same && !force) { renderRoutePanel(); return; }
+    route.shown = pick.variants;
+    routeLayer.clearLayers();
+    const lines = [], stops = [];
+    for (const v of route.shown) {
+      lines.push(L.polyline(v.shape, { renderer: canvas, interactive: false, color: COLORS.sel, weight: 5, opacity: route.shown.length > 1 ? 0.5 : 0.75, lineJoin: 'round' }).addTo(routeLayer));
+      for (const [name, lat, lon] of v.stops) {
+        const st = L.circleMarker([lat, lon], { renderer: canvas, radius: 4, color: COLORS.sel, weight: 2, fillColor: '#fff', fillOpacity: 1 })
+          .bindTooltip(name, { direction: 'top', offset: [0, -4], className: 'stop-tip' }).addTo(routeLayer);
+        st.on('click', (e) => { L.DomEvent.stopPropagation(e); st.openTooltip(); });
+        stops.push(st);
+      }
+    }
+    // Stops above the line, both under the vehicles (canvas draws in order).
+    for (const st of stops) st.bringToBack();
+    for (const l of lines) l.bringToBack();
+    renderRoutePanel();
+  }
+  function clearRoute() { route.vehicle = null; route.data = null; route.error = null; route.shown = []; route.track = []; routeLayer.clearLayers(); renderRoutePanel(); }
+  function renderRoutePanel() {
+    const el = $('p-route');
+    if (!route.vehicle) { el.hidden = true; return; }
+    el.hidden = false; el.className = 'p-route';
+    if (route.error) { el.textContent = 'Trasa: ' + route.error; return; }
+    if (!route.data) { el.textContent = 'Trasa: wczytywanie…'; return; }
+    const d = route.data, valid = d.valid;
+    const dirTxt = route.known && route.shown.length === 1
+      ? `Kierunek: ${route.shown[0].headsign} · ${route.shown[0].stops.length} przystanków`
+      : `Kierunek: ustalę, gdy pojazd ruszy · na mapie ${route.shown.length > 1 ? 'oba kierunki' : 'trasa linii'}`;
+    const old = wawTrasa.expired(valid, warsawToday());
+    el.textContent = '';
+    const a = document.createElement('div'); a.textContent = dirTxt;
+    const b = document.createElement('div'); b.className = 'p-route-src' + (old ? ' old' : '');
+    b.textContent = valid ? (old ? `Rozkład ZTM ważny do ${routeDate(valid.to)} – trasa może być nieaktualna` : `Trasa wg rozkładu ZTM (GTFS) ważnego do ${routeDate(valid.to)}`) : 'Trasa wg rozkładu ZTM (GTFS)';
+    el.append(a, b);
   }
 
   // ---- Fleet details (dataset "Pojazdy transportu publicznego"), fetched once on first selection ----
@@ -143,6 +217,7 @@
   function deselect() {
     state.selected = null; state.follow = false; $('follow').classList.remove('on');
     $('panel').hidden = true;
+    clearRoute();
     for (const x of state.markers.values()) if (x.label) { x.label.remove(); x.label = null; }
     refresh();
   }
@@ -205,6 +280,7 @@
       if (!res.ok) throw new Error(body.error || 'HTTP ' + res.status);
       state.error = null; state.lastOk = body.updated; state.source = body.source; state.received = body.received;
       sync(body.vehicles, new Set(types.map((t) => (t === 1 ? 'bus' : 'tram'))));
+      if (state.selected) updateRoute();
     } catch (e) {
       state.error = 'Brak danych: ' + e.message + (state.lastOk ? ' (pokazuję ostatnie)' : '');
       renderStatus();
@@ -847,7 +923,7 @@
   map.on('click', () => { if (state.selected) deselect(); if (state.selectedPark) deselectPark(); if (state.selectedInc !== null) deselectInc(); if (state.selectedSport) deselectSport(); if (state.selectedEvent) deselectEvent(); closeZone(); showZoneMenu(false); });
   map.on('zoomend moveend', refresh);
 
-  window.__waweye = { state, zones, me, map, poll, select, deselect, selectPark, deselectPark, selectInc, deselectInc, selectSport, deselectSport, selectEvent, deselectEvent, openZone, closeZone };
+  window.__waweye = { state, zones, me, map, poll, select, deselect, selectPark, deselectPark, selectInc, deselectInc, selectSport, deselectSport, selectEvent, deselectEvent, openZone, closeZone, route };
   poll(); setInterval(poll, POLL_MS);
   // Polling and location tracking pause while the tab is hidden (saves requests, transfer and battery) and catch up when it is shown again.
   document.addEventListener('visibilitychange', () => {

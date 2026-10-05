@@ -101,7 +101,8 @@ Cel: po kliknięciu pojazdu widać trasę linii i przystanki; z linku można wr�
 |---|---|---|
 | **Rozpoznanie źródła tras i przystanków – tylko oficjalne zbiory miasta** (decyzja). Do sprawdzenia na `dane.um.warszawa.pl`: odpowiedniki starych `public_transport_routes` (przebieg linii jako lista przystanków) i `dbtimetable_get` (przystanki, rozkłady). Jeśli miasto nie publikuje kształtu trasy, rysujemy linię przez kolejne przystanki | bez tego nie ma tras ani odjazdów; po dodaniu domeny do środowiska rozpoznanie da się zrobić w sesji | M |
 | Dane linii z długim cache (zbiory rozkładowe zmieniają się rzadko): endpoint przez Workera z cache na krawędzi na dobę, ewentualnie pliki JSON per linia generowane raz dziennie w Actions | bez bazy danych i w darmowych progach | M |
-| Trasa wybranej linii na mapie + przystanki na trasie | pierwotny wymóg produktu | M |
+| Trasa wybranej linii na mapie + przystanki na trasie | pierwotny wymóg produktu | M – **zrobione 2026-10-05** (gałąź `funkcja/trasa-wybranej-linii`): GTFS ZTM pobrany ręcznie, `scripts/trasy.js` → `public/data/trasy/`, kierunek z ruchu pojazdu |
+| **Automatyczne odświeżanie tras z GTFS ZTM** | rozkład w GTFS obejmuje ok. 10 dni, a zasady ZTM wymagają aktualności; dziś odświeżanie jest ręczne (właściciel pobiera plik w przeglądarce) | M – sprawdzić, czy `gtfs.ztm.waw.pl` odpowiada Workerowi Cloudflare w Europie albo funkcji Vercel (fra1); jeśli nie, strona narzędziowa przetwarzająca ZIP w przeglądarce właściciela |
 | Warstwa przystanków (od zoomu ~15) z panelem: nazwa, linie | punkt wyjścia do odjazdów w Fazie 2 | M |
 | Linki do stanu (`?linia=175`, `?pojazd=1-1234`) | udostępnianie („gdzie jest mój autobus”), zakładki | S |
 | Metro M1/M2: statyczne linie i stacje (oficjalny zbiór, jeśli istnieje; inaczej geometria z OSM, licencja ODbL – to mapa, nie rozkład) | luka w obrazie komunikacji; API pojazdów nie ma metra | S |
