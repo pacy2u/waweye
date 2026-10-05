@@ -2,6 +2,7 @@
 // Cloudflare Worker operations for the wawEye migration (PLAN_MIGRACJI_WAWEYE.md),
 // run by .github/workflows/waweye-operacje-cloudflare.yml:
 //   node scripts/cloudflare-ops.js <operation> [worker] [confirmation]
+// podepnij-kv is run by .github/workflows/waweye-wdrozenie-workera.yml before every deploy.
 // Env: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID; PROXY_SECRET (test-workera, ustaw-sekrety);
 // WARSAW_API_KEY (ustaw-sekrety); VERCEL_* (stan, usun-workera: which Worker production uses, when Vercel reveals it).
 // Prints a Markdown report (Polish) and never prints token or secret values.
@@ -20,6 +21,8 @@ const PROBES = [
   { name: 'Utrudnienia (?resource=incidents)', query: '?resource=incidents' },
   { name: 'Tabor (?resource=fleet)', query: '?resource=fleet' },
 ];
+const KV_TITLE = 'waweye-geokody';
+const KV_BINDING = 'GEOKODY'; // env.GEOKODY in worker/index.js
 const ANALYTICS_QUERY = `query($accountTag: string!, $scriptName: string!, $since: Time!, $until: Time!) {
   viewer { accounts(filter: { accountTag: $accountTag }) {
     workersInvocationsAdaptive(limit: 100, filter: { scriptName: $scriptName, datetime_geq: $since, datetime_leq: $until }) { sum { requests } }
@@ -174,6 +177,16 @@ async function testWorkera(ctx, value) {
     if (problem) ok = false;
     rows.push(`| ${p.name} | ${problem ? 'BŁĄD' : 'OK'} | ${problem || `${recordCount(r.body)} rekordów, ${r.ms} ms`} |`);
   }
+  // The geocode store needs neither the Warsaw API nor a location, so it answers from GitHub's runners too.
+  const geo = await (async () => {
+    try {
+      const res = await ctx.fetchImpl(base + '/?resource=geokody', { method: 'POST', headers: { 'x-proxy-secret': ctx.proxySecret, 'Content-Type': 'application/json' }, body: JSON.stringify({ get: ['test-workera'] }), signal: AbortSignal.timeout(TIMEOUT_MS) });
+      const body = await res.json().catch(() => null);
+      return res.status === 200 && body && body.found ? null : `HTTP ${res.status}${body && body.error ? ` (${body.error})` : ''}`;
+    } catch (e) { return `brak odpowiedzi (${e.message})`; }
+  })();
+  if (geo) ok = false;
+  rows.push(`| Geokody (?resource=geokody, KV) | ${geo ? 'BŁĄD' : 'OK'} | ${geo || 'magazyn odpowiada'} |`);
   const anon = await probe('?type=1', '');
   const anonOk = anon.status === 403;
   if (!anonOk) ok = false;
@@ -215,6 +228,24 @@ async function ustawSekrety(ctx, value) {
   return `### Cloudflare: sekrety Workera ${worker}\n\nUstawiono ${SECRETS.join(' i ')} (wartości z sekretów repozytorium). Następny krok: test-workera.`;
 }
 
+// Finds or creates the KV namespace for geocodes and binds it in wrangler.toml (the CI checkout only: the id is
+// not a secret, but keeping it out of the repository lets the same file deploy to any account).
+async function podepnijKv(ctx, file = path.join(__dirname, '../worker/wrangler.toml')) {
+  const toml = fs.readFileSync(file, 'utf8');
+  let ns = null;
+  for (let page = 1; !ns && page <= 20; page++) {
+    const list = (await ctx.api('GET', `/accounts/${ctx.accountId}/storage/kv/namespaces?per_page=100&page=${page}`)) || [];
+    ns = list.find((n) => n.title === KV_TITLE) || null;
+    if (list.length < 100) break;
+  }
+  const created = !ns;
+  if (!ns) ns = await ctx.api('POST', `/accounts/${ctx.accountId}/storage/kv/namespaces`, { title: KV_TITLE });
+  if (!ns || !/^[0-9a-f]{32}$/.test(ns.id || '')) throw new Error(`Cloudflare nie podał identyfikatora przestrzeni KV ${KV_TITLE}.`);
+  const bound = new RegExp(`^binding\\s*=\\s*"${KV_BINDING}"`, 'm').test(toml);
+  if (!bound) fs.writeFileSync(file, `${toml.replace(/\n*$/, '\n')}\n# Added by scripts/cloudflare-ops.js podepnij-kv (deploy workflow)\n[[kv_namespaces]]\nbinding = "${KV_BINDING}"\nid = "${ns.id}"\n`);
+  return `### Cloudflare: magazyn geokodów\n\nPrzestrzeń KV \`${KV_TITLE}\` (${ns.id}) ${created ? 'utworzona teraz' : 'już istniała'}; ${bound ? 'wrangler.toml już ją podpina' : `podpięta jako \`${KV_BINDING}\``}.`;
+}
+
 async function usunWorkera(ctx, value, confirmation) {
   const worker = checkWorker(value);
   if (String(confirmation || '').trim() !== worker) throw new Error(`Aby usunąć Workera, wpisz w polu potwierdzenia dokładnie jego nazwę: ${worker}.`);
@@ -239,6 +270,7 @@ const OPERATIONS = {
   'test-workera': (ctx, [w]) => testWorkera(ctx, w),
   'ustaw-sekrety': (ctx, [w]) => ustawSekrety(ctx, w),
   'usun-workera': (ctx, [w, confirmation]) => usunWorkera(ctx, w, confirmation),
+  'podepnij-kv': (ctx, [file]) => podepnijKv(ctx, file || undefined),
 };
 
 function context({ env = process.env, fetchImpl = fetch, now = Date.now } = {}) {

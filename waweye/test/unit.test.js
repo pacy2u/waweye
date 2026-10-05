@@ -3,7 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { normalize, fetchVehicles, fetchParkings, normalizeParkings, fetchIncidents, normalizeIncidents, fetchFleet, normalizeFleet, fetchSport, normalizeSport, fetchEvents, normalizeEvents, organizer, plainText, streetQuery, warsawDate } = require('../lib/warsaw');
 const { vehiclesHandler, parkingHandler, incidentsHandler, fleetHandler, sportHandler, eventsHandler } = require('../lib/handler');
-const { createGeocoder } = require('../lib/geocoding');
+const { createGeocoder, workerStore } = require('../lib/geocoding');
 
 const NOW = Date.parse('2026-10-01T12:00:30+02:00');
 const row = (o = {}) => ({ Lines: '175', Lon: 21.0, Lat: 52.2, VehicleNumber: '1234', Brigade: '3', Time: '2026-10-01 12:00:00', ...o });
@@ -561,11 +561,14 @@ test('sport handler: mock mode places classes (also from addresses) and drops th
   assert.ok(!ok.body.items.some((i) => i.title === 'Zakończony turniej' || i.title === 'Fit Mama w OSiR Wawer'));
   assert.ok(!JSON.stringify(ok.body).includes('<script'));
   assert.match(ok.headers['Cache-Control'], /s-maxage=1800/);
-  let budget;
+  let budget, store;
   const live = await call({ env: { UPSTREAM_URL: 'https://w.dev', UPSTREAM_SECRET: 's' }, fetchImpl: async () => ({ ok: true, json: async () => LIVE_SPORT }),
-    geo: { locate: async (items, opts) => { budget = opts.budgetMs; return 2; } } });
+    geo: { locate: async (items, opts) => { budget = opts.budgetMs; store = opts.store; return 2; } } });
   assert.equal(live.status, 200); assert.equal(live.body.pending, 2); assert.equal(live.headers['Cache-Control'], 's-maxage=15');
   assert.equal(budget, 3000); // a reply waits at most ~3 s for address lookups, the rest goes on in the background
+  assert.equal(typeof store.get, 'function'); // with the Worker in use, geocodes go through its KV first
+  await call({ env: { MOCK: '1' }, geo: { locate: async (items, opts) => { store = opts.store; return 0; } } });
+  assert.equal(store, undefined); // no Worker, no store
   assert.equal((await call({ env: {} })).status, 502);
 });
 
@@ -654,6 +657,93 @@ test('events handler: mock mode places events (one from an address), drops the u
   assert.equal((await call({ env: {} })).status, 502);
 });
 
+// A fake Workers KV namespace: get(key, 'json') and put(key, value, options), as Cloudflare provides them.
+function fakeKv() {
+  const data = new Map(), opts = new Map();
+  return { data, opts, reads: 0,
+    async get(k, type) { this.reads++; const v = data.get(k); return v === undefined ? null : type === 'json' ? JSON.parse(v) : v; },
+    async put(k, v, o) { data.set(k, v); opts.set(k, o); } };
+}
+
+test('worker geokody: KV store behind the secret, POST only, validated; "not found" expires after 30 days', async () => {
+  const { handle } = await import('../worker/index.js');
+  const kv = fakeKv();
+  const env = { PROXY_SECRET: 's', GEOKODY: kv };
+  const post = (body, e = env, secret = 's') => handle(new Request('https://w.dev/?resource=geokody', { method: 'POST', headers: { 'x-proxy-secret': secret }, body: JSON.stringify(body) }), e,
+    async () => { throw new Error('the store never calls the Warsaw API'); });
+  assert.equal((await post({ get: ['A'] }, env, 'zly')).status, 403);
+  const none = await post({ get: ['A'] }, { PROXY_SECRET: 's' });
+  assert.equal(none.status, 501); assert.match((await none.json()).error, /GEOKODY/);
+  assert.equal((await handle(new Request('https://w.dev/?resource=geokody', { headers: { 'x-proxy-secret': 's' } }), env)).status, 405);
+  assert.deepEqual(await (await post({ get: ['Lokalna 33, Warszawa', 'Nowa 1, Warszawa'] })).json(), { found: {} });
+  const saved = await post({ put: { 'Lokalna 33, Warszawa': { lat: 52.16, lon: 21.2 }, 'Nowa 1, Warszawa': null } });
+  assert.deepEqual(await saved.json(), { saved: 2 });
+  assert.equal(kv.opts.get('v1:Lokalna 33, Warszawa'), undefined); // coordinates are kept for good
+  assert.equal(kv.opts.get('v1:Nowa 1, Warszawa').expirationTtl, 30 * 86400);
+  const got = await post({ get: ['Lokalna 33, Warszawa', 'Nowa 1, Warszawa', 'Inna 2, Warszawa', 'Lokalna 33, Warszawa'] });
+  assert.equal(got.status, 200);
+  assert.deepEqual(await got.json(), { found: { 'Lokalna 33, Warszawa': { lat: 52.16, lon: 21.2 }, 'Nowa 1, Warszawa': null } });
+  // Nothing outside Warsaw, no odd keys, bounded requests.
+  for (const bad of [{ put: { X: { lat: 50, lon: 19 } } }, { put: { X: { lat: '52.2', lon: 21 } } }, { put: { '': null } }, { put: { ['x'.repeat(301)]: null } },
+    { put: Object.fromEntries(Array.from({ length: 21 }, (_, i) => [`A${i}`, null])) }, { get: Array.from({ length: 101 }, (_, i) => `A${i}`) }, { get: [1] }, { put: [] }, {}]) {
+    assert.equal((await post(bad)).status, 400, JSON.stringify(bad).slice(0, 60));
+  }
+  assert.ok(![...kv.data.keys()].some((k) => k.startsWith('v1:X') || k.startsWith('v1:A')));
+  const broken = await post({ get: ['A'] }, { PROXY_SECRET: 's', GEOKODY: { get: async () => { throw new Error('KV down'); } } });
+  assert.equal(broken.status, 502);
+});
+
+test('geocoding store: known answers skip Nominatim, new ones (also "not found") are saved, a broken store is skipped', async () => {
+  const { g, calls } = fakeGeo({ 'A, Warszawa': [52.2, 21], 'B, Warszawa': null, 'C, Warszawa': [52.22, 21] });
+  const kept = { 'A, Warszawa': { lat: 52.25, lon: 21.05 }, 'Z, Warszawa': null };
+  const asked = [], puts = [];
+  const store = { get: async (qs) => { asked.push(qs); return Object.fromEntries(qs.filter((q) => q in kept).map((q) => [q, kept[q]])); },
+    put: async (e) => { puts.push(e); Object.assign(kept, e); } };
+  const items = [{ queries: ['A, Warszawa'] }, { queries: ['Z, Warszawa', 'B, Warszawa', 'C, Warszawa'] }];
+  assert.equal(await g.locate(items, { store }), 0);
+  assert.deepEqual(asked, [['A, Warszawa', 'Z, Warszawa', 'B, Warszawa', 'C, Warszawa']]); // one batch for everything
+  assert.equal(items[0].lat, 52.25); // from the store, not from Nominatim
+  assert.deepEqual(calls.map((c) => c.q), ['B, Warszawa', 'C, Warszawa']); // Z is a known "not found"
+  assert.deepEqual(puts, [{ 'B, Warszawa': null, 'C, Warszawa': { lat: 52.22, lon: 21 } }]);
+  await g.locate([{ queries: ['A, Warszawa'] }, { queries: ['B, Warszawa'] }], { store });
+  assert.equal(asked.length, 1); assert.equal(puts.length, 1); // all in memory already
+  // A fresh instance (cold start, new deploy) takes everything from the store.
+  const fresh = fakeGeo({});
+  const again = [{ queries: ['B, Warszawa', 'C, Warszawa'] }];
+  assert.equal(await fresh.g.locate(again, { store }), 0);
+  assert.equal(again[0].lat, 52.22); assert.equal(fresh.calls.length, 0);
+  // Store down: Nominatim as before, the answers wait in memory and are saved once the store is back.
+  const down = fakeGeo({ 'D, Warszawa': [52.3, 21.1], 'E, Warszawa': [52.31, 21.1] });
+  let up = false, gets = 0; const saved = [];
+  const flaky = { get: async () => { gets++; if (!up) throw new Error('HTTP 501'); return {}; }, put: async (e) => { if (!up) throw new Error('HTTP 501'); saved.push(e); } };
+  const d = [{ queries: ['D, Warszawa'] }];
+  assert.equal(await down.g.locate(d, { store: flaky }), 0); assert.equal(d[0].lat, 52.3);
+  await down.g.locate([{ queries: ['E, Warszawa'] }], { store: flaky });
+  assert.equal(gets, 1); // paused after the failure instead of asking on every request
+  up = true; down.tick(11 * 60000);
+  await down.g.locate([{ queries: ['E, Warszawa'] }], { store: flaky });
+  assert.deepEqual(saved, [{ 'D, Warszawa': { lat: 52.3, lon: 21.1 }, 'E, Warszawa': { lat: 52.31, lon: 21.1 } }]); // found while the store was down
+});
+
+test('geocoding workerStore: POSTs to the Worker with the secret, in chunks, and keeps only sane answers', async () => {
+  const seen = [];
+  const fetchImpl = async (url, init) => {
+    const body = JSON.parse(init.body); seen.push({ url, secret: init.headers['x-proxy-secret'], method: init.method, body });
+    if (body.get) return new Response(JSON.stringify({ found: Object.fromEntries(body.get.map((q, i) => [q, i === 0 ? { lat: 52.2, lon: 21 } : i === 1 ? null : { lat: 'x' }])) }));
+    return new Response(JSON.stringify({ saved: Object.keys(body.put).length }));
+  };
+  const store = workerStore({ url: 'https://w.example.workers.dev', secret: 's3', fetchImpl });
+  const qs = Array.from({ length: 150 }, (_, i) => `Ulica ${i}, Warszawa`);
+  const found = await store.get(qs);
+  assert.equal(seen.length, 2); assert.deepEqual(seen.map((c) => c.body.get.length), [100, 50]);
+  assert.ok(seen.every((c) => c.url === 'https://w.example.workers.dev?resource=geokody' && c.secret === 's3' && c.method === 'POST'));
+  assert.deepEqual(found['Ulica 0, Warszawa'], { lat: 52.2, lon: 21 }); assert.equal(found['Ulica 1, Warszawa'], null);
+  assert.ok(!('Ulica 2, Warszawa' in found)); // malformed answers are dropped
+  await store.put(Object.fromEntries(qs.slice(0, 25).map((q) => [q, null])));
+  assert.deepEqual(seen.slice(2).map((c) => Object.keys(c.body.put).length), [20, 5]);
+  await assert.rejects(workerStore({ url: 'https://w.dev', secret: 's', fetchImpl: async () => new Response('{}', { status: 501 }) }).get(['A']), /HTTP 501/);
+});
+
 test('geocoding: what a reply leaves pending goes on in the background, one run per instance', async () => {
   const { g, calls } = fakeGeo({ 'A, Warszawa': [52.2, 21], 'B, Warszawa': [52.21, 21], 'C, Warszawa': [52.22, 21] });
   const items = ['A', 'B', 'C'].map((x) => ({ queries: [`${x}, Warszawa`] }));
@@ -667,7 +757,7 @@ test('geocoding: what a reply leaves pending goes on in the background, one run 
 test('sport and events handlers hand pending lookups to waitUntil, after a short wait in the reply', async () => {
   for (const [handler, raw] of [[sportHandler, LIVE_SPORT], [eventsHandler, LIVE_EVENTS]]) {
     const later = [], bg = [];
-    const geo = { locate: async (items, o) => { assert.equal(o.budgetMs, 3000); return 2; }, locateLater: (items, o) => { later.push(o.budgetMs); return Promise.resolve(0); } };
+    const geo = { locate: async (items, o) => { assert.equal(o.budgetMs, 3000); return 2; }, locateLater: (items, o) => { later.push(o.budgetMs); assert.equal(typeof o.store.put, 'function'); return Promise.resolve(0); } }; // the background run saves to the KV too
     const r = await new Promise((resolve) => {
       const res = { headers: {}, statusCode: 200, setHeader(k, v) { this.headers[k] = v; }, end(b) { resolve({ status: this.statusCode, body: JSON.parse(b) }); } };
       handler({ url: '/x' }, res, { env: { UPSTREAM_URL: 'https://w.dev' }, fetchImpl: async () => ({ ok: true, json: async () => raw }), geo, background: (p) => bg.push(p) });

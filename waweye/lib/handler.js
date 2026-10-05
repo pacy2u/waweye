@@ -1,7 +1,7 @@
 'use strict';
 const { fetchVehicles, fetchParkings, fetchIncidents, fetchFleet, fetchSport, fetchEvents, normalizeFleet, normalizeParkings, normalizeIncidents, normalizeSport, normalizeEvents } = require('./warsaw');
 const { mockVehicles, mockParkings, mockIncidents, mockFleet, mockSport, mockEvents, MOCK_GEOCODES } = require('./mock');
-const { createGeocoder } = require('./geocoding');
+const { createGeocoder, workerStore } = require('./geocoding');
 // Vercel's waitUntil (what @vercel/functions does, without its dependencies): keeps the function alive for work that
 // goes on after the reply. Outside Vercel (dev server, tests) there is no context and the promise just runs.
 const waitUntil = (p) => globalThis[Symbol.for('@vercel/request-context')]?.get?.()?.waitUntil?.(p);
@@ -121,6 +121,8 @@ async function fleetHandler(req, res, { env = process.env, fetchImpl = fetch } =
 // /api/sport and /api/wydarzenia run as separate Vercel functions, each with its own queue, so each keeps to one
 // Nominatim call per 2.2 s: together still under the policy's one per second.
 const geocoder = createGeocoder({ minGapMs: 2200 });
+// Answers shared by all instances and kept across deploys: the Worker's KV (only when the Worker is in use).
+const geoStore = (env, fetchImpl) => (env.UPSTREAM_URL ? workerStore({ url: env.UPSTREAM_URL, secret: env.UPSTREAM_SECRET || '', fetchImpl }) : undefined);
 const mockGeocoder = createGeocoder({ minGapMs: 0, fetchImpl: async (url) => {
   const hit = MOCK_GEOCODES[new URL(url).searchParams.get('q')];
   return new Response(JSON.stringify(hit ? [{ lat: String(hit.lat), lon: String(hit.lon) }] : []), { status: 200 });
@@ -128,10 +130,10 @@ const mockGeocoder = createGeocoder({ minGapMs: 0, fetchImpl: async (url) => {
 
 // A reply waits at most geoBudgetMs for address lookups; whatever is left goes on in the background for up to
 // backgroundMs (within the functions' 60 s limit), so places fill in within minutes, not one batch per request.
-async function locate(geo, items, { geoBudgetMs, backgroundMs, background }) {
-  const pending = await geo.locate(items, { budgetMs: geoBudgetMs });
+async function locate(geo, items, { geoBudgetMs, backgroundMs, background, store }) {
+  const pending = await geo.locate(items, { budgetMs: geoBudgetMs, store });
   if (pending && geo.locateLater) {
-    const later = geo.locateLater(items, { budgetMs: backgroundMs });
+    const later = geo.locateLater(items, { budgetMs: backgroundMs, store });
     if (later) background(later);
   }
   return pending;
@@ -150,7 +152,7 @@ async function sportHandler(req, res, { env = process.env, fetchImpl = fetch, ge
       });
     }
     const all = normalizeSport(raw);
-    const pending = await locate(geo || (source === 'mock' ? mockGeocoder : geocoder), all, { geoBudgetMs, backgroundMs, background });
+    const pending = await locate(geo || (source === 'mock' ? mockGeocoder : geocoder), all, { geoBudgetMs, backgroundMs, background, store: source === 'mock' ? undefined : geoStore(env, fetchImpl) });
     const items = all.filter((i) => i.lat != null).map(({ queries, ...i }) => i);
     // While addresses are still being looked up (in the background, see locate), the CDN keeps the reply for 15 s
     // only, so the next request shows the newly found places. The dataset itself changes every 2 h.
@@ -177,7 +179,7 @@ async function eventsHandler(req, res, { env = process.env, fetchImpl = fetch, g
       });
     }
     const all = normalizeEvents(raw);
-    const pending = await locate(geo || (source === 'mock' ? mockGeocoder : geocoder), all, { geoBudgetMs, backgroundMs, background });
+    const pending = await locate(geo || (source === 'mock' ? mockGeocoder : geocoder), all, { geoBudgetMs, backgroundMs, background, store: source === 'mock' ? undefined : geoStore(env, fetchImpl) });
     const items = [];
     for (const { queries, lat, lon, ...it } of all) {
       if (!it.points.length && lat != null) { it.points = [{ lat, lon, label: it.venue || it.address, street: it.address, district: it.district }]; it.located = 'address'; }

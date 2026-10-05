@@ -7,3 +7,5 @@ preview_urls = false
 # Deployed by .github/workflows/waweye-wdrozenie-workera.yml. Keep variables set in the Cloudflare dashboard;
 # secrets (WARSAW_API_KEY, PROXY_SECRET) are never touched by a deploy.
 keep_vars = true
+# KV namespace "waweye-geokody" (geocode store, env.GEOKODY): the deploy workflow finds or creates it and adds the
+# [[kv_namespaces]] binding below this line in its checkout (scripts/cloudflare-ops.js podepnij-kv).
