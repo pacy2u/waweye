@@ -377,6 +377,8 @@
   const SPPN_WMS = { url: 'https://wms.um.warszawa.pl/serwis', layers: 'KOMUNIKACJA_STREFA_PLATNEGO_PARKOWANIA',
     crs: { code: 'EPSG:2178', project: (ll) => L.point(toPL2000z7(ll.lat, ll.lng)) } };
   const SCT_URL = '/data/strefa-czystego-transportu.geojson', SCT_COLOR = '#00A878';
+  // The WMS fill has a faint edge, so the SPPN outline is drawn on top from OpenStreetMap, dashed like the SCT.
+  const SPPN_URL = '/data/strefa-platnego-parkowania.geojson', SPPN_COLOR = '#D64550';
   const ZONE_INFO = {
     sppn: { badge: 'SPPN', name: 'Strefa Płatnego Parkowania Niestrzeżonego', sub: 'Zarząd Dróg Miejskich · stan na październik 2026',
       rows: [['Kiedy płatne', 'pon.–pt. 8:00–20:00\nweekendy i święta bezpłatnie'],
@@ -395,7 +397,7 @@
       note: 'Ulice graniczne leżą poza strefą. Granica z OpenStreetMap (© współtwórcy OSM, ODbL).',
       link: ['https://transport.um.warszawa.pl/sct', 'Wymagania i zwolnienia na transport.um.warszawa.pl'] },
   };
-  const zones = { sppn: false, sppnAuto: false, sct: false, sctData: null, sctLoading: false, sctError: null, open: null };
+  const zones = { sppn: false, sppnAuto: false, sppnData: null, sppnLoading: false, sct: false, sctData: null, sctLoading: false, sctError: null, open: null };
   let zonePrefs = { sppnHidden: false, sct: false };
   try { zonePrefs = { ...zonePrefs, ...JSON.parse(localStorage.getItem('waweye.strefy') || '{}') }; } catch {}
   const saveZonePrefs = () => { try { localStorage.setItem('waweye.strefy', JSON.stringify(zonePrefs)); } catch {} };
@@ -403,7 +405,7 @@
   map.createPane('zones').style.zIndex = 250; // above the base map, below vehicles and markers; the WMS fills the zone solid pink, hence the low opacity
   const sppnLayer = L.tileLayer.wms(SPPN_WMS.url, { layers: SPPN_WMS.layers, crs: SPPN_WMS.crs, format: 'image/png', transparent: true, version: '1.3.0',
     pane: 'zones', opacity: 0.55, maxZoom: 19, attribution: 'SPPN: m.st. Warszawa' });
-  const sctLayer = L.layerGroup();
+  const sctLayer = L.layerGroup(), sppnLine = L.layerGroup();
 
   function renderZoneControls() {
     $('z-sppn').checked = zones.sppn; $('z-sct').checked = zones.sct;
@@ -411,8 +413,27 @@
   }
   function setSppn(on, auto = false) {
     zones.sppn = on; zones.sppnAuto = on && auto;
-    if (on) sppnLayer.addTo(map); else map.removeLayer(sppnLayer);
+    if (on) { sppnLayer.addTo(map); sppnLine.addTo(map); loadSppn(); drawSppn(); }
+    else { map.removeLayer(sppnLayer); map.removeLayer(sppnLine); }
     renderZoneControls();
+  }
+  // Without the outline (file missing, network error) the WMS fill alone still shows the zone, so no error is reported.
+  async function loadSppn() {
+    if (zones.sppnData || zones.sppnLoading) return;
+    zones.sppnLoading = true;
+    try {
+      const res = await fetch(SPPN_URL);
+      if (res.ok) zones.sppnData = await res.json();
+    } catch {}
+    zones.sppnLoading = false;
+    drawSppn();
+  }
+  function drawSppn() {
+    sppnLine.clearLayers();
+    if (!zones.sppn || !zones.sppnData) return;
+    L.geoJSON(zones.sppnData, { renderer: canvas, interactive: false, attribution: 'Granica SPPN: © współtwórcy OpenStreetMap',
+      style: { color: SPPN_COLOR, weight: 3, dashArray: '10 6', fill: false } })
+      .eachLayer((l) => { l.addTo(sppnLine); l.bringToBack(); });
   }
   async function loadSct() {
     if (zones.sctData || zones.sctLoading) return;

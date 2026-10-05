@@ -144,7 +144,7 @@ a.brand:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .z-row label { flex: 1; display: flex; align-items: center; gap: 8px; cursor: pointer; }
 .z-row input { width: 18px; height: 18px; margin: 0; accent-color: var(--orange); flex: none; }
 .z-sw { width: 18px; height: 12px; border-radius: 3px; flex: none; }
-.z-sw.sppn { background: #FDD8DA; border: 2px solid #D64550; } /* as the city's WMS draws it */
+.z-sw.sppn { background: #FDD8DA; border: 2px dashed #D64550; } /* fill as the city's WMS draws it, dashed outline from OSM */
 .z-sw.sct { background: rgba(0,168,120,.2); border: 2px dashed #00A878; }
 .z-info { width: 26px; height: 26px; flex: none; border-radius: 50%; border: 1px solid var(--line); background: #34343a; color: #fff;
   font: italic 700 14px Georgia, serif; cursor: pointer; }
