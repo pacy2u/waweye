@@ -397,7 +397,7 @@
       note: 'Ulice graniczne leżą poza strefą. Granica z OpenStreetMap (© współtwórcy OSM, ODbL).',
       link: ['https://transport.um.warszawa.pl/sct', 'Wymagania i zwolnienia na transport.um.warszawa.pl'] },
   };
-  const zones = { sppn: false, sppnAuto: false, sppnData: null, sppnLoading: false, sct: false, sctData: null, sctLoading: false, sctError: null, open: null };
+  const zones = { sppn: false, sppnAuto: false, sppnData: null, sppnLoading: false, sppnDrawn: 0, sct: false, sctData: null, sctLoading: false, sctError: null, open: null };
   let zonePrefs = { sppnHidden: false, sct: false };
   try { zonePrefs = { ...zonePrefs, ...JSON.parse(localStorage.getItem('waweye.strefy') || '{}') }; } catch {}
   const saveZonePrefs = () => { try { localStorage.setItem('waweye.strefy', JSON.stringify(zonePrefs)); } catch {} };
@@ -414,7 +414,7 @@
   function setSppn(on, auto = false) {
     zones.sppn = on; zones.sppnAuto = on && auto;
     if (on) { sppnLayer.addTo(map); sppnLine.addTo(map); loadSppn(); drawSppn(); }
-    else { map.removeLayer(sppnLayer); map.removeLayer(sppnLine); }
+    else { map.removeLayer(sppnLayer); map.removeLayer(sppnLine); zones.sppnDrawn = 0; }
     renderZoneControls();
   }
   // Without the outline (file missing, network error) the WMS fill alone still shows the zone, so no error is reported.
@@ -429,11 +429,11 @@
     drawSppn();
   }
   function drawSppn() {
-    sppnLine.clearLayers();
+    sppnLine.clearLayers(); zones.sppnDrawn = 0;
     if (!zones.sppn || !zones.sppnData) return;
     L.geoJSON(zones.sppnData, { renderer: canvas, interactive: false, attribution: 'Granica SPPN: © współtwórcy OpenStreetMap',
       style: { color: SPPN_COLOR, weight: 3, dashArray: '10 6', fill: false } })
-      .eachLayer((l) => { l.addTo(sppnLine); l.bringToBack(); });
+      .eachLayer((l) => { l.addTo(sppnLine); l.bringToBack(); zones.sppnDrawn++; });
   }
   async function loadSct() {
     if (zones.sctData || zones.sctLoading) return;

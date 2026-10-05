@@ -248,6 +248,8 @@ function findChromium() {
       assert.ok(!(await Z()).sppn, 'parking off hides the zone it showed');
       await page.click('#t-park'); await page.waitForSelector('.pk');
       let z = await Z(); assert.ok(z.sppn && z.sppnBox && z.btn);
+      // Dashed outline from OpenStreetMap on top of the WMS fill.
+      await page.waitForFunction(() => window.__waweye.zones.sppnDrawn > 0);
       await page.waitForFunction(() => document.querySelectorAll('.leaflet-zones-pane img').length > 0);
       // Read the tile address from the page: tiles loaded in an earlier step come from the browser's memory cache
       // without a new request, so the routed requests may stay empty (failed CI twice).
@@ -259,6 +261,7 @@ function findChromium() {
       assert.ok(Math.abs((n - s) / (e - w) - 1) < 0.01, 'a map tile is a square in EPSG:2178: ' + q.get('bbox'));
       await menu(true); await page.uncheck('#z-sppn');
       z = await Z(); assert.ok(!z.sppn && !z.btn); assert.equal(z.prefs.sppnHidden, true);
+      assert.equal(await page.evaluate(() => window.__waweye.zones.sppnDrawn), 0, 'the outline goes with the fill');
       assert.equal(await page.locator('.leaflet-zones-pane img').count(), 0);
       await page.click('#t-park'); await page.click('#t-park'); await page.waitForSelector('.pk');
       assert.ok(!(await Z()).sppn, 'a hidden zone stays hidden when the parkings come back');

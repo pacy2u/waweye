@@ -3,7 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { stitch, relationToFeature, fullToGeom, osmRelation, containsLatLng, featureArea, checkSct, wmsLayers } = require('../scripts/strefy');
+const { stitch, relationToFeature, fullToGeom, osmRelation, containsLatLng, featureArea, checkSct, checkSppn, wmsLayers } = require('../scripts/strefy');
 
 // A square of about 6 x 6.7 km around the centre of Warsaw, split into ways the way OSM does it (one way reversed).
 const g = (pts) => pts.map(([lat, lon]) => ({ lat, lon }));
@@ -60,6 +60,22 @@ test('committed SCT boundary is plausible', { skip: !fs.existsSync(SCT_FILE) && 
   assert.equal(fc.type, 'FeatureCollection'); assert.equal(fc.features.length, 1);
   assert.deepEqual(checkSct(fc.features[0]), []);
   assert.match(fc.features[0].properties.license, /OpenStreetMap/);
+});
+
+const SPPN_FILE = path.join(__dirname, '..', 'public', 'data', 'strefa-platnego-parkowania.geojson');
+test('committed SPPN boundary is plausible', { skip: !fs.existsSync(SPPN_FILE) && 'brak pliku – uruchom workflow waweye-dane-stref.yml' }, () => {
+  const fc = JSON.parse(fs.readFileSync(SPPN_FILE, 'utf8'));
+  assert.equal(fc.type, 'FeatureCollection'); assert.ok(fc.features.length >= 1);
+  assert.deepEqual(checkSppn(fc.features), []);
+  assert.match(fc.properties.license, /OpenStreetMap/);
+});
+
+test('checkSppn: the zone must cover the centre, Praga and Stary Mokotów, not Wilanów or Bemowo, at a sane size', () => {
+  const box = (s, w, n, e) => ({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [[[w, s], [e, s], [e, n], [w, n], [w, s]]] } });
+  assert.deepEqual(checkSppn([box(52.19, 20.96, 52.27, 21.06)]), []); // ~60 km² around the centre, Praga and Mokotów
+  assert.match(checkSppn([box(52.22, 20.99, 52.24, 21.02)]).join('; '), /powierzchnia.*Praga.*nie leży.*Stary Mokotów.*nie leży/);
+  assert.match(checkSppn([box(52.15, 20.90, 52.27, 21.10)]).join('; '), /powierzchnia|Wilanów leży/);
+  assert.deepEqual(checkSppn([box(52.19, 20.96, 52.235, 21.03), box(52.235, 20.98, 52.27, 21.06)]), []); // several relations together
 });
 
 test('fullToGeom turns an OSM API "full" answer into way geometries', () => {
