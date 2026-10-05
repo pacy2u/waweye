@@ -1,0 +1,40 @@
+name: wawEye – dane stref (SCT, SPPN)
+
+# Downloads the Clean Transport Zone boundary from OpenStreetMap into waweye/public/data/ and commits it to the branch
+# it runs on (only when it changed), and lists the zone layers of the city's WMS services (for the SPPN layer).
+# Logic: waweye/scripts/strefy.js (unit-tested). Runs on demand, and on its own after a push that changes the script
+# or this file on a branch other than main (a commit made with GITHUB_TOKEN does not start workflows, so no loop).
+on:
+  workflow_dispatch:
+  push:
+    branches-ignore: [main]
+    paths: ['waweye/scripts/strefy.js', '.github/workflows/waweye-dane-stref.yml']
+
+concurrency:
+  group: waweye-dane-stref-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  strefy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Pobranie danych stref
+        run: node waweye/scripts/strefy.js | tee -a "$GITHUB_STEP_SUMMARY"
+        shell: bash
+      - name: Zapis granicy SCT w repozytorium
+        shell: bash
+        run: |
+          git add waweye/public/data/strefa-czystego-transportu.geojson
+          if git diff --cached --quiet; then echo "Granica SCT bez zmian." | tee -a "$GITHUB_STEP_SUMMARY"; exit 0; fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -m "Dane: granica Strefy Czystego Transportu z OpenStreetMap (relacja 17792822)"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+          echo "Zapisano zmienioną granicę SCT na gałęzi ${GITHUB_REF_NAME}." | tee -a "$GITHUB_STEP_SUMMARY"
