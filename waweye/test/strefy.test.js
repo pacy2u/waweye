@@ -83,3 +83,13 @@ test('osmRelation sends a User-Agent and falls back to the OSM API when Overpass
   assert.equal(calls.length, 3); assert.ok(calls.every((c) => /wawEye/.test(c.ua)));
   assert.match(calls[2].url, /relation\/7\/full\.json$/);
 });
+
+// Reference values from proj4 (+proj=tmerc +lon_0=21 +k=0.999923 +x_0=7500000 +ellps=GRS80), 2026-10-05.
+test('toPL2000z7 matches proj4 for EPSG:2178 to within a few centimetres', () => {
+  const { toPL2000z7 } = require('../public/pl2000');
+  for (const [lat, lon, e, n] of [[52.2318, 21.006, 7500409.904786531, 5788690.086006144], [52.0976, 20.8516, 7489831.147831967, 5773769.111511815],
+    [52.3666, 21.2672, 7518199.067818733, 5803722.125117395], [52.25, 20.5, 7465855.346749933, 5790832.8636836875]]) {
+    const [north, east] = toPL2000z7(lat, lon);
+    assert.ok(Math.abs(north - n) < 0.05 && Math.abs(east - e) < 0.05, `${lat},${lon}: ${north},${east} vs ${n},${e}`);
+  }
+});

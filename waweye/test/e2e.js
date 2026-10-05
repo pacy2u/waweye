@@ -253,9 +253,10 @@ function findChromium() {
       // without a new request, so the routed requests may stay empty (failed CI twice).
       const q = new URL(await page.evaluate(() => document.querySelector('.leaflet-zones-pane img').src)).searchParams;
       assert.equal(q.get('request'), 'GetMap'); assert.equal(q.get('layers'), 'KOMUNIKACJA_STREFA_PLATNEGO_PARKOWANIA');
-      assert.equal(q.get('crs'), 'CRS:84'); // the server has no EPSG:3857
-      const [w, s, e, n] = q.get('bbox').split(',').map(Number); // CRS:84 is lon,lat
-      assert.ok(w > 20 && w < 22 && e > w && s > 51 && s < 53 && n > s, q.get('bbox'));
+      assert.equal(q.get('crs'), 'EPSG:2178'); // the server has no EPSG:3857 and pads CRS:84 tiles
+      const [s, w, n, e] = q.get('bbox').split(',').map(Number); // EPSG:2178 in WMS 1.3.0: northing, easting
+      assert.ok(s > 5.7e6 && s < 5.9e6 && w > 7.4e6 && w < 7.6e6 && n > s && e > w, q.get('bbox'));
+      assert.ok(Math.abs((n - s) / (e - w) - 1) < 0.01, 'a map tile is a square in EPSG:2178: ' + q.get('bbox'));
       await menu(true); await page.uncheck('#z-sppn');
       z = await Z(); assert.ok(!z.sppn && !z.btn); assert.equal(z.prefs.sppnHidden, true);
       assert.equal(await page.locator('.leaflet-zones-pane img').count(), 0);
