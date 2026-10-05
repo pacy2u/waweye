@@ -1,0 +1,35 @@
+name: wawEye – rozpoznanie źródeł metra (tymczasowy)
+
+# TEMPORARY: checks which sources have metro lines and stations (dane.um.warszawa.pl, ZTM timetable files, city WMS,
+# OpenStreetMap) from GitHub's runners, since the session sandbox cannot reach them. Removed after the source is chosen.
+on:
+  workflow_dispatch:
+  push:
+    branches: ['funkcja/warstwa-metra']
+    paths: ['waweye/scripts/rozpoznanie-metra.js', '.github/workflows/waweye-rozpoznanie-metra.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  rozpoznanie:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Rozpoznanie źródeł
+        shell: bash
+        env:
+          RAPORT_DIR: ${{ runner.temp }}/rozpoznanie-metra
+        run: |
+          mkdir -p "$RAPORT_DIR"
+          node waweye/scripts/rozpoznanie-metra.js | tee "$RAPORT_DIR/raport.md" | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rozpoznanie-metra
+          path: ${{ runner.temp }}/rozpoznanie-metra/
+          retention-days: 7
