@@ -95,13 +95,20 @@ async function gtfs() {
       for (const m of t.matchAll(/https?:\\?\/\\?\/[^"'\s<>]*gtfs[^"'\s<>]*/gi)) found.add(m[0].replace(/\\\//g, '/'));
     } catch (e) { log(`- ${u}: ${why(e)}`); }
   }
+  try {
+    const list = execFileSync('curl', ['-sS', '-m', '60', '--list-only', 'ftp://gtfs.ztm.waw.pl/'], { encoding: 'utf8' });
+    log(`- ftp://gtfs.ztm.waw.pl/: ${list.split(/\r?\n/).filter(Boolean).slice(-15).join(', ')}`);
+  } catch (e) { log(`- ftp://gtfs.ztm.waw.pl/: ${why(e)}`); }
+  found.clear();
+  found.add('https://gtfs.ztm.waw.pl/last');
   log(`\nZnalezione pliki GTFS: ${found.size ? [...found].join(', ') : 'brak'}\n`);
-  const zip = [...found].find((u) => /\.zip/i.test(u));
+  const zip = [...found][0];
   if (!zip) return;
   const dir = path.join(OUT, 'gtfs');
   fs.mkdirSync(dir, { recursive: true });
   const res = await fetch(zip, { headers: BROWSER, signal: AbortSignal.timeout(300000) });
-  if (!res.ok) { log(`Pobranie ${zip}: HTTP ${res.status}\n`); return; }
+  log(`Pobranie ${zip}: HTTP ${res.status}, adres końcowy ${res.url}, typ ${res.headers.get('content-type')}, content-disposition ${res.headers.get('content-disposition')}, last-modified ${res.headers.get('last-modified')}\n`);
+  if (!res.ok) return;
   const buf = Buffer.from(await res.arrayBuffer());
   fs.writeFileSync(path.join(dir, 'gtfs.zip'), buf);
   execFileSync('unzip', ['-o', '-q', path.join(dir, 'gtfs.zip'), '-d', dir]);
