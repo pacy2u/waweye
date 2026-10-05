@@ -97,11 +97,13 @@
   const routeDate = (ymd) => new Date(ymd + 'T12:00:00Z').toLocaleDateString('pl-PL', { day: 'numeric', month: 'numeric', year: 'numeric', timeZone: 'UTC' });
   async function loadRoute(line) {
     if (route.cache.has(line)) return route.cache.get(line);
-    const p = fetch('/data/trasy/' + encodeURIComponent(line) + '.json').then((res) => {
+    // The route store (refreshed daily from the ZTM GTFS, /api/trasa) first; the files shipped with the app as the fallback.
+    const fromFile = () => fetch('/data/trasy/' + encodeURIComponent(line) + '.json').then((res) => {
       if (res.status === 404) return null; // the line is not in the timetable (e.g. a new or replacement line)
       if (!res.ok) throw new Error('HTTP ' + res.status);
       return res.json();
     });
+    const p = fetch('/api/trasa?linia=' + encodeURIComponent(line)).then((res) => (res.ok ? res.json() : fromFile()), fromFile);
     route.cache.set(line, p);
     p.catch(() => route.cache.delete(line)); // try again on the next selection
     return p;

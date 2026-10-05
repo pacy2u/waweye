@@ -121,6 +121,14 @@ function findChromium() {
       await page.waitForFunction(() => /może być nieaktualna/.test(document.getElementById('p-route').textContent));
       assert.ok(await page.evaluate(() => document.querySelector('.p-route-src').classList.contains('old')));
       await page.unroute('**/data/trasy/9.json'); await page.unroute('**/data/trasy/186.json');
+      // The route store answers first (/api/trasa); the shipped file is only the fallback.
+      await page.route('**/api/trasa?linia=523', async (rt) => { const res = await page.request.get(new URL('/data/trasy/523.json', page.url()).href); const d = await res.json();
+        d.variants.forEach((v) => { v.headsign = 'Z magazynu'; }); d.valid = { from: '2026-10-05', to: '2099-01-01' }; rt.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(d) }); });
+      await page.evaluate(() => window.__waweye.route.cache.delete('523'));
+      await pick('523');
+      await page.waitForFunction(() => window.__waweye.route.data && window.__waweye.route.data.variants[0].headsign === 'Z magazynu');
+      assert.match(await page.textContent('#p-route'), /ważnego do 1\.01\.2099/);
+      await page.unroute('**/api/trasa?linia=523');
       await pick('175'); // the next step closes the panel of a selected vehicle
     });
     await step(`${label}: close panel deselects`, async () => {

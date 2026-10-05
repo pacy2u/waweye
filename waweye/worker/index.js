@@ -64,6 +64,36 @@ async function geocodes(request, env) {
   return json({ error: 'expected {"get": [...]} or {"put": {...}}' }, 400);
 }
 
+// Routes of the lines (lib/handler.js routesRefreshHandler writes them once a day from the ZTM GTFS, routeHandler reads
+// them for the app), in the same KV namespace as the geocodes under their own prefix. One key per line plus a meta key
+// (timetable validity, refresh time, fingerprints of the lines). GET &linia=175 | GET &meta=1 | POST {put, del, meta}.
+const ROUTE_PREFIX = 'trasy:v1:';
+const ROUTE_MAX_PUT = 20; // per request, so parsing stays within the free plan's CPU time
+const ROUTE_MAX_VALUE = 300000; // characters; a line is ~11 KB, the biggest ~60 KB
+const goodLine = (l) => typeof l === 'string' && /^[A-Za-z0-9-]{1,10}$/.test(l);
+
+async function routes(request, env, params) {
+  if (!env.GEOKODY) return json({ error: 'worker has no GEOKODY binding' }, 501);
+  if (request.method === 'GET') {
+    const key = params.get('meta') === '1' ? 'meta' : params.get('linia');
+    if (key !== 'meta' && !goodLine(key)) return json({ error: 'bad linia' }, 400);
+    const v = await env.GEOKODY.get(ROUTE_PREFIX + (key === 'meta' ? 'meta' : 'line:' + key));
+    return v === null ? json({ error: 'not found' }, 404) : new Response(v, { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+  if (request.method !== 'POST') return json({ error: 'use GET or POST' }, 405);
+  let body;
+  try { body = await request.json(); } catch { return json({ error: 'bad json' }, 400); }
+  const put = Object.entries((body && body.put) || {}), del = (body && body.del) || [];
+  const meta = body && body.meta;
+  if (put.length > ROUTE_MAX_PUT || !put.every(([k, v]) => goodLine(k) && typeof v === 'string' && v.length <= ROUTE_MAX_VALUE)
+    || !Array.isArray(del) || del.length > 100 || !del.every(goodLine) || (meta !== undefined && (typeof meta !== 'string' || meta.length > ROUTE_MAX_VALUE))) {
+    return json({ error: `put: up to ${ROUTE_MAX_PUT} lines as JSON strings, del: up to 100 lines, meta: a JSON string` }, 400);
+  }
+  await Promise.all([...put.map(([k, v]) => env.GEOKODY.put(ROUTE_PREFIX + 'line:' + k, v)), ...del.map((k) => env.GEOKODY.delete(ROUTE_PREFIX + 'line:' + k))]);
+  if (meta !== undefined) await env.GEOKODY.put(ROUTE_PREFIX + 'meta', meta);
+  return json({ saved: put.length, deleted: del.length, meta: meta !== undefined }, 200);
+}
+
 async function gtfs(request, fetchImpl, probe) {
   const t0 = Date.now(), colo = (request.cf && request.cf.colo) || null;
   let res;
@@ -91,6 +121,9 @@ export async function handle(request, env, fetchImpl) {
     try { return await geocodes(request, env); } catch (e) { return json({ error: 'kv: ' + e.message }, 502); }
   }
   if (resource === 'gtfs') return gtfs(request, fetchImpl, params.get('probe') === '1');
+  if (resource === 'trasy') {
+    try { return await routes(request, env, params); } catch (e) { return json({ error: 'kv: ' + e.message }, 502); }
+  }
   const resourceUrl = Object.hasOwn(RESOURCES, resource) ? RESOURCES[resource] : undefined;
   const type = params.get('type');
   if (!resourceUrl && type !== '1' && type !== '2') return json({ error: 'bad type' }, 400);

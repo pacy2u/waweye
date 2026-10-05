@@ -112,3 +112,123 @@ test('committed route files are plausible', { skip: !fs.existsSync(path.join(DIR
   const L175 = lines.find((L) => L.line === '175');
   assert.ok(L175.variants.some((v) => v.stops.some((s) => /Lotnisko Chopina/.test(s[0]))));
 });
+
+// ---- Automatic refresh: ZIP reader, Worker route store, /api/trasa and /api/odswiez-trasy ----
+const { readZip } = require('../lib/zip');
+const { lineBody, lineHash, fromZip } = require('../scripts/trasy');
+const MINI = fs.readFileSync(path.join(__dirname, 'dane', 'gtfs-mini.zip'));
+
+test('readZip streams stored, deflated and ZIP64 entries', async () => {
+  const z = readZip(MINI);
+  assert.deepEqual([...z.keys()].sort(), ['calendar.txt', 'routes.txt', 'shapes.txt', 'stop_times.txt', 'stops.txt', 'trips.txt']);
+  const text = async (n) => { let s = ''; for await (const c of z.get(n).open()) s += c; return s; };
+  assert.match(await text('calendar.txt'), /20261005,20261014/); // stored
+  assert.equal((await text('stop_times.txt')).trim().split('\n').length, 7); // deflated, ZIP64 local header
+  assert.throws(() => readZip(Buffer.from('not a zip at all, definitely not')), /nie jest plik ZIP/);
+});
+test('fromZip runs the whole pipeline on a GTFS ZIP in memory', async () => {
+  const r = await fromZip(MINI);
+  assert.deepEqual(r.valid, { from: '2026-10-05', to: '2026-10-14' });
+  assert.deepEqual(r.lines.map((L) => L.line), ['17', '175'], 'rail left out');
+  assert.deepEqual(r.lines[1].variants.map((v) => v.stops.map((s) => s[0])), [['Lotnisko Chopina', 'Pl. Piłsudskiego'], ['Pl. Piłsudskiego', 'Lotnisko Chopina']]);
+  assert.ok(r.problems.some((p) => /tylko 2 linii/.test(p)), 'the real checks run');
+});
+test('lineHash ignores trip counts and variant order, but not stops', () => {
+  const L = { line: '175', type: 'bus', variants: [{ dir: 0, headsign: 'A', trips: 5, shape: [[1, 2]], stops: [['X', 1, 2]] }, { dir: 1, headsign: 'B', trips: 4, shape: [[3, 4]], stops: [['Y', 3, 4]] }] };
+  const same = { ...L, variants: [{ ...L.variants[1], trips: 40 }, { ...L.variants[0], trips: 50 }] };
+  assert.equal(lineHash(L), lineHash(same));
+  assert.notEqual(lineHash(L), lineHash({ ...L, variants: [L.variants[0], { ...L.variants[1], stops: [['Z', 3, 4]] }] }));
+  assert.deepEqual(Object.keys(lineBody(L)), ['line', 'type', 'variants']);
+});
+
+// A Worker with an in-memory KV, called the way Vercel calls it.
+async function fakeWorker() {
+  const { handle } = await import('../worker/index.js');
+  const kv = new Map(), writes = [];
+  const env = { PROXY_SECRET: 's', GEOKODY: { get: async (k) => (kv.has(k) ? kv.get(k) : null), put: async (k, v) => { writes.push(k); kv.set(k, v); }, delete: async (k) => { writes.push('-' + k); kv.delete(k); } } };
+  const fetchImpl = async (url, init = {}) => {
+    if (url.startsWith('https://w.dev')) return handle(new Request(url, { method: init.method || 'GET', headers: init.headers, body: init.body }), env, fetchImpl);
+    if (url === 'https://gtfs.ztm.waw.pl/last') return new Response(MINI, { status: 200 });
+    throw new Error('unexpected ' + url);
+  };
+  return { kv, writes, env, fetchImpl, handle };
+}
+const call = async (handler, url, opts, headers = {}) => {
+  const res = { headers: {}, statusCode: 0, setHeader(k, v) { this.headers[k] = v; }, end(b) { this.body = b; } };
+  await handler({ method: 'GET', url, headers }, res, opts);
+  return { status: res.statusCode, body: JSON.parse(res.body), cache: res.headers['Cache-Control'] };
+};
+const ENV = { UPSTREAM_URL: 'https://w.dev', UPSTREAM_SECRET: 's' };
+
+test('worker route store: read, write in batches, delete, meta; needs the secret and valid names', async () => {
+  const w = await fakeWorker();
+  const req = (q, init = {}, secret = 's') => new Request('https://w.dev/?resource=trasy' + q, { ...init, headers: { 'x-proxy-secret': secret, ...(init.headers || {}) } });
+  assert.equal((await w.handle(req('&linia=175', {}, 'x'), w.env)).status, 403);
+  assert.equal((await w.handle(req('&linia=175'), w.env)).status, 404);
+  assert.equal((await w.handle(req('&linia=../x'), w.env)).status, 400);
+  const post = (body) => w.handle(req('', { method: 'POST', body: JSON.stringify(body) }), w.env);
+  assert.equal((await post({ put: { 175: '{"line":"175"}' }, meta: '{"refreshed":"t"}' })).status, 200);
+  assert.equal(await (await w.handle(req('&linia=175'), w.env)).text(), '{"line":"175"}');
+  assert.equal(await (await w.handle(req('&meta=1'), w.env)).text(), '{"refreshed":"t"}');
+  assert.equal((await post({ put: Object.fromEntries(Array.from({ length: 21 }, (_, i) => [String(i), '{}'])) })).status, 400, 'at most 20 per request');
+  assert.equal((await post({ put: { 175: { not: 'a string' } } })).status, 400);
+  assert.equal((await post({ del: ['175'] })).status, 200);
+  assert.equal((await w.handle(req('&linia=175'), w.env)).status, 404);
+  assert.equal((await w.handle(req('&linia=175'), { PROXY_SECRET: 's' })).status, 501, 'no KV binding');
+});
+
+test('refresh: checks the data and writes nothing when it fails; then writes only changed lines and the meta last', async () => {
+  const { routesRefreshHandler, routeHandler, resetRouteState } = require('../lib/handler');
+  const w = await fakeWorker();
+  let t = Date.parse('2026-10-06T02:00:00Z');
+  const now = () => t;
+  resetRouteState();
+  // The mini GTFS has 2 lines, far below the real minimum: nothing is written.
+  let r = await call(routesRefreshHandler, '/api/odswiez-trasy', { env: ENV, fetchImpl: w.fetchImpl, now });
+  assert.equal(r.status, 502); assert.match(r.body.error, /nie przeszły kontroli/); assert.equal(w.writes.length, 0);
+  // With the checks passing (build stands in for scripts/trasy.js on a full timetable):
+  const built = await fromZip(MINI);
+  const build = async () => ({ ...built, problems: [] });
+  resetRouteState();
+  r = await call(routesRefreshHandler, '/api/odswiez-trasy', { env: ENV, fetchImpl: w.fetchImpl, now, build });
+  assert.equal(r.status, 200, JSON.stringify(r.body)); assert.equal(r.body.lines, 2); assert.equal(r.body.changed, 2); assert.equal(r.body.via, 'bezpośrednio');
+  assert.equal(w.writes.at(-1), 'trasy:v1:meta', 'meta written last');
+  // The app reads a line with the timetable's validity; CDN may keep it for an hour.
+  const line = await call(routeHandler, '/api/trasa?linia=175', { env: ENV, fetchImpl: w.fetchImpl });
+  assert.equal(line.status, 200); assert.equal(line.body.line, '175'); assert.deepEqual(line.body.valid, { from: '2026-10-05', to: '2026-10-14' });
+  assert.match(line.cache, /s-maxage=3600/);
+  assert.equal((await call(routeHandler, '/api/trasa?linia=999', { env: ENV, fetchImpl: w.fetchImpl })).status, 404);
+  const meta = await call(routeHandler, '/api/trasa?meta=1', { env: ENV, fetchImpl: w.fetchImpl });
+  assert.equal(meta.body.lines, 2); assert.equal(meta.body.refreshed, '2026-10-06T02:00:00.000Z'); assert.ok(!('hashes' in meta.body));
+  // Called again within 12 h: nothing happens (anyone may call it when there is no CRON_SECRET).
+  t += 3600e3;
+  r = await call(routesRefreshHandler, '/api/odswiez-trasy', { env: ENV, fetchImpl: w.fetchImpl, now, build });
+  assert.match(r.body.skipped, /niedawno/);
+  // A day later with the same timetable: only the meta key is written again.
+  t += 24 * 3600e3; resetRouteState(); w.writes.length = 0;
+  r = await call(routesRefreshHandler, '/api/odswiez-trasy', { env: ENV, fetchImpl: w.fetchImpl, now, build });
+  assert.equal(r.body.changed, 0); assert.deepEqual(w.writes, ['trasy:v1:meta']);
+  // A line gone from the timetable is deleted.
+  t += 24 * 3600e3; resetRouteState(); w.writes.length = 0;
+  r = await call(routesRefreshHandler, '/api/odswiez-trasy', { env: ENV, fetchImpl: w.fetchImpl, now, build: async () => ({ ...built, lines: built.lines.slice(1), problems: [] }) });
+  assert.equal(r.body.deleted, 1); assert.ok(w.writes.includes('-trasy:v1:line:17'));
+  // With CRON_SECRET set only Vercel's cron (or the proxy secret) may run it.
+  resetRouteState();
+  assert.equal((await call(routesRefreshHandler, '/api/odswiez-trasy', { env: { ...ENV, CRON_SECRET: 'c' }, fetchImpl: w.fetchImpl, now, build })).status, 401);
+  assert.notEqual((await call(routesRefreshHandler, '/api/odswiez-trasy', { env: { ...ENV, CRON_SECRET: 'c' }, fetchImpl: w.fetchImpl, now, build }, { authorization: 'Bearer c' })).status, 401);
+});
+
+test('refresh falls back to the Worker when the direct download fails; /api/trasa without a Worker is a 404', async () => {
+  const { routesRefreshHandler, routeHandler, resetRouteState } = require('../lib/handler');
+  const w = await fakeWorker();
+  const built = await fromZip(MINI);
+  const viaWorker = async (url, init) => {
+    if (url === 'https://gtfs.ztm.waw.pl/last') throw new Error('connect timeout');
+    if (url === 'https://w.dev?resource=gtfs') return new Response(MINI, { status: 200 });
+    return w.fetchImpl(url, init);
+  };
+  resetRouteState();
+  const r = await call(routesRefreshHandler, '/api/odswiez-trasy', { env: ENV, fetchImpl: viaWorker, now: () => Date.parse('2026-10-06T02:00:00Z'), build: async (buf) => { assert.ok(buf.length > 100); return { ...built, problems: [] }; } });
+  assert.equal(r.status, 200, JSON.stringify(r.body)); assert.match(r.body.via, /przez Workera \(bezpośrednio: connect timeout\)/);
+  assert.equal((await call(routeHandler, '/api/trasa?linia=175', { env: {}, fetchImpl: viaWorker })).status, 404);
+});
