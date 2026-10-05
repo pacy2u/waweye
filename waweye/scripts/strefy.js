@@ -2,8 +2,9 @@
 // Zone data for the map layers (run in GitHub Actions: .github/workflows/waweye-dane-stref.yml).
 // 1. Clean Transport Zone (SCT): the boundary from OpenStreetMap (relation 17792822, boundary=low_emission_zone)
 //    -> public/data/strefa-czystego-transportu.geojson, checked for plausibility before it is written.
-// 2. Paid parking zone (SPPN): the city publishes it only as a map layer, so this lists the layers of the city's WMS
-//    services that look like parking or emission zones (name, title, whether they serve EPSG:3857 for Leaflet).
+// 2. Paid parking zone (SPPN): the city publishes it only as a map layer (WMS, drawn as a fill), so its outline comes
+//    from OpenStreetMap: relations zone=parking in Warsaw -> public/data/strefa-platnego-parkowania.geojson, checked
+//    like the SCT. The report also lists the zone layers of the city's WMS services.
 // Run: node scripts/strefy.js  (prints a Markdown report in Polish; exit code 1 when the SCT boundary is not usable)
 
 const fs = require('fs');
@@ -17,6 +18,12 @@ const OSM_API = 'https://api.openstreetmap.org/api/0.6';
 const HEADERS = { 'User-Agent': 'wawEye/1.0 (+https://github.com/pacy2u/waweye)', Accept: 'application/json' };
 const WMS = ['https://wms.um.warszawa.pl/serwis', 'https://wms2.um.warszawa.pl/geoserver/wms/wms'];
 const ZONE_RE = /parkow|sppn|p[łl]atn|czyst|\bsct\b|emisj/i;
+const SPPN_FILE = path.join(__dirname, '..', 'public', 'data', 'strefa-platnego-parkowania.geojson');
+const WARSAW_BBOX = '52.09,20.85,52.37,21.28'; // south, west, north, east
+// Points that must be in the SPPN: Śródmieście, Praga (Ząbkowska), Stary Mokotów (since 2026-02, Park Dreszera).
+const SPPN_INSIDE = { 'Pałac Kultury': [52.2318, 21.0060], 'Praga (Ząbkowska)': [52.2513, 21.0420], 'Stary Mokotów (od 2026-02)': [52.1995, 21.0090] };
+const SPPN_OUTSIDE = { 'Wilanów': [52.1650, 21.0900], 'Bemowo': [52.2540, 20.9120] };
+const SPPN_AREA_KM2 = [20, 90];
 const INSIDE = [52.2318, 21.0060]; // Palace of Culture: in the middle of the SCT
 const OUTSIDE = [52.1650, 21.0900]; // Wilanów: well outside it
 const AREA_KM2 = [25, 60]; // the city gives 37 km²
@@ -102,6 +109,15 @@ function checkSct(f) {
   return problems;
 }
 
+// Problems that make the SPPN outline unusable (empty list = fine).
+function checkSppn(features) {
+  const problems = [], area = features.reduce((s, f) => s + featureArea(f), 0);
+  if (area < SPPN_AREA_KM2[0] || area > SPPN_AREA_KM2[1]) problems.push(`powierzchnia ${area.toFixed(1)} km² poza zakresem ${SPPN_AREA_KM2.join('–')} km²`);
+  for (const [name, pt] of Object.entries(SPPN_INSIDE)) if (!features.some((f) => containsLatLng(f, pt))) problems.push(`${name} nie leży w strefie`);
+  for (const [name, pt] of Object.entries(SPPN_OUTSIDE)) if (features.some((f) => containsLatLng(f, pt))) problems.push(`${name} leży w strefie`);
+  return problems;
+}
+
 const decode = (s) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&').trim();
 
 // WMS GetCapabilities XML -> [{ name, title, crs: [...] }] for every named layer (CRS inherited from parent layers).
@@ -171,6 +187,38 @@ async function sct(log) {
   log(`Zapisano \`public/data/${path.basename(SCT_FILE)}\` (${Math.round(fs.statSync(SCT_FILE).size / 1024)} KB).\n`);
 }
 
+async function sppn(log) {
+  log('## Strefa Płatnego Parkowania Niestrzeżonego (OpenStreetMap)\n');
+  const query = `[out:json][timeout:90];(relation["zone"="parking"](${WARSAW_BBOX});relation["boundary"="parking_zone"](${WARSAW_BBOX}););out geom;`;
+  let data, via, errors = [];
+  for (const url of OVERPASS) {
+    try {
+      const res = await fetch(url, { method: 'POST', headers: HEADERS, body: new URLSearchParams({ data: query }), signal: AbortSignal.timeout(TIMEOUT_MS) });
+      if (!res.ok) throw new Error(`HTTP ${res.status} ${(await res.text()).slice(0, 120)}`);
+      data = await res.json(); via = url; break;
+    } catch (e) { errors.push(`${url}: ${e.message}`); }
+  }
+  if (!data) throw new Error(errors.join('; '));
+  const rels = (data.elements || []).filter((e) => e.type === 'relation');
+  log(`Relacji zone=parking w Warszawie: ${rels.length} (z ${via}, stan OSM ${data.osm3s && data.osm3s.timestamp_osm_base}).\n`);
+  const features = [];
+  for (const rel of rels) {
+    const t = rel.tags || {};
+    let f = null, err = '';
+    try { f = relationToFeature(rel, { name: t.name || '', osm_id: rel.id }); } catch (e) { err = e.message; }
+    const where = f ? Object.entries(SPPN_INSIDE).filter(([, pt]) => containsLatLng(f, pt)).map(([n]) => n).join(', ') || 'żaden punkt kontrolny' : '';
+    log(`- [${rel.id}](https://www.openstreetmap.org/relation/${rel.id}) ${t.name || '(bez nazwy)'} · ${Object.entries(t).filter(([k]) => k !== 'name').map(([k, v]) => `${k}=${v}`).join(' ').slice(0, 300)}${f ? ` · ${featureArea(f).toFixed(1)} km², zawiera: ${where}` : ` · BŁĄD: ${err}`}`);
+    if (f) features.push(f);
+  }
+  log('');
+  const problems = checkSppn(features);
+  if (problems.length) throw new Error('granica nie przeszła kontroli: ' + problems.join('; '));
+  const props = { source: `OpenStreetMap, relacje ${features.map((f) => f.properties.osm_id).join(', ')}`, license: 'ODbL 1.0, © współtwórcy OpenStreetMap', osm_timestamp: data.osm3s && data.osm3s.timestamp_osm_base };
+  fs.mkdirSync(path.dirname(SPPN_FILE), { recursive: true });
+  fs.writeFileSync(SPPN_FILE, JSON.stringify({ type: 'FeatureCollection', properties: props, features }) + '\n');
+  log(`Zapisano \`public/data/${path.basename(SPPN_FILE)}\` (${Math.round(fs.statSync(SPPN_FILE).size / 1024)} KB).\n`);
+}
+
 async function wms(log) {
   log('## Warstwy stref w usługach WMS miasta\n');
   for (const base of WMS) {
@@ -194,9 +242,10 @@ if (require.main === module) {
   (async () => {
     let ok = true;
     try { await sct(log); } catch (e) { ok = false; log(`**Błąd SCT:** ${e.message}\n`); }
+    try { await sppn(log); } catch (e) { ok = false; log(`**Błąd SPPN:** ${e.message}\n`); }
     await wms(log);
     process.exit(ok ? 0 : 1);
   })();
 }
 
-module.exports = { stitch, inRing, ringArea, relationToFeature, fullToGeom, osmRelation, containsLatLng, featureArea, checkSct, wmsLayers };
+module.exports = { stitch, inRing, ringArea, relationToFeature, fullToGeom, osmRelation, containsLatLng, featureArea, checkSct, checkSppn, wmsLayers };

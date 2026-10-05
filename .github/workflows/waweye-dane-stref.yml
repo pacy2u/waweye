@@ -1,7 +1,7 @@
 name: wawEye – dane stref (SCT, SPPN)
 
-# Downloads the Clean Transport Zone boundary from OpenStreetMap into waweye/public/data/ and commits it to the branch
-# it runs on (only when it changed), and lists the zone layers of the city's WMS services (for the SPPN layer).
+# Downloads the Clean Transport Zone and paid parking zone (SPPN) boundaries from OpenStreetMap into
+# waweye/public/data/ and commits them to the branch it runs on (only when they changed), and lists the zone layers of the city's WMS services (for the SPPN layer).
 # Logic: waweye/scripts/strefy.js (unit-tested). Runs on demand, and on its own after a push that changes the script
 # or this file on a branch other than main (a commit made with GITHUB_TOKEN does not start workflows, so no loop).
 on:
@@ -27,14 +27,20 @@ jobs:
         with:
           node-version: 22
       - name: Pobranie danych stref
-        run: node waweye/scripts/strefy.js | tee -a "$GITHUB_STEP_SUMMARY"
+        # A failed check of one zone fails the job at the end, but the other zone's file is still committed.
+        run: |
+          set -o pipefail
+          node waweye/scripts/strefy.js | tee -a "$GITHUB_STEP_SUMMARY" || echo "STREFY_FAILED=1" >> "$GITHUB_ENV"
         shell: bash
-      - name: Zapis granicy SCT w repozytorium
+      - name: Zapis granic stref w repozytorium
         shell: bash
         run: |
-          git add waweye/public/data/strefa-czystego-transportu.geojson
-          if git diff --cached --quiet; then echo "Granica SCT bez zmian." | tee -a "$GITHUB_STEP_SUMMARY"; exit 0; fi
-          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-            commit -m "Dane: granica Strefy Czystego Transportu z OpenStreetMap (relacja 17792822)"
-          git push origin "HEAD:${GITHUB_REF_NAME}"
-          echo "Zapisano zmienioną granicę SCT na gałęzi ${GITHUB_REF_NAME}." | tee -a "$GITHUB_STEP_SUMMARY"
+          git add -A waweye/public/data/
+          if git diff --cached --quiet; then echo "Granice stref bez zmian." | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -m "Dane: granice stref SCT i SPPN z OpenStreetMap"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+            echo "Zapisano zmienione granice stref na gałęzi ${GITHUB_REF_NAME}." | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ "${STREFY_FAILED:-}" = 1 ]; then echo "::error::Co najmniej jedna granica nie przeszła kontroli (szczegóły w podsumowaniu)."; exit 1; fi
