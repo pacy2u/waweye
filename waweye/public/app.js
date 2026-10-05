@@ -2,7 +2,7 @@
 (function () {
   const POLL_MS = 10000, ANIM_MS = 900, LABEL_ZOOM = 14;
   const COLORS = { bus: '#2B2B33', tram: '#0073E6', sel: '#FC4C02' };
-  const state = { range: 'today', events: false, eventItems: [], selectedEvent: null, eventMarkers: new Map(), eventError: null, eventMeta: null, sport: false, sportItems: [], selectedSport: null, sportMarkers: new Map(), sportError: null, sportMeta: null, inc: false, incidents: [], selectedInc: null, incLayers: new Map(), incError: null, park: false, parkings: [], selectedPark: null, parkMarkers: new Map(), parkError: null, types: { bus: true, tram: true }, query: '', selected: null, follow: false, markers: new Map(), lastOk: 0, data: [] };
+  const state = { range: 'today', events: false, eventItems: [], selectedEvent: null, eventMarkers: new Map(), eventError: null, eventMeta: null, sport: false, sportItems: [], selectedSport: null, sportMarkers: new Map(), sportError: null, sportMeta: null, inc: false, incidents: [], selectedInc: null, incLayers: new Map(), incError: null, park: false, parkings: [], selectedPark: null, parkMarkers: new Map(), parkError: null, types: { bus: true, tram: true }, query: '', words: [], selected: null, follow: false, markers: new Map(), lastOk: 0, data: [] };
 
   const map = L.map('map', { zoomControl: false, preferCanvas: true, minZoom: 9, maxZoom: 19 }).setView([52.2297, 21.0122], 12);
   L.control.zoom({ position: 'topright' }).addTo(map);
@@ -23,6 +23,20 @@
   const STALE_MS = 180000;
   const isStale = (v) => state.lastOk && v.time && state.lastOk - v.time > STALE_MS;
   const visible = (v) => state.types[v.type] && (!state.query || v.line.toLowerCase().startsWith(state.query));
+  // The same search box filters the other layers by their text: every word must appear somewhere in it, case and
+  // Polish letters aside ("lazienki" finds "Łazienki"). The text of an item is built once (items are replaced on each poll).
+  const fold = (s) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ł/g, 'l');
+  const searchText = new WeakMap();
+  function matches(it, fields) {
+    if (!state.words.length) return true;
+    let t = searchText.get(it);
+    if (t == null) searchText.set(it, (t = fold(fields(it).flat(2).filter((x) => typeof x === 'string').join(' '))));
+    return state.words.every((w) => t.includes(w));
+  }
+  const PARK_TEXT = (p) => [p.name, p.address, p.category];
+  const INC_TEXT = (i) => [i.name, i.content];
+  const SPORT_TEXT = (it) => [it.title, it.place, it.address, it.district, it.categories, it.audience, it.text];
+  const EVENT_TEXT = (it) => [it.title, it.venue, it.district, it.organizer, it.categories, it.text, it.points.map((x) => [x.label, x.street, x.district])];
 
   function style(v) {
     const sel = state.selected, dim = sel && sel !== v.id;
@@ -300,6 +314,7 @@
   function renderParkings() {
     const seen = new Set();
     for (const p of state.parkings) {
+      if (!matches(p, PARK_TEXT) && state.selectedPark !== p.id) continue;
       seen.add(p.id);
       let m = state.parkMarkers.get(p.id);
       const icon = L.divIcon({ className: '', html: pkLabel(p), iconSize: null, iconAnchor: [17, 11] });
@@ -384,6 +399,7 @@
     for (const g of state.incLayers.values()) incLayer.removeLayer(g);
     state.incLayers.clear();
     for (const i of state.incidents) {
+      if (!matches(i, INC_TEXT) && state.selectedInc !== i.id) continue;
       const group = L.layerGroup();
       const sel = state.selectedInc === i.id;
       for (const sh of i.shapes) {
@@ -669,6 +685,7 @@
   function sportPlaces() {
     const days = rangeDays(), places = new Map();
     for (const it of state.sportItems) {
+      if (!matches(it, SPORT_TEXT)) continue;
       const occ = occurrences(it, days); if (!occ.length) continue;
       const key = `sp-${it.lat.toFixed(4)},${it.lon.toFixed(4)}`;
       let p = places.get(key);
@@ -791,6 +808,7 @@
   function eventPlaces() {
     const days = rangeDays(), places = new Map();
     for (const it of state.eventItems) {
+      if (!matches(it, EVENT_TEXT)) continue;
       const occ = eventOcc(it, days); if (!occ.length) continue;
       for (const pt of it.points) {
         const key = `ev-${pt.lat.toFixed(4)},${pt.lon.toFixed(4)}`;
@@ -1005,7 +1023,11 @@
   }
   $('t-bus').onclick = (e) => toggleType('bus', e.currentTarget);
   $('t-tram').onclick = (e) => toggleType('tram', e.currentTarget);
-  $('search').oninput = (e) => { state.query = e.target.value.trim().toLowerCase(); refresh(); };
+  $('search').oninput = (e) => {
+    state.query = e.target.value.trim().toLowerCase(); state.words = state.query ? fold(state.query).split(/\s+/) : [];
+    renderParkings(); if (state.inc) renderIncidents(); renderSport(); renderEvents();
+    refresh(); // last: it also redraws the status line with the new counts
+  };
   $('close').onclick = deselect;
   $('follow').onclick = (e) => {
     state.follow = !state.follow; e.currentTarget.classList.toggle('on', state.follow);
