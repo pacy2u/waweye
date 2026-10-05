@@ -1,6 +1,6 @@
 'use strict';
-const { fetchVehicles, fetchParkings, fetchIncidents, fetchFleet, fetchSport, normalizeFleet, normalizeParkings, normalizeIncidents, normalizeSport } = require('./warsaw');
-const { mockVehicles, mockParkings, mockIncidents, mockFleet, mockSport, MOCK_GEOCODES } = require('./mock');
+const { fetchVehicles, fetchParkings, fetchIncidents, fetchFleet, fetchSport, fetchEvents, normalizeFleet, normalizeParkings, normalizeIncidents, normalizeSport, normalizeEvents } = require('./warsaw');
+const { mockVehicles, mockParkings, mockIncidents, mockFleet, mockSport, mockEvents, MOCK_GEOCODES } = require('./mock');
 const { createGeocoder } = require('./geocoding');
 
 // Read-only API: anything but GET/HEAD gets 405. Returns true when the request was rejected.
@@ -114,8 +114,10 @@ async function fleetHandler(req, res, { env = process.env, fetchImpl = fetch } =
   }
 }
 
-// Sport classes: geocoding answers live as long as this server instance, shared by its requests.
-const geocoder = createGeocoder();
+// Sport classes and events: geocoding answers live as long as this server instance, shared by its requests.
+// /api/sport and /api/wydarzenia run as separate Vercel functions, each with its own queue, so each keeps to one
+// Nominatim call per 2.2 s: together still under the policy's one per second.
+const geocoder = createGeocoder({ minGapMs: 2200 });
 const mockGeocoder = createGeocoder({ minGapMs: 0, fetchImpl: async (url) => {
   const hit = MOCK_GEOCODES[new URL(url).searchParams.get('q')];
   return new Response(JSON.stringify(hit ? [{ lat: String(hit.lat), lon: String(hit.lon) }] : []), { status: 200 });
@@ -148,4 +150,34 @@ async function sportHandler(req, res, { env = process.env, fetchImpl = fetch, ge
   }
 }
 
-module.exports = { fleetHandler, vehiclesHandler, parkingHandler, incidentsHandler, sportHandler };
+async function eventsHandler(req, res, { env = process.env, fetchImpl = fetch, geo, geoBudgetMs = 5000 } = {}) {
+  if (rejectUnlessRead(req, res)) return;
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  try {
+    let raw, source = 'live';
+    if (env.MOCK === '1') { source = 'mock'; raw = mockEvents(); }
+    else {
+      raw = await fetchEvents({
+        apiKey: env.WARSAW_API_KEY, fetchImpl,
+        upstream: env.UPSTREAM_URL ? { url: env.UPSTREAM_URL, secret: env.UPSTREAM_SECRET || '' } : undefined,
+      });
+    }
+    const all = normalizeEvents(raw);
+    const pending = await (geo || (source === 'mock' ? mockGeocoder : geocoder)).locate(all, { budgetMs: geoBudgetMs });
+    const items = [];
+    for (const { queries, lat, lon, ...it } of all) {
+      if (!it.points.length && lat != null) { it.points = [{ lat, lon, label: it.venue || it.address, street: it.address, district: it.district }]; it.located = 'address'; }
+      if (it.points.length) items.push(it);
+    }
+    // Same caching as /api/sport: short while addresses are still being looked up.
+    res.setHeader('Cache-Control', pending ? 's-maxage=15' : 's-maxage=1800, stale-while-revalidate=3600');
+    res.statusCode = 200;
+    res.end(JSON.stringify({ updated: Date.now(), source, received: raw.length, pending, unlocated: all.length - items.length - pending, items }));
+  } catch (e) {
+    res.setHeader('Cache-Control', 'no-store');
+    res.statusCode = 502;
+    res.end(JSON.stringify({ error: e.message }));
+  }
+}
+
+module.exports = { fleetHandler, vehiclesHandler, parkingHandler, incidentsHandler, sportHandler, eventsHandler };
