@@ -204,6 +204,27 @@ async function testWorkera(ctx, value) {
   return md;
 }
 
+// Can the Worker fetch the official ZTM GTFS (gtfs.ztm.waw.pl)? Run from GitHub's runners, so it shows what a scheduled
+// workflow would get; colo is the Cloudflare location the Worker ran in. Only a report: a failure here is an answer.
+async function testGtfs(ctx, value) {
+  const worker = checkWorker(value);
+  if (!ctx.proxySecret) throw new Error('Brak sekretu PROXY_SECRET w repozytorium (patrz README).');
+  const base = await workerBase(ctx, worker);
+  const t0 = ctx.now();
+  let row;
+  try {
+    const res = await ctx.fetchImpl(base + '/?resource=gtfs&probe=1', { headers: { 'x-proxy-secret': ctx.proxySecret }, signal: AbortSignal.timeout(TIMEOUT_MS) });
+    const b = await res.json().catch(() => ({}));
+    const size = b.length ? `${(b.length / 1048576).toFixed(1).replace('.', ',')} MB` : 'rozmiar nieznany';
+    row = res.status === 200
+      ? `| działa | HTTP ${b.status}, ${size}, plik z ${b.modified || '?'}, ${b.url || ''} | ${b.colo || '?'} | ${b.ms ?? '?'} ms |`
+      : `| NIE działa | HTTP ${res.status}${b.error ? ` (${b.error})` : ''} | ${b.colo || '?'} | ${b.ms ?? ctx.now() - t0} ms |`;
+  } catch (e) {
+    row = `| NIE działa | brak odpowiedzi Workera (${e.message}) | ? | ${ctx.now() - t0} ms |`;
+  }
+  return [`### Cloudflare: GTFS ZTM przez Workera ${worker} (zapytanie z GitHub Actions)`, '', '| Wynik | Szczegóły | Lokalizacja Cloudflare | Czas |', '|---|---|---|---|', row].join('\n');
+}
+
 async function ustawSekrety(ctx, value) {
   const worker = checkWorker(value);
   const values = { WARSAW_API_KEY: ctx.warsawApiKey, PROXY_SECRET: ctx.proxySecret };
@@ -268,6 +289,7 @@ async function usunWorkera(ctx, value, confirmation) {
 const OPERATIONS = {
   stan: (ctx, [w]) => stan(ctx, w),
   'test-workera': (ctx, [w]) => testWorkera(ctx, w),
+  'test-gtfs': (ctx, [w]) => testGtfs(ctx, w),
   'ustaw-sekrety': (ctx, [w]) => ustawSekrety(ctx, w),
   'usun-workera': (ctx, [w, confirmation]) => usunWorkera(ctx, w, confirmation),
   'podepnij-kv': (ctx, [file]) => podepnijKv(ctx, file || undefined),

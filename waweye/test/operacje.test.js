@@ -241,6 +241,7 @@ function fakeCf(over = {}) {
       if ((init.headers || {})['x-proxy-secret'] !== 'proxy-tajne') return json({ error: 'forbidden' }, 403);
       if (s.workerStatus !== 200) return json({ error: 'worker is missing WARSAW_API_KEY' }, s.workerStatus);
       const q = u.search;
+      if (q === '?resource=gtfs&probe=1') return s.gtfs ? json(s.gtfs.body, s.gtfs.status) : json({ status: 200, url: 'https://gtfs.ztm.waw.pl/files/gtfs.zip', length: '62914560', modified: 'Mon, 05 Oct 2026 03:00:00 GMT', colo: 'FRA', ms: 840 });
       if (q === '?resource=geokody') return s.kvBound === false ? json({ error: 'worker has no GEOKODY binding' }, 501) : json({ found: {} });
       return json(q === '?type=1' ? [{ Lines: '175' }, { Lines: '520' }] : q === '?resource=parking' ? { Status: 'ok', carParks: [{}] } : q === '?resource=fleet' ? { busy: [{}, {}], tramwaje: [{}] } : []);
     }
@@ -383,4 +384,14 @@ test('cloudflare podepnij-kv: finds or creates the geocode namespace and binds i
   const g = path.join(path.dirname(f), 'czysty.toml'); fs.writeFileSync(g, 'name = "waweye-proxy"\n');
   await assert.rejects(cfOps.run('podepnij-kv', [g], cdeps(fakeCf({ kvForbidden: true }), CF_ENV)), /HTTP 403 \(10000: Authentication error\)/);
   assert.equal(fs.readFileSync(g, 'utf8'), 'name = "waweye-proxy"\n');
+});
+
+test('cloudflare test-gtfs: reports whether the Worker gets the ZTM GTFS and from where', async () => {
+  const env = { ...CF_ENV, PROXY_SECRET: 'proxy-tajne' };
+  const md = await cfOps.run('test-gtfs', ['waweye-proxy'], cdeps(fakeCf(), env));
+  assert.match(md, /GTFS ZTM przez Workera waweye-proxy/);
+  assert.match(md, /\| działa \| HTTP 200, 60,0 MB, plik z Mon, 05 Oct 2026[^|]*\| FRA \| 840 ms \|/);
+  const s = fakeCf(); s.gtfs = { status: 502, body: { error: 'upstream: connection timed out', colo: 'IAD', ms: 10500 } };
+  assert.match(await cfOps.run('test-gtfs', ['waweye-proxy'], cdeps(s, env)), /\| NIE działa \| HTTP 502 \(upstream: connection timed out\) \| IAD \| 10500 ms \|/);
+  await assert.rejects(cfOps.run('test-gtfs', ['waweye-proxy'], cdeps(fakeCf(), CF_ENV)), /PROXY_SECRET/);
 });

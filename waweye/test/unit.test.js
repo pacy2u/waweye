@@ -766,3 +766,46 @@ test('sport and events handlers hand pending lookups to waitUntil, after a short
     assert.deepEqual(later, [45000]); assert.equal(bg.length, 1); assert.ok(typeof bg[0].then === 'function');
   }
 });
+
+test('worker: GTFS resource streams the ZTM timetable, probes it, needs the secret but not the API key', async () => {
+  const { handle } = await import('../worker/index.js');
+  const env = { PROXY_SECRET: 's' }; // no WARSAW_API_KEY: GTFS does not use it
+  const req = (q, secret = 's') => new Request('https://w.dev/' + q, { headers: { 'x-proxy-secret': secret } });
+  let seen;
+  const up = async (u, init) => { seen = { u, init }; return new Response('PK\u0003\u0004zip', { status: 200, headers: { 'content-type': 'application/zip', 'content-length': '7', 'last-modified': 'Mon, 05 Oct 2026 03:00:00 GMT' } }); };
+  assert.equal((await handle(req('?resource=gtfs', 'x'), env, up)).status, 403);
+  const full = await handle(req('?resource=gtfs'), env, up);
+  assert.equal(full.status, 200); assert.equal(await full.text(), 'PK\u0003\u0004zip');
+  assert.equal(full.headers.get('x-gtfs-modified'), 'Mon, 05 Oct 2026 03:00:00 GMT');
+  assert.equal(seen.u, 'https://gtfs.ztm.waw.pl/last'); assert.match(seen.init.headers['User-Agent'], /wawEye/);
+  const probe = await (await handle(req('?resource=gtfs&probe=1'), env, up)).json();
+  assert.equal(probe.status, 200); assert.equal(probe.length, '7'); assert.equal(probe.type, 'application/zip'); assert.ok('colo' in probe);
+  const down = await handle(req('?resource=gtfs'), env, async () => new Response('no', { status: 404 }));
+  assert.equal(down.status, 502); assert.match((await down.json()).error, /HTTP 404/);
+  const dead = await handle(req('?resource=gtfs&probe=1'), env, async () => { throw new Error('timed out'); });
+  assert.equal(dead.status, 502); assert.match((await dead.json()).error, /upstream: timed out/);
+});
+
+test('gtfsProbeHandler: checks GTFS through the Worker and directly, read-only', async () => {
+  const { gtfsProbeHandler } = require('../lib/handler');
+  const run = async (env, fetchImpl, method = 'GET') => {
+    const res = { headers: {}, statusCode: 0, setHeader(k, v) { this.headers[k] = v; }, end(b) { this.body = b; } };
+    await gtfsProbeHandler({ method, url: '/api/sprawdz-gtfs' }, res, { env, fetchImpl });
+    return res;
+  };
+  const calls = [];
+  const f = async (u, init) => {
+    calls.push({ u, init });
+    if (u.startsWith('https://w.dev')) return new Response(JSON.stringify({ status: 200, colo: 'FRA', length: '100' }), { status: 200 });
+    throw Object.assign(new TypeError('fetch failed'), { cause: { code: 'UND_ERR_CONNECT_TIMEOUT' } });
+  };
+  const r = await run({ UPSTREAM_URL: 'https://w.dev', UPSTREAM_SECRET: 'sek', VERCEL_REGION: 'fra1' }, f);
+  const b = JSON.parse(r.body);
+  assert.equal(b.region, 'fra1'); assert.equal(b.viaWorker.httpStatus, 200); assert.equal(b.viaWorker.worker.colo, 'FRA');
+  assert.match(b.direct.error, /UND_ERR_CONNECT_TIMEOUT/);
+  assert.equal(calls[0].u, 'https://w.dev?resource=gtfs&probe=1'); assert.equal(calls[0].init.headers['x-proxy-secret'], 'sek');
+  assert.ok(!r.body.includes('sek'), 'the secret is not echoed');
+  assert.equal(r.headers['Cache-Control'], 'no-store');
+  assert.match(JSON.parse((await run({}, f)).body).viaWorker.error, /brak UPSTREAM_URL/);
+  assert.equal((await run({}, f, 'POST')).statusCode, 405);
+});

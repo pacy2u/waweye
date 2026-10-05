@@ -4,7 +4,7 @@ name: wawEye – operacje Cloudflare
 # Logic: waweye/scripts/cloudflare-ops.js (unit-tested). The Worker code itself is deployed by
 # waweye-wdrozenie-workera.yml; this workflow sets its secrets, tests it and removes old Workers.
 # Needs repository secrets CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID; WARSAW_API_KEY and PROXY_SECRET
-# for ustaw-sekrety (PROXY_SECRET also for test-workera); VERCEL_TOKEN so that usun-workera can check
+# for ustaw-sekrety (PROXY_SECRET also for test-workera and test-gtfs); VERCEL_TOKEN so that usun-workera can check
 # which Worker production uses.
 on:
   workflow_dispatch:
@@ -13,7 +13,7 @@ on:
         description: 'Operacja'
         type: choice
         default: stan
-        options: [stan, test-workera, ustaw-sekrety, usun-workera]
+        options: [stan, test-workera, test-gtfs, ustaw-sekrety, usun-workera]
       worker:
         description: 'Nazwa Workera'
         type: string
@@ -51,6 +51,6 @@ jobs:
           OPERACJA: ${{ inputs.operacja }}
           WORKER: ${{ inputs.worker }}
           POTWIERDZENIE: ${{ inputs.potwierdzenie }}
-          PROXY_SECRET: ${{ (inputs.operacja == 'test-workera' || inputs.operacja == 'ustaw-sekrety') && secrets.PROXY_SECRET || '' }}
+          PROXY_SECRET: ${{ (inputs.operacja == 'test-workera' || inputs.operacja == 'test-gtfs' || inputs.operacja == 'ustaw-sekrety') && secrets.PROXY_SECRET || '' }}
           WARSAW_API_KEY: ${{ inputs.operacja == 'ustaw-sekrety' && secrets.WARSAW_API_KEY || '' }}
         run: node waweye/scripts/cloudflare-ops.js "$OPERACJA" "$WORKER" "$POTWIERDZENIE" | tee -a "$GITHUB_STEP_SUMMARY"

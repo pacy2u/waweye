@@ -13,6 +13,12 @@ const RESOURCES = {
   wydarzenia: 'https://dane.um.warszawa.pl/api/action/get_bmm_kalendarz_wydarzen',
 };
 
+// Official ZTM timetable (GTFS ZIP, ~10 days ahead). ?resource=gtfs streams it through (no parsing, so it fits the free
+// plan's CPU limit); &probe=1 answers only with the upstream status, size, date and the Cloudflare location (colo) the
+// request went out from - the Warsaw servers refuse some locations (the Warsaw API answers 522 to Workers run in the USA).
+const GTFS_URL = 'https://gtfs.ztm.waw.pl/last';
+const GTFS_UA = 'wawEye/1.0 (+https://github.com/pacy2u/waweye)';
+
 const json = (body, status) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
 // Geocodes shared by every Vercel instance, kept across deploys and cold starts (lib/geocoding.js uses them).
@@ -58,6 +64,25 @@ async function geocodes(request, env) {
   return json({ error: 'expected {"get": [...]} or {"put": {...}}' }, 400);
 }
 
+async function gtfs(request, fetchImpl, probe) {
+  const t0 = Date.now(), colo = (request.cf && request.cf.colo) || null;
+  let res;
+  try {
+    res = await fetchImpl(GTFS_URL, { redirect: 'follow', headers: { 'User-Agent': GTFS_UA } });
+  } catch (e) {
+    return json({ error: 'upstream: ' + e.message, colo, ms: Date.now() - t0 }, 502);
+  }
+  const info = { status: res.status, url: res.url || GTFS_URL, type: res.headers.get('content-type'), length: res.headers.get('content-length'),
+    modified: res.headers.get('last-modified'), disposition: res.headers.get('content-disposition'), colo, ms: Date.now() - t0 };
+  if (probe || !res.ok) {
+    try { if (res.body) await res.body.cancel(); } catch {}
+    return json(res.ok ? info : { error: `gtfs: HTTP ${res.status}`, ...info }, res.ok ? 200 : 502);
+  }
+  const headers = { 'Content-Type': info.type || 'application/zip', 'x-gtfs-url': info.url, 'x-gtfs-modified': info.modified || '', 'x-colo': colo || '' };
+  if (info.length) headers['Content-Length'] = info.length;
+  return new Response(res.body, { status: 200, headers });
+}
+
 export async function handle(request, env, fetchImpl) {
   if (!env.PROXY_SECRET || request.headers.get('x-proxy-secret') !== env.PROXY_SECRET) return json({ error: 'forbidden' }, 403);
   const params = new URL(request.url).searchParams;
@@ -65,6 +90,7 @@ export async function handle(request, env, fetchImpl) {
   if (resource === 'geokody') {
     try { return await geocodes(request, env); } catch (e) { return json({ error: 'kv: ' + e.message }, 502); }
   }
+  if (resource === 'gtfs') return gtfs(request, fetchImpl, params.get('probe') === '1');
   const resourceUrl = Object.hasOwn(RESOURCES, resource) ? RESOURCES[resource] : undefined;
   const type = params.get('type');
   if (!resourceUrl && type !== '1' && type !== '2') return json({ error: 'bad type' }, 400);
