@@ -69,7 +69,7 @@
   }
 
   function select(id) {
-    closeZone();
+    closeZone(); closeStation();
     if (state.selectedPark) deselectPark();
     if (state.selectedInc) deselectInc();
     if (state.selectedSport) deselectSport();
@@ -141,6 +141,7 @@
     // Stops above the line, both under the vehicles (canvas draws in order).
     for (const st of stops) st.bringToBack();
     for (const l of lines) l.bringToBack();
+    metroLayer.eachLayer((l) => { if (!l.options.interactive) l.bringToBack(); }); // metro lines stay under the route
     renderRoutePanel();
   }
   function clearRoute() { route.vehicle = null; route.data = null; route.error = null; route.shown = []; route.track = []; routeLayer.clearLayers(); renderRoutePanel(); }
@@ -249,7 +250,7 @@
     if (!state.error && !state.lastOk) return; // still on the initial load
     const n = [...state.markers.values()].filter((m) => visible(m.v)).length; // computed now, never cached
     if (state.error) { el.className = 'err'; t.textContent = state.error; }
-    else if (state.lastOk) { el.className = 'ok'; t.textContent = `${n} pojazdów · ${new Date(state.lastOk).toLocaleTimeString('pl-PL')}${state.source === 'mock' ? ' · dane testowe' : ''}${state.parkError ? ' · parkingi: ' + state.parkError : ''}${state.incError ? ' · utrudnienia: ' + state.incError : ''}${sportStatus()}${eventStatus()}${zones.sctError ? ' · strefa czystego transportu: ' + zones.sctError : ''}${state.data.length === 0 && state.received > 0 ? ` · API zwróciło ${state.received}, wszystkie odrzucone (nieaktualne/poza Warszawą)` : state.data.length === 0 && state.received === 0 ? ' · API zwróciło pustą listę' : ''}`; }
+    else if (state.lastOk) { el.className = 'ok'; t.textContent = `${n} pojazdów · ${new Date(state.lastOk).toLocaleTimeString('pl-PL')}${state.source === 'mock' ? ' · dane testowe' : ''}${state.parkError ? ' · parkingi: ' + state.parkError : ''}${state.incError ? ' · utrudnienia: ' + state.incError : ''}${sportStatus()}${eventStatus()}${zones.sctError ? ' · strefa czystego transportu: ' + zones.sctError : ''}${metro.error ? ' · metro: ' + metro.error : ''}${state.data.length === 0 && state.received > 0 ? ` · API zwróciło ${state.received}, wszystkie odrzucone (nieaktualne/poza Warszawą)` : state.data.length === 0 && state.received === 0 ? ' · API zwróciło pustą listę' : ''}`; }
   }
 
   // Smooth movement between polls.
@@ -339,7 +340,7 @@
     const p = state.parkings.find((x) => x.id === id); if (!p) return;
     if (state.selected) deselect();
     if (state.selectedInc) deselectInc();
-    closeZone();
+    closeZone(); closeStation();
     if (state.selectedSport) deselectSport();
     if (state.selectedEvent) deselectEvent();
     state.selectedPark = id; fillParkPanel(p); $('ppanel').hidden = false; renderParkings();
@@ -414,7 +415,7 @@
     const i = state.incidents.find((x) => x.id === id); if (!i) return;
     if (state.selected) deselect();
     if (state.selectedPark) deselectPark();
-    closeZone();
+    closeZone(); closeStation();
     if (state.selectedSport) deselectSport();
     if (state.selectedEvent) deselectEvent();
     state.selectedInc = id; fillIncPanel(i); $('ipanel').hidden = false; renderIncidents();
@@ -528,7 +529,7 @@
     if (state.selectedInc !== null) deselectInc();
     if (state.selectedSport) deselectSport();
     if (state.selectedEvent) deselectEvent();
-    zones.open = kind;
+    closeStation(); zones.open = kind;
     $('zp-badge').className = 'z-badge ' + kind; $('zp-badge').textContent = z.badge;
     $('zp-name').textContent = z.name; $('zp-sub').textContent = z.sub;
     const dl = $('zp-rows'); dl.textContent = '';
@@ -555,6 +556,94 @@
   $('zclose').onclick = closeZone;
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('zmenu').hidden) { showZoneMenu(false); $('zones-btn').focus(); } });
   if (zonePrefs.sct) setSct(true);
+
+  // ---- Metro (M1, M2): lines and stations from OpenStreetMap (scripts/metro.js); the vehicle API has no metro ----
+  // The layer comes and goes with the trams unless the user has hidden it with its own chip (switched on without the trams,
+  // it stays until switched off); the choice is remembered in this browser only. Drawn on the vehicles' canvas, under them:
+  // lines are not interactive, stations are (a click opens the station panel), and a vehicle on top of a station wins the click.
+  const METRO_URL = '/data/metro.geojson';
+  const metro = { on: false, auto: false, data: null, loading: false, error: null, selected: null, stations: [] };
+  let metroPrefs = { hidden: false };
+  try { metroPrefs = { ...metroPrefs, ...JSON.parse(localStorage.getItem('waweye.metro') || '{}') }; } catch {}
+  const saveMetroPrefs = () => { try { localStorage.setItem('waweye.metro', JSON.stringify(metroPrefs)); } catch {} };
+  const metroLayer = L.layerGroup();
+  const metroColour = (refs) => (refs.length === 1 && metro.lineColours[refs[0]]) || '#242428';
+  metro.lineColours = {};
+  const stationRadius = () => Math.max(3, Math.min(8, map.getZoom() - 7));
+  function stationStyle(st) {
+    const sel = metro.selected === st.name;
+    return { radius: sel ? stationRadius() + 3 : stationRadius(), color: sel ? COLORS.sel : metroColour(st.lines), weight: sel ? 4 : 2.5, fillColor: '#fff', fillOpacity: 1 };
+  }
+  async function loadMetro() {
+    if (metro.data || metro.loading) return;
+    metro.loading = true;
+    try {
+      const res = await fetch(METRO_URL);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      metro.data = await res.json(); metro.error = null;
+    } catch (e) {
+      metro.error = 'brak danych (' + e.message + ')';
+    }
+    metro.loading = false;
+    drawMetro(); renderStatus();
+  }
+  function drawMetro() {
+    metroLayer.clearLayers(); metro.stations = [];
+    if (!metro.on || !metro.data) return;
+    const attribution = 'Metro: © współtwórcy OpenStreetMap';
+    const stations = [];
+    for (const f of metro.data.features) {
+      const p = f.properties;
+      if (p.kind === 'line') {
+        metro.lineColours[p.ref] = p.colour;
+        L.polyline(f.geometry.coordinates.map((c) => c.map(([lon, lat]) => [lat, lon])), { renderer: canvas, interactive: false, attribution,
+          color: p.colour, weight: 5, opacity: 0.85, lineCap: 'round', lineJoin: 'round' }).addTo(metroLayer).bringToBack();
+      } else if (p.kind === 'station' && p.name) stations.push({ name: p.name, lines: p.lines, ll: [f.geometry.coordinates[1], f.geometry.coordinates[0]] });
+    }
+    for (const st of stations) {
+      st.mk = L.circleMarker(st.ll, { ...stationStyle(st), renderer: canvas, attribution });
+      st.mk.on('click', (e) => { L.DomEvent.stopPropagation(e); openStation(st.name); });
+      st.mk.addTo(metroLayer);
+      metro.stations.push(st);
+    }
+    for (const m of state.markers.values()) if (map.hasLayer(m.mk)) m.mk.bringToFront(); // vehicles stay on top
+  }
+  function restyleStations() { for (const st of metro.stations) st.mk.setStyle(stationStyle(st)); }
+  function setMetro(on, auto = false) {
+    metro.on = on; metro.auto = on && auto;
+    if (on) { metroLayer.addTo(map); loadMetro(); drawMetro(); }
+    else { map.removeLayer(metroLayer); closeStation(); metro.error = null; renderStatus(); }
+    $('t-metro').classList.toggle('on', on); $('t-metro').setAttribute('aria-pressed', on);
+  }
+  function openStation(name) {
+    const st = metro.stations.find((s) => s.name === name);
+    if (!st) return;
+    if (state.selected) deselect();
+    if (state.selectedPark) deselectPark();
+    if (state.selectedInc !== null) deselectInc();
+    if (state.selectedSport) deselectSport();
+    if (state.selectedEvent) deselectEvent();
+    closeZone();
+    metro.selected = name; restyleStations(); st.mk.bringToFront();
+    const badges = $('mp-badges'); badges.textContent = '';
+    for (const ref of st.lines) { const b = document.createElement('span'); b.className = 'm-badge'; b.style.background = metroColour([ref]); b.textContent = ref; badges.append(b); }
+    $('mp-name').textContent = st.name;
+    $('mp-sub').textContent = st.lines.length > 1 ? 'Stacja metra · przesiadka ' + st.lines.join(' / ') : 'Stacja metra';
+    const dl = $('mp-rows'); dl.textContent = '';
+    for (const f of metro.data.features) {
+      const p = f.properties;
+      if (p.kind === 'line' && st.lines.includes(p.ref)) row(dl, p.ref, `${p.from} – ${p.to}`);
+    }
+    $('mpanel').hidden = false;
+  }
+  function closeStation() {
+    if (metro.selected == null) return;
+    metro.selected = null; $('mpanel').hidden = true; restyleStations();
+  }
+  $('t-metro').onclick = () => { const on = !metro.on; setMetro(on, state.types.tram); metroPrefs.hidden = !on; saveMetroPrefs(); };
+  $('mclose').onclick = closeStation;
+  map.on('zoomend', restyleStations);
+  if (!metroPrefs.hidden && state.types.tram) setMetro(true, true);
 
   // ---- Sport classes (dataset "Zajęcia sportowe"); one marker per place, counting the classes in the chosen days ----
   const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
@@ -637,7 +726,7 @@
     if (state.selected) deselect();
     if (state.selectedPark) deselectPark();
     if (state.selectedInc !== null) deselectInc();
-    closeZone();
+    closeZone(); closeStation();
     if (state.selectedEvent) deselectEvent();
     state.selectedSport = id; fillSportPanel(m.place); $('spanel').hidden = false; $('spanel').scrollTop = 0; renderSport();
   }
@@ -762,7 +851,7 @@
     if (state.selectedPark) deselectPark();
     if (state.selectedInc !== null) deselectInc();
     if (state.selectedSport) deselectSport();
-    closeZone();
+    closeZone(); closeStation();
     state.selectedEvent = id; fillEventPanel(m.place); $('epanel').hidden = false; $('epanel').scrollTop = 0; renderEvents();
   }
   function deselectEvent() {
@@ -899,16 +988,17 @@
   // Like Google's button riding on top of the bottom sheet: lift it above an open panel that covers it (phones).
   function liftLocate() {
     const b = $('locate'), br = b.getBoundingClientRect();
-    const tops = ['panel', 'ppanel', 'ipanel', 'spanel', 'epanel', 'zpanel'].map($).filter((p) => !p.hidden).map((p) => p.getBoundingClientRect())
+    const tops = ['panel', 'ppanel', 'ipanel', 'spanel', 'epanel', 'zpanel', 'mpanel'].map($).filter((p) => !p.hidden).map((p) => p.getBoundingClientRect())
       .filter((r) => r.right > br.left && r.left < br.right).map((r) => r.top);
     b.style.bottom = tops.length ? `${document.documentElement.clientHeight - Math.min(...tops) + 10}px` : '';
   }
-  if (window.ResizeObserver) { const ro = new ResizeObserver(liftLocate); for (const id of ['panel', 'ppanel', 'ipanel', 'spanel', 'epanel', 'zpanel']) ro.observe($(id)); }
+  if (window.ResizeObserver) { const ro = new ResizeObserver(liftLocate); for (const id of ['panel', 'ppanel', 'ipanel', 'spanel', 'epanel', 'zpanel', 'mpanel']) ro.observe($(id)); }
   window.addEventListener('resize', liftLocate);
 
   function toggleType(key, btn) {
     state.types[key] = !state.types[key];
     btn.classList.toggle('on', state.types[key]); btn.setAttribute('aria-pressed', state.types[key]);
+    if (key === 'tram') { if (state.types.tram && !metroPrefs.hidden) setMetro(true, true); else if (!state.types.tram && metro.auto) setMetro(false); }
     refresh(); poll();
   }
   $('t-bus').onclick = (e) => toggleType('bus', e.currentTarget);
@@ -920,10 +1010,10 @@
     if (state.follow && me.centered) setCentered(false); // following a vehicle takes the map off the user
     const s = state.markers.get(state.selected); if (state.follow && s) map.setView(s.mk.getLatLng(), Math.max(map.getZoom(), 15));
   };
-  map.on('click', () => { if (state.selected) deselect(); if (state.selectedPark) deselectPark(); if (state.selectedInc !== null) deselectInc(); if (state.selectedSport) deselectSport(); if (state.selectedEvent) deselectEvent(); closeZone(); showZoneMenu(false); });
+  map.on('click', () => { if (state.selected) deselect(); if (state.selectedPark) deselectPark(); if (state.selectedInc !== null) deselectInc(); if (state.selectedSport) deselectSport(); if (state.selectedEvent) deselectEvent(); closeZone(); closeStation(); showZoneMenu(false); });
   map.on('zoomend moveend', refresh);
 
-  window.__waweye = { state, zones, me, map, poll, select, deselect, selectPark, deselectPark, selectInc, deselectInc, selectSport, deselectSport, selectEvent, deselectEvent, openZone, closeZone, route };
+  window.__waweye = { state, zones, me, map, poll, select, deselect, selectPark, deselectPark, selectInc, deselectInc, selectSport, deselectSport, selectEvent, deselectEvent, openZone, closeZone, metro, openStation, closeStation, route };
   poll(); setInterval(poll, POLL_MS);
   // Polling and location tracking pause while the tab is hidden (saves requests, transfer and battery) and catch up when it is shown again.
   document.addEventListener('visibilitychange', () => {

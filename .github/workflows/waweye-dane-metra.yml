@@ -1,0 +1,41 @@
+name: wawEye – dane metra (M1, M2)
+
+# Downloads the metro lines and stations from OpenStreetMap into waweye/public/data/metro.geojson and commits the file
+# to the branch it runs on (only when it changed). The data is checked first (2 lines, station counts of October 2026,
+# Centrum/Świętokrzyska in the centre, everything inside Warsaw); a failed check ends the job red and keeps the old file.
+# Logic: waweye/scripts/metro.js (unit-tested). Runs on demand, and on its own after a push that changes the script
+# or this file on a branch other than main (a commit made with GITHUB_TOKEN does not start workflows, so no loop).
+on:
+  workflow_dispatch:
+  push:
+    branches-ignore: [main]
+    paths: ['waweye/scripts/metro.js', '.github/workflows/waweye-dane-metra.yml']
+
+concurrency:
+  group: waweye-dane-metra-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  metro:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Pobranie danych metra
+        run: node waweye/scripts/metro.js | tee -a "$GITHUB_STEP_SUMMARY"
+        shell: bash
+      - name: Zapis warstwy metra w repozytorium
+        shell: bash
+        run: |
+          git add waweye/public/data/metro.geojson
+          if git diff --cached --quiet; then echo "Warstwa metra bez zmian." | tee -a "$GITHUB_STEP_SUMMARY"; exit 0; fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -m "Dane: linie i stacje metra M1, M2 z OpenStreetMap"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+          echo "Zapisano zmienioną warstwę metra na gałęzi ${GITHUB_REF_NAME}." | tee -a "$GITHUB_STEP_SUMMARY"

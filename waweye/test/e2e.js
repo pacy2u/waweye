@@ -130,7 +130,7 @@ function findChromium() {
       await page.evaluate(() => { const { state, select } = window.__waweye; select([...state.markers.keys()][0]); });
       await page.mouse.click(5, ctxOpts.viewport.height - 5); await page.waitForTimeout(200);
       // bottom-left may hit status chip; use map centre-top-right instead if still selected
-      if ((await S()).sel) { await page.evaluate(() => window.__waweye.map.fire('click')); }
+      if ((await S()).sel) { await page.evaluate(() => { window.__waweye.map.fire('click'); }); }
       assert.equal((await S()).sel, null);
     });
     await step(`${label}: type filter`, async () => {
@@ -349,6 +349,48 @@ function findChromium() {
       const z = await Z(); assert.ok(!z.sct && !z.btn); assert.equal(z.prefs.sct, false);
       await page.click('#zones-btn'); assert.ok(await page.isHidden('#zmenu'));
     });
+    await step(`${label}: metro M1/M2 comes with the trams, stations open a panel, own chip hides it`, async () => {
+      const M = () => page.evaluate(() => { const { map, metro } = window.__waweye; let lines = [], prefs = null;
+        map.eachLayer((l) => { if (l instanceof L.Polyline && !(l instanceof L.Polygon) && !l.options.interactive && /Metro/.test(l.options.attribution || '')) lines.push(l.options.color); });
+        try { prefs = JSON.parse(localStorage.getItem('waweye.metro')); } catch {}
+        return { on: metro.on, err: metro.error, lines, stations: metro.stations.filter((s) => map.hasLayer(s.mk)).length, prefs,
+          chip: document.getElementById('t-metro').getAttribute('aria-pressed'), panel: !document.getElementById('mpanel').hidden }; });
+      await page.waitForFunction(() => window.__waweye.metro.stations.length > 0);
+      let m = await M();
+      assert.ok(m.on && m.chip === 'true', 'on by default with the trams'); assert.equal(m.err, null);
+      assert.deepEqual(m.lines.sort(), ['#0071BC', '#C60C30']); assert.equal(m.stations, 38);
+      assert.equal(await page.locator('.leaflet-overlay-pane canvas').count(), 1, 'metro shares the vehicles canvas');
+      assert.match(await page.textContent('.leaflet-control-attribution'), /Metro: © współtwórcy OpenStreetMap/);
+      // Hide the vehicles (line filter) so the click lands on the station, not on a tram or bus parked on top of it.
+      await page.fill('#search', 'zzz');
+      await page.evaluate(() => { window.__waweye.map.setView([52.2351, 21.0079], 15, { animate: false }); });
+      await page.waitForTimeout(200);
+      const pt = await page.evaluate(() => { const { map, metro } = window.__waweye; const st = metro.stations.find((s) => s.name === 'Świętokrzyska');
+        const r = map.getContainer().getBoundingClientRect(), p = map.latLngToContainerPoint(st.mk.getLatLng()); return { x: r.left + p.x, y: r.top + p.y }; });
+      await page.mouse.click(pt.x, pt.y); await page.waitForTimeout(100);
+      m = await M(); assert.ok(m.panel, 'station panel opens');
+      assert.equal(await page.textContent('#mp-name'), 'Świętokrzyska');
+      assert.deepEqual(await page.$$eval('#mp-badges .m-badge', (b) => b.map((x) => x.textContent)), ['M1', 'M2']);
+      const t = await page.textContent('#mpanel');
+      for (const x of ['przesiadka', 'Kabaty', 'Bemowo', 'OpenStreetMap']) assert.ok(t.includes(x), 'missing ' + x);
+      await page.screenshot({ path: `${SHOTS}/waweye-${label}-metro.png` });
+      await page.evaluate(() => { const { state, select } = window.__waweye; select([...state.markers.keys()][0]); });
+      assert.ok(!(await M()).panel, 'selecting a vehicle closes the station panel');
+      await page.evaluate(() => { window.__waweye.deselect(); window.__waweye.openStation('Centrum'); });
+      assert.equal(await page.textContent('#mp-name'), 'Centrum');
+      await page.click('#mclose'); assert.ok(!(await M()).panel);
+      await page.fill('#search', '');
+      await page.click('#t-tram'); m = await M();
+      assert.ok(!m.on && m.chip === 'false' && m.stations === 0 && m.lines.length === 0, 'hidden with the trams');
+      await page.click('#t-tram'); m = await M(); assert.ok(m.on && m.stations === 38, 'back with the trams');
+      await page.click('#t-metro'); m = await M();
+      assert.ok(!m.on && m.stations === 0); assert.deepEqual(m.prefs, { hidden: true });
+      await page.click('#t-tram'); await page.click('#t-tram'); m = await M();
+      assert.ok(!m.on, 'stays hidden when the trams come back');
+      await page.click('#t-metro'); m = await M();
+      assert.ok(m.on && m.stations === 38); assert.deepEqual(m.prefs, { hidden: false });
+      await page.evaluate(() => { window.__waweye.map.setView([52.2297, 21.0122], 13, { animate: false }); });
+    });
     await step(`${label}: incidents button draws points and lines, panel shows details`, async () => {
       await page.evaluate(() => { window.__waweye.map.setView([52.2297, 21.0122], 13, { animate: false }); });
       assert.equal(await page.locator('.ic').count(), 0);
@@ -566,6 +608,7 @@ function findChromium() {
   const pctx = await browser.newContext(); await wmsTiles(pctx);
   const pg = await pctx.newPage();
   await pg.route('**/api/parking', (route) => route.fulfill({ status: 502, contentType: 'application/json', body: '{"error":"HTTP 403 (forbidden)"}' }));
+  await pg.route('**/data/metro.geojson', (route) => route.fulfill({ status: 404, body: 'Not found' }));
   await pg.goto(`http://localhost:${half.address().port}/`);
   await step('parking API failure is reported, vehicles stay visible', async () => {
     await pg.waitForFunction(() => window.__waweye.state.markers.size > 50);
@@ -591,6 +634,10 @@ function findChromium() {
     assert.ok(await pg.evaluate(() => window.__waweye.state.markers.size > 50));
   });
 
+  await step('metro data failure is reported, vehicles stay visible', async () => {
+    await pg.waitForFunction(() => /metro: brak danych \(HTTP 404\)/.test(document.getElementById('status-text').textContent));
+    assert.ok(await pg.evaluate(() => window.__waweye.state.markers.size > 50));
+  });
   await pg.route('**/data/strefa-czystego-transportu.geojson', (route) => route.fulfill({ status: 404, body: 'Not found' }));
   await step('SCT data failure is reported, vehicles stay visible', async () => {
     await pg.click('#zones-btn'); await pg.check('#z-sct');
