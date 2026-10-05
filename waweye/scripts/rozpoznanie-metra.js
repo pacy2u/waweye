@@ -19,7 +19,10 @@ const why = (e) => `${e.message}${e.cause ? ` (${e.cause.code || e.cause.message
 
 async function get(url, opts = {}) {
   const res = await fetch(url, { ...opts, headers: { 'User-Agent': UA, ...(opts.headers || {}) }, signal: AbortSignal.timeout(TIMEOUT_MS) });
-  if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 200).replace(/\s+/g, ' ')}`);
+  if (!res.ok) {
+    const body = await res.text(), msg = [...body.matchAll(/<p>([\s\S]*?)<\/p>/g)].map((m) => m[1].replace(/<[^>]+>/g, '')).join(' | ');
+    throw new Error(`HTTP ${res.status}: ${(msg || body).slice(0, 600).replace(/\s+/g, ' ')}`);
+  }
   return res;
 }
 
@@ -56,14 +59,26 @@ async function ztm() {
   for (const p of pages) {
     try {
       const html = await (await get(p)).text();
-      const links = [...new Set([...html.matchAll(/href="([^"]*RA\d{6}\.7z)"/gi)].map((m) => new URL(m[1], p).href))].sort();
+      const all = [...new Set([...html.matchAll(/(?:href|src|data-[\w-]+)=["']([^"']+)["']/gi)].map((m) => m[1]))];
+      log(`- ${p}: linki zawierające 7z/zip/rozk/RA/gtfs/ftp (${all.length} wszystkich):\n\n\`\`\`\n${all.filter((u) => /7z|zip|rozk|\bRA|gtfs|ftp|dane/i.test(u)).slice(0, 60).join('\n')}\n\`\`\`\n`);
+      log(`  fragmenty tekstu z „7z” lub „RA2”: ${[...html.matchAll(/.{0,120}(?:\.7z|RA2\d{5}).{0,120}/g)].slice(0, 10).map((m) => '`' + m[0].replace(/`/g, '') + '`').join('; ') || 'brak'}\n`);
+      const links = [...new Set([...html.matchAll(/(?:href|data-[\w-]+)=["']([^"']*RA\d{6}\.7z)["']/gi)].map((m) => new URL(m[1], p).href))].sort();
       log(`- ${p}: HTTP 200, linków RA*.7z: ${links.length}${links.length ? ` (ostatni: ${links[links.length - 1]})` : ''}`);
       if (links.length) { link = links[links.length - 1]; break; }
     } catch (e) { log(`- ${p}: ${why(e)}`); }
   }
+  if (!link) {
+    try {
+      const list = execFileSync('curl', ['-sS', '-m', '60', '--list-only', 'ftp://rozklady.ztm.waw.pl/'], { encoding: 'utf8' });
+      const ra = list.split(/\r?\n/).filter((f) => /^RA\d{6}\.7z$/i.test(f.trim())).sort();
+      log(`- ftp://rozklady.ztm.waw.pl/: plików ${list.split(/\n/).filter(Boolean).length}, RA*.7z: ${ra.length}${ra.length ? ` (ostatni: ${ra[ra.length - 1]})` : ''}`);
+      if (ra.length) link = `ftp://rozklady.ztm.waw.pl/${ra[ra.length - 1].trim()}`;
+    } catch (e) { log(`- ftp://rozklady.ztm.waw.pl/: ${why(e)}`); }
+  }
   if (!link) { log('\nNie znaleziono pliku RA*.7z.\n'); return; }
   try {
-    const buf = Buffer.from(await (await get(link)).arrayBuffer());
+    const buf = link.startsWith('ftp:') ? execFileSync('curl', ['-sS', '-m', '300', link], { maxBuffer: 1 << 30 })
+      : Buffer.from(await (await get(link)).arrayBuffer());
     const dir = path.join(OUT, 'ztm');
     fs.mkdirSync(dir, { recursive: true });
     const file = path.join(dir, path.basename(link));
@@ -122,7 +137,7 @@ async function osm() {
   log('## 4. OpenStreetMap (Overpass)\n');
   try {
     const { data, via } = await overpass(`[out:json][timeout:120];
-relation["route"="subway"](${BBOX})->.r;(.r;relation["route_master"="subway"](${BBOX}););out tags members;
+relation["route"="subway"](${BBOX})->.r;(.r;relation["route_master"="subway"](${BBOX}););out body;
 node(r.r);out tags;
 (node["station"="subway"](${BBOX});nwr["railway"="station"]["subway"="yes"](${BBOX}););out center tags;`);
     log(`Źródło: ${via}, stan danych OSM: ${(data.osm3s || {}).timestamp_osm_base}.\n`);
