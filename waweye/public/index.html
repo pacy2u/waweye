@@ -27,9 +27,12 @@
     <button id="t-sport" class="chip" aria-pressed="false" title="Zajęcia sportowe z kalendarza miasta">
       <svg class="pico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="14.5" cy="4" r="2.2" fill="currentColor"/><path d="M7 21l3.5-5 2.5 2V22M10.5 16l1.5-6-3 1.5L7.5 14M12 10l3 2.5 3 .5M12 10l2.5-.8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Sport
     </button>
+    <button id="t-events" class="chip" aria-pressed="false" title="Wydarzenia z kalendarza miasta (um.warszawa.pl)">
+      <svg class="pico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 7.5A1.5 1.5 0 0 1 4 6h16a1.5 1.5 0 0 1 1.5 1.5V10a2 2 0 0 0 0 4v2.5A1.5 1.5 0 0 1 20 18H4a1.5 1.5 0 0 1-1.5-1.5V14a2 2 0 0 0 0-4z" fill="currentColor"/><path d="M15 7.5v9" stroke="var(--picon-bg,#242428)" stroke-width="1.8" stroke-dasharray="1.8 1.6"/></svg>DziejeSię
+    </button>
   </div>
-  <div id="sfilter" role="group" aria-label="Zajęcia sportowe: kiedy" hidden>
-    <span>Zajęcia sportowe:</span>
+  <div id="sfilter" role="group" aria-label="Sport i DziejeSię: kiedy" hidden>
+    <span>Kiedy:</span>
     <button type="button" data-range="today" class="on" aria-pressed="true">Dziś</button>
     <button type="button" data-range="tomorrow" aria-pressed="false">Jutro</button>
     <button type="button" data-range="week" aria-pressed="false">7 dni</button>
@@ -83,6 +86,16 @@
   </div>
   <ul id="sp-list" class="s-list"></ul>
   <div class="s-note">Kalendarz zajęć sportowych m.st. Warszawy (sport.um.warszawa.pl), aktualizowany co 2 h.</div>
+</aside>
+
+<aside id="epanel" hidden>
+  <button id="eclose" aria-label="Zamknij wydarzenia">×</button>
+  <div class="p-head">
+    <div class="e-badge"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 7.5A1.5 1.5 0 0 1 4 6h16a1.5 1.5 0 0 1 1.5 1.5V10a2 2 0 0 0 0 4v2.5A1.5 1.5 0 0 1 20 18H4a1.5 1.5 0 0 1-1.5-1.5V14a2 2 0 0 0 0-4z" fill="currentColor"/><path d="M15 7.5v9" stroke="var(--events)" stroke-width="1.8" stroke-dasharray="1.8 1.6"/></svg></div>
+    <div class="meta"><div id="ep-name" class="p-name"></div><div id="ep-addr" class="p-addr"></div></div>
+  </div>
+  <ul id="ep-list" class="s-list"></ul>
+  <div class="s-note">Kalendarz wydarzeń m.st. Warszawy (um.warszawa.pl), aktualizowany co 2 h.</div>
 </aside>
 
 <script src="vendor/leaflet.js"></script>

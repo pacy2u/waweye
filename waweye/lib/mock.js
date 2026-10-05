@@ -112,4 +112,26 @@ function mockSport() {
   ];
 }
 
-module.exports = { mockFleet, mockVehicles, mockParkings, mockIncidents, mockSport, MOCK_GEOCODES };
+// City events in the shape of the "Kalendarz wydarzeń" API (records from the live API, 2026-10-05, trimmed).
+const at = (days, time) => `${ymd(days)}T${time}:00+02`;
+function mockEvents() {
+  const ev = (title, extra) => ({ title, url: 'https://um.warszawa.pl/-/' + title.toLowerCase().replace(/[^a-z0-9]+/g, '-'), language: 'pl_PL', availableLanguages: ['pl_PL'],
+    category: [{ id: '34057', name: 'Kultura' }], text: '<p>Opis wydarzenia.</p><p>Organizator: <a href="https://teatrsyrena.pl/" target="_blank">Teatr Syrena</a></p>', ...extra });
+  return [
+    ev('Oskarżony – spektakl', { address: [{ name: 'OCH-Teatr' }], localization: [{ id: '33974', name: 'Ochota' }], lead: 'Dramat sądowy w reżyserii Krystyny Jandy.',
+      occurrence: [{ daily: false, from: at(0, '19:00'), to: at(0, '21:00') }, { daily: false, from: at(1, '19:00'), to: at(1, '21:00') }],
+      map: point(20.9799983868717, 52.2141938100175, { district: 'Ochota', shortStreetName: 'ul. Grójecka', streetNumber: '65' }) }),
+    ev('Wystawa w Zachęcie', { address: [{ name: 'Zachęta', street: 'pl. Małachowskiego 3' }], occurrence: [{ daily: true, from: at(-10, '00:00'), to: at(20, '23:59') }],
+      map: point(21.0115, 52.2392, { district: 'Śródmieście', shortStreetName: 'pl. Małachowskiego', streetNumber: '3' }) }),
+    ev('Niepodległościowy Bal Kostiumowy', { address: [{ name: 'Dom Kultury Zacisze', street: 'ul. Blokowa 1' }], occurrence: [{ daily: false, from: at(3, '11:00'), to: at(3, '11:00') }],
+      map: { type: 'FeatureCollection', features: [0, 1, 2].map(() => point(21.071652391045, 52.2834103762377, { district: 'Targówek', shortStreetName: 'ul. Blokowa', streetNumber: '1' }).features[0]) } }),
+    ev('Festiwal na dwóch scenach', { address: [{ name: 'Teatr Syrena', street: 'Litewska 3' }], occurrence: [{ daily: true, from: at(0, '00:00'), to: at(0, '23:59') }],
+      map: { type: 'FeatureCollection', features: [point(21.038453, 52.252014, { shortStreetName: 'ul. Targowa', streetNumber: '56' }).features[0], point(21.022151, 52.216486, { shortStreetName: 'ul. Litewska', streetNumber: '3' }).features[0]] } }),
+    ev('Koncert w SP 218', { address: [{ name: 'Szkoła Podstawowa nr 218', street: 'Michała Kajki 80/82' }], occurrence: [{ daily: false, from: at(0, '17:00'), to: at(0, '18:30') }],
+      text: '<p>Koncert.</p><script>alert(1)</script>' }), // no point: placed from the address
+    ev('Wydarzenie bez miejsca', { occurrence: [{ daily: false, from: at(0, '12:00'), to: at(0, '13:00') }] }),
+    ev('Dawno zakończone', { occurrence: [{ daily: false, from: '2023-07-05T09:00:00+02', to: '2023-07-05T10:00:00+02' }], map: point(21, 52.23) }),
+  ];
+}
+
+module.exports = { mockFleet, mockVehicles, mockParkings, mockIncidents, mockSport, mockEvents, MOCK_GEOCODES };
