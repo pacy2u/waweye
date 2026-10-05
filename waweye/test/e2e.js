@@ -348,7 +348,10 @@ function findChromium() {
         await page.waitForFunction(() => [...window.__waweye.state.markers.values()].every((m) => !m.to));
         const pts = await page.evaluate(() => { const { map, state } = window.__waweye; const r = map.getContainer().getBoundingClientRect(); const sz = map.getSize();
           return [...state.markers.values()].filter((m) => map.getBounds().contains(m.mk.getLatLng())).map((m) => { const p = map.latLngToContainerPoint(m.mk.getLatLng());
-            return { x: r.left + p.x, y: r.top + p.y, cy: p.y, cx: p.x, id: m.v.id, w: sz.x, h: sz.y }; }).filter((p, _, all) => p.cy > 160 && p.cy < p.h - 120 && p.cx > 40 && p.cx < p.w - 80 && all.every((q) => q === p || Math.hypot(q.cx - p.cx, q.cy - p.cy) > 20)).slice(0, 6); });
+            return { x: r.left + p.x, y: r.top + p.y, cy: p.y, cx: p.x, id: m.v.id, w: sz.x, h: sz.y }; }).filter((p, _, all) => p.cy > 160 && p.cy < p.h - 120 && p.cx > 40 && p.cx < p.w - 80 && all.every((q) => q === p || Math.hypot(q.cx - p.cx, q.cy - p.cy) > 20)
+              // Only points where the click reaches the map canvas: the bar (taller on phones with more layer buttons),
+              // an incident icon or a panel may cover a vehicle, and a click there cannot select it.
+              && document.elementFromPoint(p.x, p.y) instanceof HTMLCanvasElement).slice(0, 6); });
         assert.ok(pts.length >= 3);
         for (const p of pts) {
           await page.mouse.click(p.x, p.y); await page.waitForTimeout(80);

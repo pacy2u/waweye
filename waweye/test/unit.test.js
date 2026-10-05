@@ -565,7 +565,7 @@ test('sport handler: mock mode places classes (also from addresses) and drops th
   const live = await call({ env: { UPSTREAM_URL: 'https://w.dev', UPSTREAM_SECRET: 's' }, fetchImpl: async () => ({ ok: true, json: async () => LIVE_SPORT }),
     geo: { locate: async (items, opts) => { budget = opts.budgetMs; return 2; } } });
   assert.equal(live.status, 200); assert.equal(live.body.pending, 2); assert.equal(live.headers['Cache-Control'], 's-maxage=15');
-  assert.equal(budget, 5000); // a reply waits at most ~5 s for address lookups
+  assert.equal(budget, 3000); // a reply waits at most ~3 s for address lookups, the rest goes on in the background
   assert.equal((await call({ env: {} })).status, 502);
 });
 
@@ -650,6 +650,29 @@ test('events handler: mock mode places events (one from an address), drops the u
   let budget;
   const live = await call({ env: { UPSTREAM_URL: 'https://w.dev' }, fetchImpl: async () => ({ ok: true, json: async () => LIVE_EVENTS }),
     geo: { locate: async (items, o) => { budget = o.budgetMs; return 1; } } });
-  assert.equal(live.body.pending, 1); assert.equal(live.headers['Cache-Control'], 's-maxage=15'); assert.equal(budget, 5000);
+  assert.equal(live.body.pending, 1); assert.equal(live.headers['Cache-Control'], 's-maxage=15'); assert.equal(budget, 3000);
   assert.equal((await call({ env: {} })).status, 502);
+});
+
+test('geocoding: what a reply leaves pending goes on in the background, one run per instance', async () => {
+  const { g, calls } = fakeGeo({ 'A, Warszawa': [52.2, 21], 'B, Warszawa': [52.21, 21], 'C, Warszawa': [52.22, 21] });
+  const items = ['A', 'B', 'C'].map((x) => ({ queries: [`${x}, Warszawa`] }));
+  const first = g.locateLater(items, { budgetMs: 60000 });
+  assert.ok(first); assert.equal(g.locateLater(items), null); // already running
+  assert.equal(await first, 0); assert.deepEqual(items.map((i) => i.lat), [52.2, 52.21, 52.22]);
+  assert.equal(calls.length, 3);
+  assert.ok(g.locateLater([{ queries: ['A, Warszawa'] }])); // free again
+});
+
+test('sport and events handlers hand pending lookups to waitUntil, after a short wait in the reply', async () => {
+  for (const [handler, raw] of [[sportHandler, LIVE_SPORT], [eventsHandler, LIVE_EVENTS]]) {
+    const later = [], bg = [];
+    const geo = { locate: async (items, o) => { assert.equal(o.budgetMs, 3000); return 2; }, locateLater: (items, o) => { later.push(o.budgetMs); return Promise.resolve(0); } };
+    const r = await new Promise((resolve) => {
+      const res = { headers: {}, statusCode: 200, setHeader(k, v) { this.headers[k] = v; }, end(b) { resolve({ status: this.statusCode, body: JSON.parse(b) }); } };
+      handler({ url: '/x' }, res, { env: { UPSTREAM_URL: 'https://w.dev' }, fetchImpl: async () => ({ ok: true, json: async () => raw }), geo, background: (p) => bg.push(p) });
+    });
+    assert.equal(r.status, 200); assert.equal(r.body.pending, 2);
+    assert.deepEqual(later, [45000]); assert.equal(bg.length, 1); assert.ok(typeof bg[0].then === 'function');
+  }
 });
