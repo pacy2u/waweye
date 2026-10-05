@@ -93,18 +93,18 @@ Cel: każda zmiana jest testowana i wdrażana automatycznie, a awaria jest widoc
 | Porządek w dokumentacji (D6), `maxDuration` dla wszystkich funkcji (D9) | następne sesje startują z poprawnego stanu | S | zrobione (`README1st` usunięty na prośbę właściciela) |
 | Pauza odpytywania w ukrytej karcie (D7) | mniej żądań i transferu, oszczędność baterii | S | zrobione |
 | Wspólny handler zasobów i wspólny komponent panelu (D4, D5) | tańsze dodawanie zbiorów w Fazie 1 i 2 | M | następny PR |
+| Metro M1/M2: statyczne linie i stacje (przeniesione z Fazy 1) | luka w obrazie komunikacji; API pojazdów nie ma metra | S | zrobione 2026-10-05 (gałąź `funkcja/warstwa-metra`): linie i stacje z OSM (`scripts/metro.js`, workflow `waweye-dane-metra.yml`), bo żaden osiągalny oficjalny zbiór nie ma metra; warstwa pojawia się razem z tramwajami |
 
 ### Faza 1 – Trasy i przystanki: domknięcie pierwotnego celu (listopad 2026)
 Cel: po kliknięciu pojazdu widać trasę linii i przystanki; z linku można wrócić do tego samego widoku.
 
 | Zadanie | Dlaczego | Rozmiar |
 |---|---|---|
-| **Rozpoznanie źródła tras i przystanków – tylko oficjalne zbiory miasta** (decyzja). Do sprawdzenia na `dane.um.warszawa.pl`: odpowiedniki starych `public_transport_routes` (przebieg linii jako lista przystanków) i `dbtimetable_get` (przystanki, rozkłady). Jeśli miasto nie publikuje kształtu trasy, rysujemy linię przez kolejne przystanki | bez tego nie ma tras ani odjazdów; po dodaniu domeny do środowiska rozpoznanie da się zrobić w sesji | M |
+| **Rozpoznanie źródła tras i przystanków – tylko oficjalne zbiory miasta** (decyzja). Najlepszy kandydat (2026-10-05): **oficjalny GTFS ZTM** (`https://gtfs.ztm.waw.pl/last`, FTP `gtfs.ztm.waw.pl`; zasady na ztm.waw.pl → Pliki do pobrania → Dane rozkładowe pozwalają przetwarzać i publikować dane). Ma `routes`, `trips`, `stops`, `shapes` (kształty tras!) i `stop_times` (~380 MB), autobusy, tramwaje i koleje, **bez metra**. Przeszkoda: serwer nie odpowiada ani z sandboxa, ani z GitHub Actions; trzeba pobierać z Polski albo przez pośrednika w Europie i ciąć do małych plików per linia. Do sprawdzenia też `dane.um.warszawa.pl`: odpowiedniki starych `public_transport_routes` i `dbtimetable_get` | bez tego nie ma tras ani odjazdów; po dodaniu domeny do środowiska rozpoznanie da się zrobić w sesji | M |
 | Dane linii z długim cache (zbiory rozkładowe zmieniają się rzadko): endpoint przez Workera z cache na krawędzi na dobę, ewentualnie pliki JSON per linia generowane raz dziennie w Actions | bez bazy danych i w darmowych progach | M |
 | Trasa wybranej linii na mapie + przystanki na trasie | pierwotny wymóg produktu | M |
 | Warstwa przystanków (od zoomu ~15) z panelem: nazwa, linie | punkt wyjścia do odjazdów w Fazie 2 | M |
 | Linki do stanu (`?linia=175`, `?pojazd=1-1234`) | udostępnianie („gdzie jest mój autobus”), zakładki | S |
-| Metro M1/M2: statyczne linie i stacje (oficjalny zbiór, jeśli istnieje; inaczej geometria z OSM, licencja ODbL – to mapa, nie rozkład) | luka w obrazie komunikacji; API pojazdów nie ma metra | S |
 
 ### Faza 2 – Codzienny pasażer (grudzień 2026 – styczeń 2027)
 Cel: aplikację da się zainstalować na telefonie i używać codziennie do sprawdzania „swoich” linii.
@@ -116,6 +116,7 @@ Cel: aplikację da się zainstalować na telefonie i używać codziennie do spra
 | „Pokaż mnie” (geolokalizacja) + najbliższe przystanki | naturalny start na telefonie | S – lokalizacja zrobiona (przycisk jak w Google Maps, gałąź `feat/lokalizacja-uzytkownika-na-mapie`); najbliższe przystanki po warstwie przystanków z Fazy 1 |
 | Odjazdy z przystanku: rozkład + pojazdy na żywo zbliżające się do przystanku | odpowiedź na „kiedy przyjedzie” | L |
 | Szacowanie opóźnienia pojazdu (dopasowanie linii i brygady do rozkładu) | najczęściej oczekiwana informacja | L |
+| Pozycje składów metra (szacowane z rozkładu, pokazywane razem z tramwajami) | prośba właściciela 2026-10-05; dziś mapa ma tylko linie i stacje | M – **zablokowane**: brak oficjalnego źródła pozycji i rozkładu metra (API pojazdów i GTFS ZTM go nie mają); bez społecznościowego GTFS |
 | Filtr dostępności z danych o taborze: niskopodłogowe, klimatyzacja, miejsca na wózek | wartość dla osób z niepełnosprawnościami i z wózkami; dane już są | S |
 | Utrudnienia: domyślnie ukryte zakończone, grupowanie gęstych znaczników | czytelność mapy | S |
 | Dostępność: status ogłaszany tylko przy błędzie (D10), lista pojazdów linii obsługiwana klawiaturą (D11), testy e2e także w WebKit i Firefox | iOS/Safari to duża część telefonów; czytniki ekranu | M |
