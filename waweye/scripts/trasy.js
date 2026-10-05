@@ -117,15 +117,38 @@ function validity(calendar) {
   return from && to ? { from: d(from), to: d(to) } : null;
 }
 
+// What is stored for a line (public/data/trasy/<line>.json and the route store in Cloudflare KV); the timetable's
+// validity is kept beside it, so a new day of the same timetable does not change the line.
+const lineBody = (L) => ({ line: L.line, type: L.type, variants: L.variants });
+// Fingerprint of a line that ignores the trip counts and the variant order (they shift every day with the calendar
+// window), so only real changes of a route or its stops are written again.
+function lineHash(L) {
+  const canon = L.variants.map((v) => JSON.stringify([v.dir, v.headsign, v.shape, v.stops])).sort();
+  return require('crypto').createHash('sha1').update(JSON.stringify([L.line, L.type, canon])).digest('hex').slice(0, 16);
+}
+
+// The whole pipeline from a GTFS ZIP in memory: { lines, valid, problems } (problems empty = usable).
+async function fromZip(buf) {
+  const data = await load(require('../lib/zip').readZip(buf));
+  const valid = validity(data.calendar);
+  const lines = buildLines(data);
+  const problems = checkLines(lines);
+  if (!valid) problems.push('brak dat w calendar.txt');
+  return { lines, valid, problems, trips: data.trips.length };
+}
+
 // ---- File part ----
 
-// Streams a CSV file (or several parts with a header each) and calls onRow(object) for every data row.
-async function readCsv(files, onRow) {
-  for (const file of [].concat(files)) {
+// Streams CSV sources (file paths or functions returning a readable stream; several parts with a header each)
+// and calls onRow(object) for every data row.
+async function readCsv(sources, onRow) {
+  for (const source of [].concat(sources)) {
     let head = null;
-    const rl = readline.createInterface({ input: fs.createReadStream(file, 'utf8'), crlfDelay: Infinity });
+    const input = typeof source === 'function' ? source() : fs.createReadStream(source);
+    input.setEncoding('utf8');
+    const rl = readline.createInterface({ input, crlfDelay: Infinity });
     for await (const raw of rl) {
-      const line = raw.replace(/^﻿/, '');
+      const line = raw.replace(/^\uFEFF/, '');
       if (!line) continue;
       if (!head) { head = splitCsv(line); continue; }
       const v = splitCsv(line), o = {};
@@ -135,9 +158,19 @@ async function readCsv(files, onRow) {
   }
 }
 
-async function load(dir) {
-  const f = (name) => path.join(dir, name);
-  const parts = fs.readdirSync(dir).filter((n) => /^stop_times(_part\d+)?\.txt$/.test(n)).sort().map(f);
+// GTFS files from a folder (path) or from a ZIP read by lib/zip.js (Map name -> { open }), by base name.
+function gtfsFiles(src) {
+  if (typeof src === 'string') {
+    const names = fs.readdirSync(src);
+    return { names, open: (n) => path.join(src, n) };
+  }
+  const byBase = new Map([...src].map(([name, f]) => [path.posix.basename(name), f]));
+  return { names: [...byBase.keys()], open: (n) => { const f = byBase.get(n); if (!f) throw new Error(`brak pliku ${n} w GTFS`); return () => f.open(); } };
+}
+
+async function load(src) {
+  const g = gtfsFiles(src), f = g.open;
+  const parts = g.names.filter((n) => /^stop_times(_part\d+)?\.txt$/.test(n)).sort().map(f);
   if (!parts.length) throw new Error('brak stop_times.txt ani stop_times_part*.txt');
   const routes = [], trips = [], calendar = [];
   await readCsv(f('routes.txt'), (r) => routes.push(r));
@@ -208,4 +241,4 @@ if (require.main === module) {
   main(dir, (s) => console.log(s)).then(() => process.exit(0), (e) => { console.log(`**Błąd tras:** ${e.message}\n`); process.exit(1); });
 }
 
-module.exports = { splitCsv, pickVariants, buildLines, checkLines, validity, readCsv, main, TYPES };
+module.exports = { splitCsv, pickVariants, buildLines, checkLines, validity, readCsv, load, main, fromZip, lineBody, lineHash, TYPES };

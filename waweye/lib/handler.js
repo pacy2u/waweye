@@ -217,4 +217,111 @@ async function gtfsProbeHandler(req, res, { env = process.env, fetchImpl = fetch
   res.end(JSON.stringify({ region: env.VERCEL_REGION || 'lokalnie', checked: new Date().toISOString(), viaWorker, direct }));
 }
 
-module.exports = { gtfsProbeHandler, fleetHandler, vehiclesHandler, parkingHandler, incidentsHandler, sportHandler, eventsHandler };
+// ---- Routes of the lines: a daily refresh from the ZTM GTFS into the Worker's KV, and reads for the app ----
+// Vercel runs in Frankfurt (fra1), where gtfs.ztm.waw.pl answers; GitHub's runners and Workers called from the USA get
+// no connection (2026-10-05). The cron in vercel.json calls /api/odswiez-trasy once a day.
+const GTFS_URL = 'https://gtfs.ztm.waw.pl/last';
+const ROUTE_LINE_RE = /^[A-Za-z0-9-]{1,10}$/;
+const REFRESH_EVERY_MS = 12 * 3600e3; // without CRON_SECRET anyone may call the refresh; it does nothing more often
+const ATTEMPT_EVERY_MS = 15 * 60e3; // and one instance does not start another download sooner than this
+let lastAttempt = 0;
+const resetRouteState = () => { lastAttempt = 0; routeMetaCache = { at: 0, value: undefined }; }; // tests
+let routeMetaCache = { at: 0, value: undefined };
+
+const workerUrl = (env, query) => env.UPSTREAM_URL + (env.UPSTREAM_URL.includes('?') ? '&' : '?') + query;
+const workerFetch = (env, fetchImpl, query, init = {}) => fetchImpl(workerUrl(env, query),
+  { ...init, headers: { 'x-proxy-secret': env.UPSTREAM_SECRET || '', ...(init.headers || {}) }, signal: AbortSignal.timeout(init.timeout || 25000) });
+
+async function routeMeta(env, fetchImpl, fresh = false) {
+  if (!fresh && routeMetaCache.value !== undefined && Date.now() - routeMetaCache.at < 600e3) return routeMetaCache.value;
+  const r = await workerFetch(env, fetchImpl, 'resource=trasy&meta=1');
+  if (r.status === 404) { routeMetaCache = { at: Date.now(), value: null }; return null; }
+  if (!r.ok) throw new Error(`magazyn tras: HTTP ${r.status}`);
+  const value = await r.json();
+  routeMetaCache = { at: Date.now(), value };
+  return value;
+}
+
+// GET /api/trasa?linia=175 -> the line's variants with the timetable's validity; ?meta=1 -> validity and refresh time.
+// 404 when the store has no such line (or there is no Worker): the app then falls back to public/data/trasy/<line>.json.
+async function routeHandler(req, res, { env = process.env, fetchImpl = fetch } = {}) {
+  if (rejectUnlessRead(req, res)) return;
+  const url = new URL(req.url, 'http://x');
+  const send = (status, body, cache) => { res.statusCode = status; res.setHeader('Cache-Control', cache); res.end(JSON.stringify(body)); };
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  if (!env.UPSTREAM_URL) return send(404, { error: 'brak magazynu tras (produkcja bez Workera)' }, 'no-store');
+  try {
+    if (url.searchParams.get('meta') === '1') {
+      const m = await routeMeta(env, fetchImpl, true);
+      if (!m) return send(404, { error: 'magazyn tras jest pusty' }, 'no-store');
+      return send(200, { source: m.source, valid: m.valid, refreshed: m.refreshed, lines: Object.keys(m.lines || {}).length }, 'public, s-maxage=60');
+    }
+    const line = url.searchParams.get('linia') || '';
+    if (!ROUTE_LINE_RE.test(line)) return send(400, { error: 'podaj linię, np. ?linia=175' }, 'no-store');
+    const [r, m] = await Promise.all([workerFetch(env, fetchImpl, 'resource=trasy&linia=' + encodeURIComponent(line)), routeMeta(env, fetchImpl)]);
+    if (r.status === 404) return send(404, { error: 'brak trasy tej linii' }, 'public, s-maxage=300');
+    if (!r.ok) throw new Error(`magazyn tras: HTTP ${r.status}`);
+    const body = await r.json();
+    return send(200, { ...body, valid: m && m.valid, refreshed: m && m.refreshed }, 'public, s-maxage=3600, stale-while-revalidate=86400');
+  } catch (e) {
+    return send(502, { error: e.message }, 'no-store');
+  }
+}
+
+// GET /api/odswiez-trasy (Vercel cron): download the GTFS, build the routes (scripts/trasy.js), check them, and write the
+// lines whose fingerprint changed plus the meta key. Bad or missing data writes nothing, so the old routes stay.
+async function routesRefreshHandler(req, res, { env = process.env, fetchImpl = fetch, now = Date.now, build } = {}) {
+  if (rejectUnlessRead(req, res)) return;
+  const url = new URL(req.url, 'http://x');
+  const send = (status, body) => { res.statusCode = status; res.setHeader('Cache-Control', 'no-store'); res.end(JSON.stringify(body)); };
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  if (!env.UPSTREAM_URL) return send(500, { error: 'brak UPSTREAM_URL: trasy są przechowywane przez Workera' });
+  const h = req.headers || {};
+  const secretOk = !!env.UPSTREAM_SECRET && h['x-proxy-secret'] === env.UPSTREAM_SECRET;
+  const cronOk = !!env.CRON_SECRET && h.authorization === `Bearer ${env.CRON_SECRET}`;
+  if (env.CRON_SECRET && !cronOk && !secretOk) return send(401, { error: 'unauthorized' });
+  const force = secretOk && url.searchParams.get('wymus') === '1';
+  const t0 = now();
+  try {
+    const old = await routeMeta(env, fetchImpl, true);
+    if (!force && old && old.refreshed && t0 - Date.parse(old.refreshed) < REFRESH_EVERY_MS) return send(200, { skipped: 'odświeżone niedawno', refreshed: old.refreshed });
+    if (!force && t0 - lastAttempt < ATTEMPT_EVERY_MS) return send(429, { error: 'poprzednia próba była przed chwilą' });
+    lastAttempt = t0;
+    const trasy = require('../scripts/trasy');
+    let buf, via = 'bezpośrednio';
+    try {
+      const r = await fetchImpl(GTFS_URL, { redirect: 'follow', headers: { 'User-Agent': 'wawEye/1.0 (+https://github.com/pacy2u/waweye)' }, signal: AbortSignal.timeout(30000) });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      buf = Buffer.from(await r.arrayBuffer());
+    } catch (e) {
+      via = `przez Workera (bezpośrednio: ${e.message})`;
+      const r = await workerFetch(env, fetchImpl, 'resource=gtfs', { timeout: 30000 });
+      if (!r.ok) throw new Error(`GTFS niedostępny bezpośrednio (${e.message}) ani przez Workera (HTTP ${r.status})`);
+      buf = Buffer.from(await r.arrayBuffer());
+    }
+    const { lines, valid, problems } = await (build || trasy.fromZip)(buf);
+    if (problems.length) return send(502, { error: 'dane nie przeszły kontroli, magazyn bez zmian', problems: problems.slice(0, 20), via });
+    const hashes = {}, changed = [];
+    for (const L of lines) { hashes[L.line] = trasy.lineHash(L); if (!old || !old.hashes || old.hashes[L.line] !== hashes[L.line]) changed.push(L); }
+    const removed = old && old.hashes ? Object.keys(old.hashes).filter((l) => !hashes[l]) : [];
+    const post = async (payload) => {
+      const r = await workerFetch(env, fetchImpl, 'resource=trasy', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      if (!r.ok) throw new Error(`zapis w magazynie tras: HTTP ${r.status} ${(await r.text()).slice(0, 120)}`);
+    };
+    const batches = [];
+    for (let i = 0; i < changed.length; i += 10) batches.push(changed.slice(i, i + 10)); // ~110 KB per request: little CPU for the Worker
+    for (let i = 0; i < batches.length; i += 4) {
+      await Promise.all(batches.slice(i, i + 4).map((b) => post({ put: Object.fromEntries(b.map((L) => [L.line, JSON.stringify(trasy.lineBody(L))])) })));
+    }
+    for (let i = 0; i < removed.length; i += 100) await post({ del: removed.slice(i, i + 100) });
+    const refreshed = new Date(now()).toISOString();
+    // The meta key goes last: until it is written, readers keep seeing the previous refresh as complete.
+    await post({ meta: JSON.stringify({ source: 'GTFS ZTM Warszawa (gtfs.ztm.waw.pl)', valid, refreshed, lines: Object.fromEntries(lines.map((L) => [L.line, L.type])), hashes }) });
+    routeMetaCache = { at: 0, value: undefined };
+    return send(200, { refreshed, valid, lines: lines.length, changed: changed.length, deleted: removed.length, via, ms: now() - t0 });
+  } catch (e) {
+    return send(502, { error: e.message });
+  }
+}
+
+module.exports = { routeHandler, routesRefreshHandler, resetRouteState, gtfsProbeHandler, fleetHandler, vehiclesHandler, parkingHandler, incidentsHandler, sportHandler, eventsHandler };

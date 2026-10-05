@@ -809,3 +809,18 @@ test('gtfsProbeHandler: checks GTFS through the Worker and directly, read-only',
   assert.match(JSON.parse((await run({}, f)).body).viaWorker.error, /brak UPSTREAM_URL/);
   assert.equal((await run({}, f, 'POST')).statusCode, 405);
 });
+
+test('health check: route store freshness (optional row)', () => {
+  const now = Date.parse('2026-10-08T10:00:00Z');
+  const routes = (body, status = 200) => ({ status, body, ms: 50 });
+  const fresh = { source: 'GTFS ZTM', valid: { from: '2026-10-08', to: '2026-10-17' }, refreshed: '2026-10-08T02:10:00Z', lines: 317 };
+  let r = evaluate({ ...liveSet(), routes: routes(fresh) }, now);
+  assert.ok(r.ok, JSON.stringify(r.rows)); assert.match(r.rows[4].detail, /317 linii, rozkład 2026-10-08 – 2026-10-17, odświeżone 8 h temu/);
+  r = evaluate({ ...liveSet(), routes: routes({ ...fresh, refreshed: '2026-10-05T02:10:00Z' }) }, now);
+  assert.ok(!r.ok); assert.match(report('https://x', r), /Trasy linii[^\n]*BŁĄD[^\n]*nieodświeżane od 80 h[^\n]*cron \/api\/odswiez-trasy/);
+  r = evaluate({ ...liveSet(), routes: routes({ ...fresh, valid: { from: '2026-09-28', to: '2026-10-07' } }) }, now);
+  assert.match(report('https://x', r), /ważny tylko do 2026-10-07/);
+  r = evaluate({ ...liveSet(), routes: routes({ error: 'magazyn tras jest pusty' }, 404) }, now);
+  assert.match(report('https://x', r), /HTTP 404 \(magazyn tras jest pusty\)/);
+  assert.equal(evaluate(liveSet(), now).rows.length, 4, 'without the routes response no row');
+});

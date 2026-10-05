@@ -6,7 +6,8 @@
 const DEFAULT_URL = 'https://waweye.vercel.app';
 const TIMEOUT_MS = 60000; // the fleet dataset took ~21 s on a cold cache (2026-10-02)
 const MIN_FLEET_MATCH = 0.9; // 2026-10-02: 99.5% of live buses and 99.6% of live trams were in the fleet dataset
-const MIN_SAMPLE = 20; // too few vehicles of a type (e.g. trams at night) say nothing about the join
+const MIN_SAMPLE = 20;
+const ROUTES_MAX_AGE_MS = 48 * 3600e3; // the route store is refreshed daily (vercel.json cron); two missed days is a problem // too few vehicles of a type (e.g. trams at night) say nothing about the join
 
 async function get(base, path, fetchImpl = fetch) {
   const t0 = Date.now();
@@ -34,8 +35,8 @@ function fleetMatch(vehicles, fleet) {
 const pct = (x) => (x * 100).toFixed(1).replace('.', ',') + '%';
 const httpFail = (r) => (r.status === 200 && r.body ? null : r.error ? `brak odpowiedzi (${r.error})` : `HTTP ${r.status}${r.body && r.body.error ? ` (${r.body.error})` : ''}`);
 
-// Pure part, unit-tested: takes the four responses, returns one row per check.
-function evaluate({ vehicles, parking, incidents, fleet }) {
+// Pure part, unit-tested: takes the responses, returns one row per check (routes: /api/trasa?meta=1, optional).
+function evaluate({ vehicles, parking, incidents, fleet, routes }, now = Date.now()) {
   const rows = [];
   const add = (name, problem, detail) => rows.push({ name, ok: !problem, detail: problem || detail });
 
@@ -84,6 +85,16 @@ function evaluate({ vehicles, parking, incidents, fleet }) {
     }
     add('Tabor (/api/fleet)', problem, detail);
   }
+  if (routes) {
+    const b = routes.body;
+    let problem = httpFail(routes);
+    const age = !problem && b.refreshed ? now - Date.parse(b.refreshed) : null;
+    const today = new Date(now).toLocaleDateString('en-CA', { timeZone: 'Europe/Warsaw' });
+    if (!problem && age === null) problem = 'brak daty odświeżenia';
+    else if (!problem && age > ROUTES_MAX_AGE_MS) problem = `trasy nieodświeżane od ${Math.round(age / 3600e3)} h (${b.refreshed}) – sprawdź cron /api/odswiez-trasy w Vercel`;
+    else if (!problem && b.valid && b.valid.to < today) problem = `rozkład w magazynie ważny tylko do ${b.valid.to}`;
+    add('Trasy linii (/api/trasa?meta=1)', problem, !problem && `${b.lines} linii, rozkład ${b.valid.from} – ${b.valid.to}, odświeżone ${Math.round(age / 3600e3)} h temu`);
+  }
   return { ok: rows.every((r) => r.ok), rows };
 }
 
@@ -105,8 +116,8 @@ async function main() {
   // PASIBUS_URL: old name, kept until the end of the wawEye migration (PLAN_MIGRACJI_WAWEYE.md, Faza 9).
   const base = process.argv[2] || process.env.WAWEYE_URL || process.env.PASIBUS_URL || DEFAULT_URL;
   const check = async () => {
-    const [vehicles, parking, incidents, fleet] = await Promise.all(['/api/vehicles', '/api/parking', '/api/incidents', '/api/fleet'].map((p) => get(base, p)));
-    return evaluate({ vehicles, parking, incidents, fleet });
+    const [vehicles, parking, incidents, fleet, routes] = await Promise.all(['/api/vehicles', '/api/parking', '/api/incidents', '/api/fleet', '/api/trasa?meta=1'].map((p) => get(base, p)));
+    return evaluate({ vehicles, parking, incidents, fleet, routes });
   };
   let result = await check();
   // One retry after 30 s, so a single dropped connection does not raise an alert.
