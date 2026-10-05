@@ -121,7 +121,7 @@ const mockGeocoder = createGeocoder({ minGapMs: 0, fetchImpl: async (url) => {
   return new Response(JSON.stringify(hit ? [{ lat: String(hit.lat), lon: String(hit.lon) }] : []), { status: 200 });
 } });
 
-async function sportHandler(req, res, { env = process.env, fetchImpl = fetch, geo, geoBudgetMs = 20000 } = {}) {
+async function sportHandler(req, res, { env = process.env, fetchImpl = fetch, geo, geoBudgetMs = 5000 } = {}) {
   if (rejectUnlessRead(req, res)) return;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   try {
@@ -136,8 +136,9 @@ async function sportHandler(req, res, { env = process.env, fetchImpl = fetch, ge
     const all = normalizeSport(raw);
     const pending = await (geo || (source === 'mock' ? mockGeocoder : geocoder)).locate(all, { budgetMs: geoBudgetMs });
     const items = all.filter((i) => i.lat != null).map(({ queries, ...i }) => i);
-    // The dataset changes every 2 h; while addresses are still being looked up, let the next request continue soon.
-    res.setHeader('Cache-Control', pending ? 's-maxage=60' : 's-maxage=1800, stale-while-revalidate=3600');
+    // Each reply spends at most ~5 s on lookups (about 4 addresses), so nobody waits long; while some are left,
+    // the CDN keeps the reply for 15 s only and the next request carries on. The dataset itself changes every 2 h.
+    res.setHeader('Cache-Control', pending ? 's-maxage=15' : 's-maxage=1800, stale-while-revalidate=3600');
     res.statusCode = 200;
     res.end(JSON.stringify({ updated: Date.now(), source, received: raw.length, pending, unlocated: all.length - items.length - pending, items }));
   } catch (e) {

@@ -561,9 +561,11 @@ test('sport handler: mock mode places classes (also from addresses) and drops th
   assert.ok(!ok.body.items.some((i) => i.title === 'Zakończony turniej' || i.title === 'Fit Mama w OSiR Wawer'));
   assert.ok(!JSON.stringify(ok.body).includes('<script'));
   assert.match(ok.headers['Cache-Control'], /s-maxage=1800/);
+  let budget;
   const live = await call({ env: { UPSTREAM_URL: 'https://w.dev', UPSTREAM_SECRET: 's' }, fetchImpl: async () => ({ ok: true, json: async () => LIVE_SPORT }),
-    geo: { locate: async () => 2 } });
-  assert.equal(live.status, 200); assert.equal(live.body.pending, 2); assert.equal(live.headers['Cache-Control'], 's-maxage=60');
+    geo: { locate: async (items, opts) => { budget = opts.budgetMs; return 2; } } });
+  assert.equal(live.status, 200); assert.equal(live.body.pending, 2); assert.equal(live.headers['Cache-Control'], 's-maxage=15');
+  assert.equal(budget, 5000); // a reply waits at most ~5 s for address lookups
   assert.equal((await call({ env: {} })).status, 502);
 });
 
