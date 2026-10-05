@@ -73,6 +73,7 @@ Opcjonalnie dodaj do tokenu Cloudflare uprawnienie Account Analytics: Read, wted
 
 ## Struktura
 - `public/` – front (Leaflet, `app.js`, `style.css`)
+- `public/o-serwisie.html` – strona „O serwisie” (`/o-serwisie`, link z logo w pasku mapy); `public/media/` – film 720p, plakat i zrzuty z telefonu dla tej strony
 - `worker/` – opcjonalny pośrednik Cloudflare
 - `api/*.js` – funkcje Vercel; `lib/` – logika API, mock, handler
 - `dev-server.js` – serwer lokalny

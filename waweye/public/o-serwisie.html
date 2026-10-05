@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#242428">
+<meta name="description" content="wawEye: autobusy i tramwaje Warszawy na jednej mapie, na żywo. Jak działa, skąd są dane i co dalej.">
+<title>O serwisie – wawEye</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<style>
+:root {
+  --orange: #FC4C02; --charcoal: #242428; --ink: #fff; --muted: #A7A7B1; --line: #3a3a41;
+  --bg: #F4F4F6; --surface: #fff; --fg: #242428; --fg-muted: #5F5F69; --border: #D9D9DF; --accent-ink: #C23A00;
+  --free: #00A878; --tram: #0073E6; --inc: #F5A100;
+  --gutter: clamp(16px, 4vw, 40px);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #17171A; --surface: #202024; --fg: #EDEDF0; --fg-muted: #A7A7B1; --border: #34343B; --accent-ink: #FF7A3D; color-scheme: dark; }
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; background: var(--bg); color: var(--fg);
+  font: 16px/1.6 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+a { color: var(--accent-ink); text-underline-offset: 2px; }
+a:focus-visible { outline: 3px solid var(--orange); outline-offset: 3px; border-radius: 4px; }
+h1, h2, h3, p { margin: 0; } h1, h2 { text-wrap: balance; }
+.wrap { max-width: 1080px; margin-inline: auto; padding-inline: var(--gutter); }
+
+/* Pasek jak w aplikacji: logo + powrót do mapy */
+.top { position: sticky; top: 0; z-index: 10; background: var(--charcoal); border-bottom: 1px solid var(--line); }
+.top .wrap { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-block: 10px;
+  padding-top: max(10px, env(safe-area-inset-top)); }
+.brand { display: inline-flex; align-items: center; gap: 9px; font-weight: 800; font-size: 18px; letter-spacing: .5px; color: var(--orange); text-decoration: none; }
+.brand svg { width: 26px; height: 26px; }
+.back { display: inline-flex; align-items: center; gap: 6px; color: #fff; background: var(--orange); text-decoration: none;
+  font-weight: 700; font-size: 14px; padding: 8px 14px; border-radius: 999px; }
+.back svg { width: 16px; height: 16px; }
+
+/* Hero */
+.hero { background: var(--charcoal); color: var(--ink); }
+.hero .wrap { display: grid; gap: 28px; padding-block: clamp(28px, 6vw, 64px) clamp(32px, 6vw, 72px); }
+@media (min-width: 880px) { .hero .wrap { grid-template-columns: 1fr 1.15fr; align-items: center; gap: 48px; } }
+.eyebrow { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.eyebrow i { width: 8px; height: 8px; border-radius: 50%; background: #3ddc84; animation: pulse 2s infinite; }
+@keyframes pulse { 50% { opacity: .35; } }
+h1 { font-size: clamp(30px, 3.2vw + 16px, 50px); line-height: 1.05; font-weight: 800; letter-spacing: -.01em; margin-top: 12px; }
+h1 em { font-style: normal; color: var(--orange); }
+.lead { margin-top: 16px; font-size: clamp(16px, .4vw + 15px, 19px); color: #E4E4E9; max-width: 52ch; }
+.cta { margin-top: 22px; display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+.btn { display: inline-flex; align-items: center; gap: 8px; background: var(--orange); color: #fff; text-decoration: none; font-weight: 700; font-size: 17px; padding: 13px 20px; border-radius: 10px; }
+.btn.ghost { background: none; border: 1px solid var(--line); color: #fff; }
+.btn svg { width: 18px; height: 18px; }
+.video { position: relative; border-radius: 14px; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,.5); background: #000; aspect-ratio: 16 / 9; }
+.video video { display: block; width: 100%; height: 100%; }
+.video-cap { margin-top: 10px; font-size: 13px; color: var(--muted); }
+
+/* Sekcje */
+main section { padding-block: clamp(40px, 6vw, 72px); border-bottom: 1px solid var(--border); }
+main section:last-child { border-bottom: 0; }
+h2 { font-size: clamp(24px, 1.2vw + 18px, 32px); line-height: 1.15; font-weight: 800; }
+.sub { margin-top: 10px; color: var(--fg-muted); max-width: 66ch; }
+
+/* Funkcje ze zrzutami z telefonu */
+.features { margin-top: 32px; display: grid; gap: 22px; grid-template-columns: 1fr; }
+@media (min-width: 560px) { .features { grid-template-columns: 1fr 1fr; } }
+@media (min-width: 960px) { .features { grid-template-columns: repeat(4, 1fr); } }
+.feature { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; display: grid; grid-template-rows: auto 1fr; }
+.shot { background: var(--charcoal); padding: 18px 18px 0; display: grid; place-items: end center; height: 300px; overflow: hidden; }
+.shot img { width: 78%; height: auto; max-width: 220px; border-radius: 18px 18px 0 0; border: 5px solid #111; border-bottom: 0; display: block; }
+.feature .txt { padding: 16px 18px 20px; display: grid; gap: 8px; align-content: start; }
+.feature h3 { font-size: 18px; font-weight: 800; display: flex; align-items: center; gap: 8px; }
+.feature p { font-size: 15px; color: var(--fg-muted); }
+.ico { width: 22px; height: 22px; border-radius: 6px; display: inline-grid; place-items: center; color: #fff; font-size: 13px; font-weight: 800; flex: none; }
+
+/* Zasady */
+.pledges { margin-top: 26px; display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+.pledge { padding: 16px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); }
+.pledge b { display: block; font-size: 16px; }
+.pledge span { font-size: 14px; color: var(--fg-muted); }
+.pledge b::before { content: "✕ "; color: var(--orange); }
+.pledge.yes b::before { content: "✓ "; color: var(--free); }
+
+/* Tabela źródeł */
+.table-wrap { margin-top: 24px; overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 15px; }
+th, td { text-align: left; vertical-align: top; padding: 11px 14px; border-bottom: 1px solid var(--border); }
+tr:last-child td { border-bottom: 0; }
+th { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--fg-muted); }
+td.f { white-space: nowrap; font-weight: 700; }
+
+/* Plan rozwoju: linia z przystankami */
+.route { list-style: none; margin: 26px 0 0; padding: 0; display: grid; gap: 0; }
+@media (min-width: 880px) { .route { grid-template-columns: repeat(4, 1fr); } }
+.stop { position: relative; padding: 0 0 26px 38px; }
+.stop::before { content: ""; position: absolute; left: 9px; top: 12px; bottom: -12px; width: 4px; background: var(--orange); border-radius: 2px; }
+.stop:last-child::before { display: none; }
+.stop .pin { position: absolute; left: 0; top: 2px; width: 22px; height: 22px; border-radius: 50%; border: 5px solid var(--orange); background: var(--bg); }
+.stop.done .pin { background: var(--orange); }
+@media (min-width: 880px) {
+  .stop { padding: 38px 18px 0 0; }
+  .stop::before { left: 12px; right: -12px; top: 9px; bottom: auto; width: auto; height: 4px; }
+  .stop .pin { top: 0; }
+}
+.when { font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--accent-ink); }
+.stop h3 { font-size: 17px; font-weight: 800; margin: 2px 0 4px; }
+.stop p { font-size: 14px; color: var(--fg-muted); }
+
+/* Prasa */
+.press { margin-top: 22px; display: flex; flex-wrap: wrap; gap: 12px; }
+.press a { display: inline-flex; align-items: center; gap: 8px; padding: 12px 16px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); color: var(--fg); text-decoration: none; font-weight: 700; }
+.press a svg { width: 18px; height: 18px; color: var(--orange); }
+
+blockquote { margin: 22px 0 0; padding: 4px 0 4px 20px; border-left: 4px solid var(--orange); max-width: 62ch; display: grid; gap: 8px; }
+blockquote p { font-size: 19px; line-height: 1.45; font-weight: 500; }
+blockquote footer { color: var(--fg-muted); font-size: 15px; background: none; }
+.contact { margin-top: 26px; font-style: normal; display: grid; gap: 2px; }
+.label { font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--fg-muted); }
+body > footer { background: var(--charcoal); color: var(--muted); font-size: 13px; }
+body > footer .wrap { padding-block: 22px max(28px, env(safe-area-inset-bottom)); display: flex; flex-wrap: wrap; gap: 6px 22px; }
+body > footer a { color: inherit; }
+@media (prefers-reduced-motion: reduce) { .eyebrow i { animation: none; } html { scroll-behavior: auto; } }
+
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="/" aria-label="wawEye – wróć do mapy">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#FC4C02"/><rect x="7" y="8" width="18" height="14" rx="3" fill="#fff"/><circle cx="12" cy="24" r="2.5" fill="#fff"/><circle cx="20" cy="24" r="2.5" fill="#fff"/></svg>
+      wawEye
+    </a>
+    <a class="back" href="/">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 10H5M10 4l-6 6 6 6"/></svg>
+      Mapa
+    </a>
+  </div>
+</header>
+
+<div class="hero">
+  <div class="wrap">
+    <div>
+      <span class="eyebrow"><i aria-hidden="true"></i>pozycje pojazdów co 10 s</span>
+      <h1>Autobusy i tramwaje Warszawy na jednej mapie, <em>na żywo</em></h1>
+      <p class="lead">wawEye pokazuje, gdzie w tej chwili jest każdy warszawski autobus i tramwaj, a na tej samej mapie wolne miejsca na parkingach i utrudnienia w ruchu. Działa w przeglądarce na telefonie i komputerze. Bez instalacji, bez konta, bez reklam.</p>
+      <div class="cta">
+        <a class="btn" href="/">Otwórz mapę
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10h11M10 4l6 6-6 6"/></svg></a>
+        <a class="btn ghost" href="#funkcje">Co potrafi</a>
+      </div>
+    </div>
+    <div>
+      <div class="video">
+        <video controls preload="none" playsinline poster="/media/waweye-film-plakat.webp" aria-label="Film promocyjny wawEye, 30 sekund">
+          <source src="/media/waweye-film-720p.mp4" type="video/mp4">
+        </video>
+      </div>
+      <p class="video-cap">Film: wawEye w 30 sekund · zbudowany z prawdziwych danych produkcji · z dźwiękiem</p>
+    </div>
+  </div>
+</div>
+
+<main>
+  <section id="funkcje"><div class="wrap">
+    <h2>Co potrafi wawEye</h2>
+    <p class="sub">Planery podróży mówią, jak dojechać z A do B. wawEye odpowiada na pytanie z przystanku: gdzie jest teraz mój autobus?</p>
+    <div class="features">
+      <article class="feature">
+        <div class="shot"><img width="480" height="1039" src="/media/ekran-mapa.webp" alt="Mapa Warszawy z pojazdami na żywo" loading="lazy"></div>
+        <div class="txt"><h3><span class="ico" style="background:var(--orange)">●</span>Pojazdy na żywo</h3>
+          <p>Wszystkie autobusy i tramwaje, odświeżane co 10 s i płynnie przesuwane. Wyszukiwanie linii, filtr typu, tryb „Śledź”.</p></div>
+      </article>
+      <article class="feature">
+        <div class="shot"><img width="480" height="1039" src="/media/ekran-pojazd.webp" alt="Karta wybranego tramwaju z danymi taboru" loading="lazy"></div>
+        <div class="txt"><h3><span class="ico" style="background:var(--tram)">T</span>Karta pojazdu</h3>
+          <p>Model, rok produkcji, zajezdnia, liczba miejsc, niska podłoga, klimatyzacja, miejsce na wózek. Dane dla 99,5% autobusów i 99,6% tramwajów.</p></div>
+      </article>
+      <article class="feature">
+        <div class="shot"><img width="480" height="1039" src="/media/ekran-parking.webp" alt="Parkingi z liczbą wolnych miejsc" loading="lazy"></div>
+        <div class="txt"><h3><span class="ico" style="background:var(--free)">P</span>Parkingi</h3>
+          <p>Wolne miejsca (także dla osób z niepełnosprawnościami i aut elektrycznych), godziny, cennik i telefon. Co minutę.</p></div>
+      </article>
+      <article class="feature">
+        <div class="shot"><img width="480" height="1039" src="/media/ekran-utrudnienia.webp" alt="Utrudnienia drogowe na mapie" loading="lazy"></div>
+        <div class="txt"><h3><span class="ico" style="background:var(--inc);color:#242428">!</span>Utrudnienia</h3>
+          <p>Punkty i odcinki ulic: trwa, zaplanowane, zakończone. Opis, daty i link do infoulice.um.warszawa.pl. Co minutę.</p></div>
+      </article>
+    </div>
+  </div></section>
+
+  <section id="zasady"><div class="wrap">
+    <h2>Szybko, za darmo i bez śledzenia</h2>
+    <div class="pledges">
+      <div class="pledge"><b>Bez konta</b><span>Otwierasz stronę i od razu widzisz mapę.</span></div>
+      <div class="pledge"><b>Bez reklam</b><span>Projekt niekomercyjny.</span></div>
+      <div class="pledge"><b>Bez analityki</b><span>Nie zbieramy danych o użytkownikach. Twoja lokalizacja nie opuszcza telefonu.</span></div>
+      <div class="pledge yes"><b>Oszczędnie</b><span>Karta w tle wstrzymuje odświeżanie: mniej baterii i transferu.</span></div>
+    </div>
+  </div></section>
+
+  <section id="dane"><div class="wrap">
+    <h2>Skąd są dane</h2>
+    <p class="sub">wawEye nie tworzy własnych danych o ruchu. Pokazuje to, co publikuje miasto, przez oficjalne API portalu <a href="https://dane.um.warszawa.pl">dane.um.warszawa.pl</a>.</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th scope="col">Co widać</th><th scope="col">Zbiór danych</th><th scope="col">Udostępnia</th><th scope="col">Odświeżanie</th></tr></thead>
+      <tbody>
+        <tr><td>Pozycje pojazdów</td><td><a href="https://dane.um.warszawa.pl/pl/catalogue/f319f602-7292-4e8c-b3d1-f5898aa9a638">Lokalizacja pojazdów komunikacji miejskiej</a></td><td>m.st. Warszawa (ZTM)</td><td class="f">co 10 s</td></tr>
+        <tr><td>Karta pojazdu</td><td><a href="https://dane.um.warszawa.pl/pl/catalogue/a8295279-8bd5-4fec-8352-d7a7b96dc129">Pojazdy transportu publicznego</a></td><td>m.st. Warszawa</td><td class="f">co godzinę</td></tr>
+        <tr><td>Parkingi</td><td>Wolne miejsca parkingowe</td><td>m.st. Warszawa</td><td class="f">co minutę</td></tr>
+        <tr><td>Utrudnienia</td><td>Utrudnienia drogowe (infoulice)</td><td>m.st. Warszawa</td><td class="f">co minutę</td></tr>
+        <tr><td>Podkład mapy</td><td><a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a></td><td>współtwórcy OSM (ODbL)</td><td class="f">–</td></tr>
+      </tbody>
+    </table></div>
+    <p class="sub">Miejski zbiór pozycji obejmuje autobusy i tramwaje, ale nie metro.</p>
+  </div></section>
+
+  <section id="plan"><div class="wrap">
+    <h2>Co dalej</h2>
+    <p class="sub">Terminy są orientacyjne.</p>
+    <ol class="route">
+      <li class="stop done"><span class="pin" aria-hidden="true"></span><span class="when">Październik 2026</span><h3>Fundamenty</h3><p>Testy przy każdej zmianie, automatyczne wdrażanie, monitoring produkcji.</p></li>
+      <li class="stop"><span class="pin" aria-hidden="true"></span><span class="when">Listopad 2026</span><h3>Trasy i przystanki</h3><p>Trasa linii wybranego pojazdu, warstwa przystanków, linki do udostępniania, metro M1 i M2.</p></li>
+      <li class="stop"><span class="pin" aria-hidden="true"></span><span class="when">Grudzień – styczeń</span><h3>Dla codziennego pasażera</h3><p>Instalacja na ekranie głównym, ulubione, odjazdy z przystanku, opóźnienia.</p></li>
+      <li class="stop"><span class="pin" aria-hidden="true"></span><span class="when">I–II kw. 2027</span><h3>Kontekst miasta</h3><p>Utrudnienia na Twojej linii, Veturilo, powiadomienia, ciemny motyw mapy.</p></li>
+    </ol>
+  </div></section>
+
+  <section id="prasa"><div class="wrap">
+    <h2>Dla mediów</h2>
+    <blockquote>
+      <p>„Chciałem mieć aplikację, która otwiera się w sekundę i po prostu pokazuje, gdzie jest mój autobus. Bez reklam, bez logowania i bez śledzenia użytkowników.”</p>
+      <footer>– Andrzej Pacek, twórca wawEye</footer>
+    </blockquote>
+    <p class="sub">Film można wykorzystywać w publikacjach o wawEye.</p>
+    <div class="press">
+      <a href="/media/waweye-film-720p.mp4" download="waweye-film-720p.mp4"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M10 3v10M5 9l5 5 5-5M4 17h12"/></svg>Pobierz film MP4 (720p, 5 MB)</a>
+    </div>
+    <address class="contact">
+      <span class="label">Kontakt dla mediów</span>
+      <b>Andrzej Pacek</b>
+      <a href="mailto:demo-only@no_contact_mail.com">demo-only@no_contact_mail.com</a>
+      <a href="tel:+48123456789">+48 123 456 789</a>
+    </address>
+  </div></section>
+</main>
+
+<footer><div class="wrap">
+  <span>wawEye · niekomercyjny projekt na otwartych danych m.st. Warszawy</span>
+  <span>Mapa © <a href="https://www.openstreetmap.org/copyright">współtwórcy OpenStreetMap</a></span>
+</div></footer>
+</body>
+</html>

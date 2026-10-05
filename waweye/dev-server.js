@@ -13,7 +13,7 @@ try {
 
 const { vehiclesHandler, parkingHandler, incidentsHandler, fleetHandler } = require('./lib/handler');
 const PUBLIC = path.join(__dirname, 'public');
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.json': 'application/json' };
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.json': 'application/json', '.webp': 'image/webp', '.mp4': 'video/mp4' };
 
 function createServer(opts = {}) {
   return http.createServer((req, res) => {
@@ -22,7 +22,9 @@ function createServer(opts = {}) {
     if (pathname === '/api/parking') return parkingHandler(req, res, opts);
     if (pathname === '/api/fleet') return fleetHandler(req, res, opts);
     if (pathname === '/api/incidents') return incidentsHandler(req, res, opts);
-    const file = path.normalize(path.join(PUBLIC, pathname === '/' ? 'index.html' : pathname));
+    // Clean URLs like Vercel's cleanUrls: /o-serwisie serves o-serwisie.html.
+    const clean = pathname === '/' ? 'index.html' : path.extname(pathname) ? pathname : pathname + '.html';
+    const file = path.normalize(path.join(PUBLIC, clean));
     if (!file.startsWith(PUBLIC)) { res.statusCode = 403; return res.end(); }
     fs.readFile(file, (err, data) => {
       if (err) { res.statusCode = 404; return res.end('Not found'); }
