@@ -119,7 +119,16 @@ function createGeocoder({ fetchImpl = fetch, minGapMs = 1100, now = Date.now, sl
     return pending;
   }
 
-  return { locate, cache };
+  // Keeps looking up after the reply has gone (Vercel waitUntil), so the next reply has more places.
+  // One background run per instance at a time; it shares the throttled queue with the requests.
+  let running = null;
+  function locateLater(items, { budgetMs = 45000, store } = {}) {
+    if (running) return null;
+    running = locate(items, { budgetMs, store }).catch(() => 0).finally(() => { running = null; });
+    return running;
+  }
+
+  return { locate, locateLater, cache };
 }
 
 module.exports = { createGeocoder, workerStore, USER_AGENT };
