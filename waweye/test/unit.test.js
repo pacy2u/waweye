@@ -1,8 +1,9 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { normalize, fetchVehicles, fetchParkings, normalizeParkings, fetchIncidents, normalizeIncidents, fetchFleet, normalizeFleet } = require('../lib/warsaw');
-const { vehiclesHandler, parkingHandler, incidentsHandler, fleetHandler } = require('../lib/handler');
+const { normalize, fetchVehicles, fetchParkings, normalizeParkings, fetchIncidents, normalizeIncidents, fetchFleet, normalizeFleet, fetchSport, normalizeSport, plainText, streetQuery, warsawDate } = require('../lib/warsaw');
+const { vehiclesHandler, parkingHandler, incidentsHandler, fleetHandler, sportHandler } = require('../lib/handler');
+const { createGeocoder } = require('../lib/geocoding');
 
 const NOW = Date.parse('2026-10-01T12:00:30+02:00');
 const row = (o = {}) => ({ Lines: '175', Lon: 21.0, Lat: 52.2, VehicleNumber: '1234', Brigade: '3', Time: '2026-10-01 12:00:00', ...o });
@@ -335,7 +336,7 @@ test('handler: rejects invalid types with 400 and non-GET methods with 405', asy
   assert.equal(mixed.status, 400);
   const dup = await call('/api/vehicles?types=1,1', { env: { MOCK: '1' } });
   assert.equal(dup.status, 200);
-  for (const handler of [vehiclesHandler, parkingHandler, incidentsHandler, fleetHandler]) {
+  for (const handler of [vehiclesHandler, parkingHandler, incidentsHandler, fleetHandler, sportHandler]) {
     const r = await new Promise((resolve) => {
       const res = { headers: {}, statusCode: 200, setHeader(k, v) { this.headers[k] = v; }, end(b) { resolve({ status: this.statusCode, headers: this.headers, body: JSON.parse(b) }); } };
       handler({ url: '/x', method: 'POST' }, res, { env: { MOCK: '1' } });
@@ -443,4 +444,133 @@ test('health check: low fleet match fails, too few live vehicles of a type are n
   const night = liveSet(); night.vehicles.body.vehicles = night.vehicles.body.vehicles.filter((v, i) => v.type === 'bus' || i < 6);
   const n = evaluate(night);
   assert.ok(n.ok); assert.match(n.rows[3].detail, /tramwaje: za mało pojazdów na żywo \(3\)/);
+});
+
+// ---- Sport classes ("Zajęcia sportowe") ----
+// Records as the live API returned them on 2026-10-05 (text shortened).
+const LIVE_SPORT = [
+  { address: [{ name: 'Korty Falenica', postCodeAndOffice: 'Warszawa', street: 'Lokalna 33' }], availableLanguages: ['pl_PL'],
+    category: [{ id: 'category_147', name: 'Inne' }], date: ['2026-10-07', '2026-10-14', '2026-09-30'], day: [{ id: 'wednesday', name: 'Środa' }],
+    dedicated: [{ id: 'value_5', name: 'Seniorzy' }], image: { small: { path: 'http://um.warszawa.pl/x.png' } }, language: 'pl_PL',
+    localization: [{}, { id: 'wawer', name: 'Wawer' }], time: '11:00', title: 'Tenisowe środy dla Seniorów - aktywny senior',
+    text: '<h3>Dla kogo są zajęcia?</h3>\n<p>Zapraszamy na bezpłatne, grupowe zajęcia tenisowe dla seniorów na Kortach Falenica</p>\n<h3>Kiedy?</h3><p>Cykl zajęć trwa od&nbsp;7&nbsp;październ</p>',
+    url: 'https://sport.um.warszawa.pl/waw/osir-wawer/-/tenisowe-srody-dla-seniorow-aktywny-senior' },
+  { title: 'Cykl spacerów jogicznych „Od jesieni do zimy”', day: [{ id: 'saturday', name: 'Sobota' }], time: '09:30',
+    address: [{ email: ['sekretariat@parkpowsin.pl'], name: 'Park Kultury w Powsinie', phone: ['22648 48 11'], postCodeAndOffice: '02-973, Warszawa', street: 'Maślaków 1' }],
+    map: { features: [{ geometry: { coordinates: [21.091389, 52.116374], type: 'Point' }, properties: { details: 'Zbiórka przy KluboKawiarni Powsin' }, type: 'Feature' }], type: 'FeatureCollection' } },
+  { title: 'Taneczne piątki dla seniorów', day: [{ id: 'friday', name: 'Piątek' }],
+    map: { features: [{ geometry: { coordinates: [21.035758, 52.25002], type: 'Point' }, properties: { district: 'Praga-Północ', fullStreetName: 'ulica Jagiellońska', shortStreetName: 'ul. Jagiellońska', streetNumber: '7' }, type: 'Feature' }], type: 'FeatureCollection' } },
+  { title: 'Fit Mama w OSiR Wawer', day: [{ id: 'monday', name: 'Poniedziałek' }], category: [{ id: 'x' }] },
+  { title: 'Stary turniej', date: ['2026-01-09'], map: { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: [21, 52.2] } }] } },
+  { title: 'Bez terminu', date: [], day: [] },
+  { title: 'Punkt poza Warszawą', day: [{ id: 'monday' }], map: { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: [0, 0] } }] },
+    address: [{ name: 'Hala', street: 'ul. Kadetów 15', postCodeAndOffice: '03-987 Warszawa' }], url: 'javascript:alert(1)' },
+];
+
+test('sport: live records normalise; finished and undated ones are dropped', () => {
+  const out = normalizeSport(LIVE_SPORT, '2026-10-05');
+  assert.deepEqual(out.map((i) => i.title), ['Tenisowe środy dla Seniorów - aktywny senior', 'Cykl spacerów jogicznych „Od jesieni do zimy”', 'Taneczne piątki dla seniorów', 'Fit Mama w OSiR Wawer', 'Punkt poza Warszawą']);
+  const [tenis, joga, taniec, mama, poza] = out;
+  assert.deepEqual(tenis.dates, ['2026-10-07', '2026-10-14']); // past date dropped
+  assert.deepEqual(tenis.days, ['wednesday']);
+  assert.equal(tenis.lat, null); assert.deepEqual(tenis.queries, ['Lokalna 33, Warszawa', 'Korty Falenica, Warszawa']);
+  assert.equal(tenis.district, 'Wawer'); assert.deepEqual(tenis.categories, ['Inne']); assert.deepEqual(tenis.audience, ['Seniorzy']);
+  assert.equal(tenis.address, 'Lokalna 33'); assert.equal(tenis.time, '11:00');
+  assert.match(tenis.text, /^Dla kogo są zajęcia\? Zapraszamy .* Cykl zajęć trwa od 7 październ$/);
+  assert.deepEqual([joga.lat, joga.lon, joga.located], [52.116374, 21.091389, 'map']);
+  assert.equal(joga.place, 'Zbiórka przy KluboKawiarni Powsin'); assert.equal(joga.address, 'Maślaków 1, 02-973 Warszawa');
+  assert.equal(joga.phone, '22648 48 11'); assert.equal(joga.email, 'sekretariat@parkpowsin.pl'); assert.equal(joga.queries, undefined);
+  assert.equal(taniec.place, 'ul. Jagiellońska 7'); assert.equal(taniec.district, 'Praga-Północ');
+  assert.deepEqual(mama.queries, []); assert.deepEqual(mama.categories, []);
+  assert.equal(poza.lat, null); assert.deepEqual(poza.queries, ['Kadetów 15, Warszawa', 'Hala, Warszawa']); assert.equal(poza.url, '');
+});
+
+test('sport: descriptions become plain text; addresses become Nominatim-friendly', () => {
+  assert.equal(plainText('<p>A&nbsp;&amp;&#243;&#x142; <b>B</b></p><script>alert(1)</script><a href="tel:1">1</a>'), 'A &ół B 1');
+  assert.equal(plainText('a&#99999999;b&#0;c'), 'a b c');
+  assert.equal(streetQuery('Michała Kajki 80/82'), 'Michała Kajki 80, Warszawa');
+  assert.equal(streetQuery('Węglarska 41 a'), 'Węglarska 41a, Warszawa');
+  assert.equal(streetQuery('ul. Kadetów 15'), 'Kadetów 15, Warszawa');
+  assert.equal(streetQuery(''), '');
+  assert.equal(warsawDate(Date.parse('2026-10-05T22:30:00Z')), '2026-10-06'); // already Tuesday in Warsaw
+});
+
+test('sport: direct POST to get_bmm_zajecia_sportowe; relay uses resource=sport', async () => {
+  let seen;
+  const f = async (url, opts) => { seen = { url, opts }; return { ok: true, json: async () => LIVE_SPORT }; };
+  assert.equal((await fetchSport({ apiKey: 'TOK', fetchImpl: f })).length, LIVE_SPORT.length);
+  assert.equal(seen.url, 'https://dane.um.warszawa.pl/api/action/get_bmm_zajecia_sportowe'); assert.equal(seen.opts.method, 'POST');
+  await fetchSport({ fetchImpl: f, upstream: { url: 'https://w.dev', secret: 's' } });
+  assert.equal(seen.url, 'https://w.dev?resource=sport');
+});
+
+// A fake clock: sleep() moves time forward, so throttling is checked without waiting.
+function fakeGeo(answers, { budgetMs } = {}) {
+  let t = 1000; const calls = [];
+  const fetchImpl = async (url, init) => {
+    const q = new URL(url).searchParams.get('q'); calls.push({ q, at: t, ua: init.headers['User-Agent'], url });
+    const a = answers[q];
+    if (a instanceof Error) throw a;
+    if (typeof a === 'number') return new Response('{}', { status: a });
+    t += 200; // a lookup takes a while
+    return new Response(JSON.stringify(a ? [{ lat: String(a[0]), lon: String(a[1]) }] : []), { status: 200 });
+  };
+  const g = createGeocoder({ fetchImpl, now: () => t, sleep: async (ms) => { t += ms; } });
+  return { g, calls, tick: (ms) => { t += ms; } };
+}
+
+test('geocoding: at most one Nominatim call per 1.1 s, identified, inside Warsaw; answers cached, "not found" too', async () => {
+  const { g, calls } = fakeGeo({ 'Lokalna 33, Warszawa': [52.16, 21.2], 'Nowa 1, Warszawa': null, 'Hala, Warszawa': [52.3, 21.1] });
+  const items = [{ queries: ['Lokalna 33, Warszawa'] }, { queries: ['Nowa 1, Warszawa', 'Hala, Warszawa'] }, { queries: ['Lokalna 33, Warszawa'] }, { lat: 1, lon: 2, queries: ['x'] }, { queries: [] }];
+  assert.equal(await g.locate(items), 0);
+  assert.deepEqual(items.map((i) => [i.lat, i.located]), [[52.16, 'address'], [52.3, 'address'], [52.16, 'address'], [1, undefined], [undefined, undefined]]);
+  assert.deepEqual(calls.map((c) => c.q), ['Lokalna 33, Warszawa', 'Nowa 1, Warszawa', 'Hala, Warszawa']);
+  for (let k = 1; k < calls.length; k++) assert.ok(calls[k].at - calls[k - 1].at >= 1100, 'gap between calls');
+  assert.match(calls[0].ua, /^wawEye\/.*waweye\.vercel\.app/);
+  assert.match(calls[0].url, /countrycodes=pl&bounded=1&viewbox=20\.85,52\.37,21\.28,52\.09/);
+  const again = [{ queries: ['Nowa 1, Warszawa', 'Hala, Warszawa'] }];
+  await g.locate(again);
+  assert.equal(calls.length, 3); assert.equal(again[0].lat, 52.3); // all from the cache
+});
+
+test('geocoding: a spent time budget leaves the rest pending; errors are retried, 429 pauses lookups', async () => {
+  const { g, calls, tick } = fakeGeo({ 'A, Warszawa': [52.2, 21], 'B, Warszawa': [52.21, 21], 'C, Warszawa': [52.22, 21], 'E, Warszawa': new Error('reset'), 'F, Warszawa': 429 });
+  const items = ['A', 'B', 'C'].map((x) => ({ queries: [`${x}, Warszawa`] }));
+  assert.equal(await g.locate(items, { budgetMs: 1500 }), 1); // A at once, B after 1.1 s, then the budget is gone
+  assert.deepEqual(items.map((i) => i.lat), [52.2, 52.21, undefined]);
+  assert.equal(await g.locate(items, { budgetMs: 5000 }), 0); assert.equal(items[2].lat, 52.22);
+  const e = [{ queries: ['E, Warszawa'] }];
+  assert.equal(await g.locate(e), 1); assert.equal(await g.locate(e), 1); // not cached, tried again
+  assert.equal(calls.filter((c) => c.q === 'E, Warszawa').length, 2);
+  const f = [{ queries: ['F, Warszawa'] }, { queries: ['A, Warszawa'] }, { queries: ['G, Warszawa'] }];
+  assert.equal(await g.locate(f), 2); // F refused, A cached, G not even tried
+  assert.equal(f[1].lat, 52.2); assert.ok(!calls.some((c) => c.q === 'G, Warszawa'));
+  tick(11 * 60000);
+  await g.locate([{ queries: ['G, Warszawa'] }]); assert.ok(calls.some((c) => c.q === 'G, Warszawa')); // the pause is over
+});
+
+test('sport handler: mock mode places classes (also from addresses) and drops the unplaceable; caching follows pending lookups', async () => {
+  const call = (opts) => new Promise((resolve) => {
+    const res = { headers: {}, statusCode: 200, setHeader(k, v) { this.headers[k] = v; }, end(b) { resolve({ status: this.statusCode, body: JSON.parse(b), headers: this.headers }); } };
+    sportHandler({ url: '/api/sport' }, res, opts);
+  });
+  const ok = await call({ env: { MOCK: '1' } });
+  assert.equal(ok.status, 200); assert.equal(ok.body.source, 'mock'); assert.equal(ok.body.pending, 0); assert.equal(ok.body.unlocated, 1);
+  assert.ok(ok.body.items.every((i) => Number.isFinite(i.lat) && Number.isFinite(i.lon) && !('queries' in i)));
+  assert.ok(ok.body.items.some((i) => i.located === 'address'));
+  assert.ok(!ok.body.items.some((i) => i.title === 'Zakończony turniej' || i.title === 'Fit Mama w OSiR Wawer'));
+  assert.ok(!JSON.stringify(ok.body).includes('<script'));
+  assert.match(ok.headers['Cache-Control'], /s-maxage=1800/);
+  const live = await call({ env: { UPSTREAM_URL: 'https://w.dev', UPSTREAM_SECRET: 's' }, fetchImpl: async () => ({ ok: true, json: async () => LIVE_SPORT }),
+    geo: { locate: async () => 2 } });
+  assert.equal(live.status, 200); assert.equal(live.body.pending, 2); assert.equal(live.headers['Cache-Control'], 's-maxage=60');
+  assert.equal((await call({ env: {} })).status, 502);
+});
+
+test('worker: sport resource', async () => {
+  const { handle } = await import('../worker/index.js');
+  let seen;
+  const ok = await handle(new Request('https://w.dev/?resource=sport', { headers: { 'x-proxy-secret': 's' } }), { PROXY_SECRET: 's', WARSAW_API_KEY: 'TOK' },
+    async (u, init) => { seen = { u, init }; return new Response('[]', { status: 200 }); });
+  assert.equal(ok.status, 200); assert.equal(seen.u, 'https://dane.um.warszawa.pl/api/action/get_bmm_zajecia_sportowe'); assert.equal(seen.init.method, 'POST');
 });

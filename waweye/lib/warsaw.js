@@ -5,6 +5,7 @@ const ENDPOINT = 'https://dane.um.warszawa.pl/api/action/get_ztm_lokalizacja_poj
 const INCIDENTS_ENDPOINT = 'https://dane.um.warszawa.pl/api/action/get_bin_utrudnienia_drogowe';
 const FLEET_ENDPOINT = 'https://dane.um.warszawa.pl/api/action/get_ztm_pojazdy';
 const PARKING_ENDPOINT = 'https://dane.um.warszawa.pl/api/action/get_m_parkingi_wolne_miejsca';
+const SPORT_ENDPOINT = 'https://dane.um.warszawa.pl/api/action/get_bmm_zajecia_sportowe';
 const TYPES = { 1: 'bus', 2: 'tram' };
 const MAX_AGE_MS = 5 * 60 * 1000;
 const BBOX = { minLat: 51.9, maxLat: 52.6, minLon: 20.5, maxLon: 21.6 };
@@ -249,6 +250,77 @@ async function fetchFleet({ apiKey, fetchImpl = fetch, upstream }) {
   return normalizeFleet(raw);
 }
 
+// ---- Sport classes (dataset "Zajęcia sportowe", calendar of sport.um.warszawa.pl, updated every 2 h) ----
+// Reply: a bare list. Only "map" (a GeoJSON FeatureCollection, missing from the docs) has coordinates; about a quarter
+// of the records have just an address, which lib/geocoding.js turns into coordinates. Records without "date" are
+// weekly classes on the weekdays in "day"; records with "date" happen on those days only.
+const WEEKDAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+const WARSAW_DAY = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Warsaw', year: 'numeric', month: '2-digit', day: '2-digit' });
+const warsawDate = (ms = Date.now()) => WARSAW_DAY.format(new Date(ms)); // "2026-10-05"
+const ENTITIES = { nbsp: ' ', amp: '&', quot: '"', apos: "'", lt: '<', gt: '>', oacute: 'ó', Oacute: 'Ó', ndash: '–', mdash: '—', bdquo: '„', rdquo: '”', hellip: '…' };
+
+// The city's descriptions are HTML; the app shows them as plain text only.
+function plainText(html) {
+  return String(html || '')
+    .replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e) => {
+      if (e[0] !== '#') return ENTITIES[e] ?? m;
+      const cp = e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : Number(e.slice(1));
+      return cp > 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : ' '; // a broken entity must not break the whole list
+    })
+    .replace(/\s+/g, ' ').trim();
+}
+const names = (list) => (Array.isArray(list) ? list : []).map((x) => str(x && x.name)).filter((x) => x && x !== 'undefined');
+const first = (v) => str([].concat(v ?? [])[0]); // phone/email come as a list or a string
+const httpUrl = (u) => (/^https?:\/\/[^\s"'<>]+$/i.test(str(u)) ? str(u) : '');
+const inBox = (lat, lon) => Number.isFinite(lat) && Number.isFinite(lon) && lat >= BBOX.minLat && lat <= BBOX.maxLat && lon >= BBOX.minLon && lon <= BBOX.maxLon;
+
+// "ul. Michała Kajki 80/82" -> "Michała Kajki 80", "Węglarska 41 a" -> "Węglarska 41a": forms Nominatim finds.
+function streetQuery(street) {
+  let s = str(street).replace(/^(ul\.?|ulica)\s+/i, '').replace(/(\d+)\s*\/\s*\d+\w?/, '$1').replace(/(\d+)\s+([a-z])\b/i, '$1$2');
+  return s ? `${s}, Warszawa` : '';
+}
+
+function normalizeSport(raw, today = warsawDate()) {
+  const out = [];
+  raw.forEach((r, i) => {
+    if (!r || typeof r !== 'object') return;
+    const allDates = (Array.isArray(r.date) ? r.date : []).map(str).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d));
+    const dates = allDates.filter((d) => d >= today).sort();
+    const days = (Array.isArray(r.day) ? r.day : []).map((d) => str(d && d.id).toLowerCase()).filter((d) => WEEKDAYS.includes(d));
+    if (allDates.length ? !dates.length : !days.length) return; // finished, or no way to tell when it happens
+    const addr = (Array.isArray(r.address) ? r.address : []).find((a) => a && typeof a === 'object') || {};
+    const feature = ((r.map && Array.isArray(r.map.features)) ? r.map.features : [])
+      .find((f) => f && f.geometry && f.geometry.type === 'Point' && Array.isArray(f.geometry.coordinates) && inBox(Number(f.geometry.coordinates[1]), Number(f.geometry.coordinates[0])));
+    const props = (feature && feature.properties) || {};
+    const mapStreet = [str(props.shortStreetName), str(props.streetNumber)].filter(Boolean).join(' ');
+    const item = {
+      id: `s-${i}-${str(r.url).split('/').pop() || i}`.slice(0, 120),
+      title: str(r.title) || 'Zajęcia sportowe',
+      url: httpUrl(r.url),
+      categories: names(r.category), audience: names(r.dedicated),
+      district: names(r.localization)[0] || str(props.district),
+      // The point's own description ("Zbiórka przy …") says best where to go; the address may be the organiser's.
+      place: str(props.details) || str(addr.name) || mapStreet,
+      address: [str(addr.street) || mapStreet, str(addr.postCodeAndOffice).replace(/\s*,\s*/, ' ').replace(/^Warszawa$/, '')].filter(Boolean).join(', '),
+      phone: first(addr.phone), email: first(addr.email),
+      dates, days, time: /^\d{1,2}:\d{2}$/.test(str(r.time)) ? str(r.time) : '',
+      text: plainText(r.text).slice(0, 400),
+      lat: null, lon: null, located: '',
+    };
+    if (feature) { item.lat = Number(feature.geometry.coordinates[1]); item.lon = Number(feature.geometry.coordinates[0]); item.located = 'map'; }
+    else item.queries = [...new Set([streetQuery(addr.street), str(addr.name) && `${str(addr.name)}, Warszawa`].filter(Boolean))];
+    out.push(item);
+  });
+  return out;
+}
+
+async function fetchSport({ apiKey, fetchImpl = fetch, upstream }) {
+  if (!apiKey && !upstream) throw new Error('Missing WARSAW_API_KEY');
+  return requestList({ endpoint: SPORT_ENDPOINT, relayQuery: 'resource=sport', extract: extractIncidents, apiKey, fetchImpl, upstream });
+}
+
 async function fetchVehicles({ apiKey, types = [1, 2], fetchImpl = fetch, upstream }) {
   if (!apiKey && !upstream) throw new Error('Missing WARSAW_API_KEY');
   const settled = await Promise.allSettled(types.map((t) => fetchType(t, apiKey, fetchImpl, upstream)));
@@ -262,4 +334,4 @@ async function fetchVehicles({ apiKey, types = [1, 2], fetchImpl = fetch, upstre
   return { vehicles, errors, received };
 }
 
-module.exports = { fetchVehicles, fetchParkings, fetchIncidents, fetchFleet, normalize, normalizeFleet, normalizeParkings, normalizeIncidents, TYPES };
+module.exports = { fetchVehicles, fetchParkings, fetchIncidents, fetchFleet, fetchSport, normalize, normalizeFleet, normalizeParkings, normalizeIncidents, normalizeSport, plainText, streetQuery, warsawDate, TYPES };

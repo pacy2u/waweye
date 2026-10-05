@@ -1,4 +1,5 @@
 'use strict';
+const { warsawDate } = require('./warsaw');
 // Deterministic moving vehicles around Warsaw, for local work without the live API.
 const LINES = { bus: ['175', '186', '523', '111', '500', 'N22'], tram: ['9', '17', '24', '33'] };
 
@@ -78,4 +79,37 @@ function mockFleet() {
   };
 }
 
-module.exports = { mockFleet, mockVehicles, mockParkings, mockIncidents };
+// Sport classes in the shape of the "Zajęcia sportowe" API (records from the live API, 2026-10-05, trimmed).
+// Weekly classes run every day here, so the e2e test finds some "today" on any weekday.
+const EVERY_DAY = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map((id) => ({ id, name: id }));
+const point = (lon, lat, properties = {}) => ({ type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: [lon, lat] }, properties }] });
+const ymd = (days) => warsawDate(Date.now() + days * 86400e3); // the app counts days in Warsaw time
+// Addresses the mock geocoder knows (lib/handler.js), standing in for Nominatim.
+const MOCK_GEOCODES = { 'Lokalna 33, Warszawa': { lat: 52.1610, lon: 21.2050 }, 'Michała Kajki 80, Warszawa': { lat: 52.2320, lon: 21.1010 } };
+
+function mockSport() {
+  const cls = (title, extra) => ({ title, url: 'https://sport.um.warszawa.pl/-/' + title.toLowerCase().replace(/[^a-z0-9]+/g, '-'), language: 'pl_PL',
+    category: [{ id: 'category_1', name: 'Fitness' }], dedicated: [{ id: 'value_1', name: 'Kobiety' }, { id: 'value_2', name: 'Mężczyźni' }],
+    localization: [{}, { id: 'srodmiescie', name: 'Śródmieście' }], text: '<p>Bezpłatne zajęcia. Zapisy na miejscu.</p>', time: '18:00', ...extra });
+  return [
+    cls('Taneczne piątki dla seniorów', { day: EVERY_DAY, date: [], time: '10:00', category: [{ id: 'c', name: 'Taniec' }], dedicated: [{ id: 'value_5', name: 'Seniorzy' }],
+      localization: [{ id: 'praga-polnoc', name: 'Praga-Północ' }], map: point(21.035758, 52.25002, { district: 'Praga-Północ', shortStreetName: 'ul. Jagiellońska', streetNumber: '7' }) }),
+    cls('Zdrowy kręgosłup', { day: EVERY_DAY, date: [], time: '18:30', category: [{ id: 'c', name: 'Gimnastyka' }],
+      localization: [{ id: 'praga-polnoc', name: 'Praga-Północ' }], map: point(21.035758, 52.25002, { district: 'Praga-Północ', shortStreetName: 'ul. Jagiellońska', streetNumber: '7' }) }),
+    cls('Cykl spacerów jogicznych', { day: EVERY_DAY, date: [], time: '09:30', category: [{ id: 'c', name: 'Aktywności parkowe i miejskie' }],
+      address: [{ name: 'Park Kultury w Powsinie', street: 'Maślaków 1', postCodeAndOffice: '02-973, Warszawa', phone: ['22648 48 11'], email: ['sekretariat@parkpowsin.pl'] }],
+      map: point(21.091389, 52.116374, { details: 'Zbiórka przy KluboKawiarni Powsin' }) }),
+    cls('Fruwaj z Orłami', { day: EVERY_DAY, date: [], dedicated: [{ id: 'value_3', name: 'Dzieci' }], address: [{ name: 'Białe Orły', postCodeAndOffice: 'Warszawa' }],
+      map: point(21.0449405431161, 52.2955022585573, { details: 'Szkoła Podstawowa nr 380 ul. Krasiczyńska 4/6' }) }),
+    cls('Bieg w Parku Skaryszewskim', { day: [{ id: 'saturday', name: 'Sobota' }], date: [ymd(0), ymd(3)], time: '08:00', category: [{ id: 'c', name: 'Bieganie' }],
+      map: point(21.0520, 52.2440) }),
+    cls('Tenisowe środy dla Seniorów', { day: EVERY_DAY, date: [], time: '11:00', category: [{ id: 'c', name: 'Inne' }],
+      address: [{ name: 'Korty Falenica', postCodeAndOffice: 'Warszawa', street: 'Lokalna 33' }], localization: [{}, { id: 'wawer', name: 'Wawer' }] }),
+    cls('Siatkówka w SP 218', { day: EVERY_DAY, date: [], address: [{ name: 'Szkoła Podstawowa nr 218', postCodeAndOffice: '04-621 Warszawa', street: 'Michała Kajki 80/82' }],
+      text: '<h3>Dla kogo?</h3><p>Dla młodzieży&nbsp;i dorosłych.</p><script>alert(1)</script><a href="tel:22">22</a>' }),
+    cls('Fit Mama w OSiR Wawer', { day: EVERY_DAY, date: [] }), // no address, no point: cannot be placed
+    cls('Zakończony turniej', { day: [], date: [ymd(-30)], map: point(21.0, 52.23) }),
+  ];
+}
+
+module.exports = { mockFleet, mockVehicles, mockParkings, mockIncidents, mockSport, MOCK_GEOCODES };

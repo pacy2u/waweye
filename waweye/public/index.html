@@ -24,6 +24,15 @@
     <button id="t-inc" class="chip" aria-pressed="false" title="Utrudnienia w ruchu drogowym">
       <svg class="pico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 22.5 20.5h-21z" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 9v5.5M12 17.2v.3" stroke="var(--picon-bg,#242428)" stroke-width="2.2" stroke-linecap="round"/></svg>Utrudnienia
     </button>
+    <button id="t-sport" class="chip" aria-pressed="false" title="Zajęcia sportowe z kalendarza miasta">
+      <svg class="pico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="14.5" cy="4" r="2.2" fill="currentColor"/><path d="M7 21l3.5-5 2.5 2V22M10.5 16l1.5-6-3 1.5L7.5 14M12 10l3 2.5 3 .5M12 10l2.5-.8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Sport
+    </button>
+  </div>
+  <div id="sfilter" role="group" aria-label="Zajęcia sportowe: kiedy" hidden>
+    <span>Zajęcia sportowe:</span>
+    <button type="button" data-range="today" class="on" aria-pressed="true">Dziś</button>
+    <button type="button" data-range="tomorrow" aria-pressed="false">Jutro</button>
+    <button type="button" data-range="week" aria-pressed="false">7 dni</button>
   </div>
 </header>
 
@@ -64,6 +73,16 @@
   <div id="ip-status" class="i-status"></div>
   <div id="ip-body" class="i-body"></div>
   <a id="ip-link" class="i-link" target="_blank" rel="noopener noreferrer" hidden>Więcej na infoulice.um.warszawa.pl</a>
+</aside>
+
+<aside id="spanel" hidden>
+  <button id="sclose" aria-label="Zamknij zajęcia">×</button>
+  <div class="p-head">
+    <div class="s-badge"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="14.5" cy="4" r="2.2" fill="currentColor"/><path d="M7 21l3.5-5 2.5 2V22M10.5 16l1.5-6-3 1.5L7.5 14M12 10l3 2.5 3 .5M12 10l2.5-.8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="meta"><div id="sp-name" class="p-name"></div><div id="sp-addr" class="p-addr"></div></div>
+  </div>
+  <ul id="sp-list" class="s-list"></ul>
+  <div class="s-note">Kalendarz zajęć sportowych m.st. Warszawy (sport.um.warszawa.pl), aktualizowany co 2 h.</div>
 </aside>
 
 <script src="vendor/leaflet.js"></script>
