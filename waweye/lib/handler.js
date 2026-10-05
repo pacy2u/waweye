@@ -1,7 +1,7 @@
 'use strict';
 const { fetchVehicles, fetchParkings, fetchIncidents, fetchFleet, fetchSport, fetchEvents, normalizeFleet, normalizeParkings, normalizeIncidents, normalizeSport, normalizeEvents } = require('./warsaw');
 const { mockVehicles, mockParkings, mockIncidents, mockFleet, mockSport, mockEvents, MOCK_GEOCODES } = require('./mock');
-const { createGeocoder } = require('./geocoding');
+const { createGeocoder, workerStore } = require('./geocoding');
 
 // Read-only API: anything but GET/HEAD gets 405. Returns true when the request was rejected.
 function rejectUnlessRead(req, res) {
@@ -118,6 +118,8 @@ async function fleetHandler(req, res, { env = process.env, fetchImpl = fetch } =
 // /api/sport and /api/wydarzenia run as separate Vercel functions, each with its own queue, so each keeps to one
 // Nominatim call per 2.2 s: together still under the policy's one per second.
 const geocoder = createGeocoder({ minGapMs: 2200 });
+// Answers shared by all instances and kept across deploys: the Worker's KV (only when the Worker is in use).
+const geoStore = (env, fetchImpl) => (env.UPSTREAM_URL ? workerStore({ url: env.UPSTREAM_URL, secret: env.UPSTREAM_SECRET || '', fetchImpl }) : undefined);
 const mockGeocoder = createGeocoder({ minGapMs: 0, fetchImpl: async (url) => {
   const hit = MOCK_GEOCODES[new URL(url).searchParams.get('q')];
   return new Response(JSON.stringify(hit ? [{ lat: String(hit.lat), lon: String(hit.lon) }] : []), { status: 200 });
@@ -136,7 +138,7 @@ async function sportHandler(req, res, { env = process.env, fetchImpl = fetch, ge
       });
     }
     const all = normalizeSport(raw);
-    const pending = await (geo || (source === 'mock' ? mockGeocoder : geocoder)).locate(all, { budgetMs: geoBudgetMs });
+    const pending = await (geo || (source === 'mock' ? mockGeocoder : geocoder)).locate(all, { budgetMs: geoBudgetMs, store: source === 'mock' ? undefined : geoStore(env, fetchImpl) });
     const items = all.filter((i) => i.lat != null).map(({ queries, ...i }) => i);
     // Each reply spends at most ~5 s on lookups (about 4 addresses), so nobody waits long; while some are left,
     // the CDN keeps the reply for 15 s only and the next request carries on. The dataset itself changes every 2 h.
@@ -163,7 +165,7 @@ async function eventsHandler(req, res, { env = process.env, fetchImpl = fetch, g
       });
     }
     const all = normalizeEvents(raw);
-    const pending = await (geo || (source === 'mock' ? mockGeocoder : geocoder)).locate(all, { budgetMs: geoBudgetMs });
+    const pending = await (geo || (source === 'mock' ? mockGeocoder : geocoder)).locate(all, { budgetMs: geoBudgetMs, store: source === 'mock' ? undefined : geoStore(env, fetchImpl) });
     const items = [];
     for (const { queries, lat, lon, ...it } of all) {
       if (!it.points.length && lat != null) { it.points = [{ lat, lon, label: it.venue || it.address, street: it.address, district: it.district }]; it.located = 'address'; }

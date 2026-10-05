@@ -241,6 +241,7 @@ function fakeCf(over = {}) {
       if ((init.headers || {})['x-proxy-secret'] !== 'proxy-tajne') return json({ error: 'forbidden' }, 403);
       if (s.workerStatus !== 200) return json({ error: 'worker is missing WARSAW_API_KEY' }, s.workerStatus);
       const q = u.search;
+      if (q === '?resource=geokody') return s.kvBound === false ? json({ error: 'worker has no GEOKODY binding' }, 501) : json({ found: {} });
       return json(q === '?type=1' ? [{ Lines: '175' }, { Lines: '520' }] : q === '?resource=parking' ? { Status: 'ok', carParks: [{}] } : q === '?resource=fleet' ? { busy: [{}, {}], tramwaje: [{}] } : []);
     }
     if (method === 'GET' && p === '/accounts/acc1/workers/scripts') return ok(s.scripts);
@@ -252,6 +253,11 @@ function fakeCf(over = {}) {
     if (set && method === 'GET') return ok({ bindings: [...(s.secrets[set[1]] || []).map((x) => ({ name: x.name, type: 'secret_text' })), ...(s.plain[set[1]] || []).map((n) => ({ name: n, type: 'plain_text', text: 'jawne-tajne' }))] });
     const del = p.match(/^\/accounts\/acc1\/workers\/scripts\/([^/]+)$/);
     if (del && method === 'DELETE') { s.scripts = s.scripts.filter((x) => x.id !== del[1]); return ok(null); }
+    if (method === 'GET' && p === '/accounts/acc1/storage/kv/namespaces') return ok((s.namespaces || []).slice((u.searchParams.get('page') - 1) * 100, u.searchParams.get('page') * 100));
+    if (method === 'POST' && p === '/accounts/acc1/storage/kv/namespaces') {
+      if (s.kvForbidden) return json({ success: false, errors: [{ code: 10000, message: 'Authentication error' }] }, 403);
+      const ns = { id: 'f'.repeat(32), title: body.title }; (s.namespaces = s.namespaces || []).push(ns); return ok(ns);
+    }
     if (method === 'POST' && p === '/graphql') {
       if (s.analyticsError) return json({ data: null, errors: [{ message: s.analyticsError }] });
       return json({ data: { viewer: { accounts: [{ workersInvocationsAdaptive: [{ sum: { requests: s.requests[body.variables.scriptName] || 0 } }] }] } }, errors: null });
@@ -307,6 +313,8 @@ test('cloudflare test-workera: every resource with the secret and a 403 without 
   assert.match(md, /\| Autobusy \(\?type=1\) \| OK \| 2 rekordów/);
   assert.match(md, /\| Tabor \(\?resource=fleet\) \| OK \| 3 rekordów/);
   assert.match(md, /\| Bez sekretu \(oczekiwane 403\) \| OK \| HTTP 403 \|/);
+  assert.match(md, /\| Geokody \(\?resource=geokody, KV\) \| OK \|/);
+  await assert.rejects(cfOps.run('test-workera', ['waweye-proxy'], cdeps(fakeCf({ kvBound: false }), env)), /Geokody[^|]*\| BŁĄD \| HTTP 501 \(worker has no GEOKODY binding\)/);
   assert.doesNotMatch(md, /proxy-tajne/);
   await assert.rejects(cfOps.run('test-workera', ['waweye-proxy'], cdeps(fakeCf({ workerStatus: 500 }), env)), /PROBLEM[\s\S]*HTTP 500 \(worker is missing WARSAW_API_KEY\)/);
   // 522 everywhere while the secret works: explain the location problem and point to the preview test.
@@ -355,4 +363,24 @@ test('cloudflare usun-workera: with UPSTREAM_URL hidden in Vercel only zero traf
 test('cloudflare: analytics without permission does not break stan', async () => {
   const md = await cfOps.run('stan', [], cdeps(fakeCf({ analyticsError: 'not authorized for that account' })));
   assert.match(md, /nieznane \(not authorized for that account\)/);
+});
+
+test('cloudflare podepnij-kv: finds or creates the geocode namespace and binds it in wrangler.toml once', async () => {
+  const f = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cf-')), 'wrangler.toml');
+  fs.writeFileSync(f, fs.readFileSync(path.join(__dirname, '../worker/wrangler.toml'), 'utf8'));
+  const s = fakeCf({ namespaces: Array.from({ length: 100 }, (_, i) => ({ id: String(i).padStart(32, '0'), title: `inna-${i}` })) });
+  const md = await cfOps.run('podepnij-kv', [f], cdeps(s, CF_ENV));
+  assert.match(md, /waweye-geokody[\s\S]*utworzona teraz[\s\S]*podpięta jako `GEOKODY`/);
+  const toml = fs.readFileSync(f, 'utf8');
+  assert.match(toml, /\n\[\[kv_namespaces\]\]\nbinding = "GEOKODY"\nid = "f{32}"\n$/);
+  assert.match(toml, /^name = "waweye-proxy"/m); // the rest is untouched
+  // Second run (e.g. the next deploy on the same checkout): the namespace exists (on page 2), nothing is added.
+  const again = await cfOps.run('podepnij-kv', [f], cdeps(s, CF_ENV));
+  assert.match(again, /już istniała[\s\S]*już ją podpina/);
+  assert.equal(fs.readFileSync(f, 'utf8'), toml);
+  assert.equal(s.calls.filter((c) => c.method === 'POST' && c.path.endsWith('/storage/kv/namespaces')).length, 1);
+  // A token without KV rights: a clear error, wrangler.toml unchanged.
+  const g = path.join(path.dirname(f), 'czysty.toml'); fs.writeFileSync(g, 'name = "waweye-proxy"\n');
+  await assert.rejects(cfOps.run('podepnij-kv', [g], cdeps(fakeCf({ kvForbidden: true }), CF_ENV)), /HTTP 403 \(10000: Authentication error\)/);
+  assert.equal(fs.readFileSync(g, 'utf8'), 'name = "waweye-proxy"\n');
 });
