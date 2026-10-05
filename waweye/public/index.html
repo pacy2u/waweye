@@ -10,6 +10,21 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<!-- SPPN outline (public/app.js, sppnLayer): the edge of the WMS fill, 3 px inside it, dashed by a 16 px mask
+     (dashes on most edges, solid on 45° ones); the fill itself at 55%. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <filter id="sppn-edge" x="0" y="0" width="1" height="1" color-interpolation-filters="sRGB">
+    <feComponentTransfer in="SourceAlpha" result="a"><feFuncA type="discrete" tableValues="0 1"/></feComponentTransfer>
+    <feConvolveMatrix in="a" order="7" kernelMatrix="-1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 48 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1" divisor="1" edgeMode="duplicate" result="edge"/>
+    <feFlood flood-color="#D64550"/>
+    <feComposite in2="edge" operator="in" result="line"/>
+    <feImage href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect width='10' height='16'/%3E%3Crect width='16' height='10'/%3E%3C/svg%3E" x="0" y="0" width="16" height="16" result="dash"/>
+    <feTile in="dash" result="dashes"/>
+    <feComposite in="line" in2="dashes" operator="in" result="dashed"/>
+    <feComponentTransfer in="SourceGraphic" result="fill"><feFuncA type="linear" slope="0.55"/></feComponentTransfer>
+    <feMerge><feMergeNode in="fill"/><feMergeNode in="dashed"/></feMerge>
+  </filter>
+</svg>
 <div id="map" aria-label="Mapa pojazdów"></div>
 
 <header id="bar">

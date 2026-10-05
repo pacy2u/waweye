@@ -400,9 +400,12 @@
   try { zonePrefs = { ...zonePrefs, ...JSON.parse(localStorage.getItem('waweye.strefy') || '{}') }; } catch {}
   const saveZonePrefs = () => { try { localStorage.setItem('waweye.strefy', JSON.stringify(zonePrefs)); } catch {} };
 
-  map.createPane('zones').style.zIndex = 250; // above the base map, below vehicles and markers; the WMS fills the zone solid pink, hence the low opacity
+  map.createPane('zones').style.zIndex = 250; // above the base map, below vehicles and markers
+  // The WMS fills the zone solid pink with a faint edge. The SVG filter #sppn-edge (index.html) on every tile thins the
+  // fill (55%) and draws the fill's own edge as a dashed line in the zone colour, so the line always matches the city's
+  // layer. It reads no pixels, so the tiles need no CORS; edgeMode="duplicate" keeps tile seams from looking like edges.
   const sppnLayer = L.tileLayer.wms(SPPN_WMS.url, { layers: SPPN_WMS.layers, crs: SPPN_WMS.crs, format: 'image/png', transparent: true, version: '1.3.0',
-    pane: 'zones', opacity: 0.55, maxZoom: 19, attribution: 'SPPN: m.st. Warszawa' });
+    pane: 'zones', className: 'sppn-wms', maxZoom: 19, attribution: 'SPPN: m.st. Warszawa' });
   const sctLayer = L.layerGroup();
 
   function renderZoneControls() {

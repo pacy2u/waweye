@@ -249,6 +249,9 @@ function findChromium() {
       await page.click('#t-park'); await page.waitForSelector('.pk');
       let z = await Z(); assert.ok(z.sppn && z.sppnBox && z.btn);
       await page.waitForFunction(() => document.querySelectorAll('.leaflet-zones-pane img').length > 0);
+      // The dashed outline is an SVG filter on the WMS tiles (edge of the city's own fill).
+      assert.ok(await page.evaluate(() => getComputedStyle(document.querySelector('.leaflet-zones-pane img')).filter.includes('#sppn-edge')
+        && !!document.querySelector('filter#sppn-edge feConvolveMatrix[edgeMode="duplicate"]')), 'SPPN tiles carry the outline filter');
       // Read the tile address from the page: tiles loaded in an earlier step come from the browser's memory cache
       // without a new request, so the routed requests may stay empty (failed CI twice).
       const q = new URL(await page.evaluate(() => document.querySelector('.leaflet-zones-pane img').src)).searchParams;
