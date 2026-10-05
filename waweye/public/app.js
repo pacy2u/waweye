@@ -349,7 +349,10 @@
   // ---- Zones: paid parking (SPPN, the city's WMS layer) and the Clean Transport Zone (SCT, boundary from OpenStreetMap) ----
   // SPPN comes and goes with the parkings unless the user has hidden it (switched on without the parkings, it stays until switched off);
   // both switches are remembered in this browser only.
-  const SPPN_WMS = { url: 'https://wms.um.warszawa.pl/serwis', layers: 'SPPN' };
+  // The city's WMS (Oracle MapViewer) serves no EPSG:3857, only the Polish grids and CRS:84 (inherited from the root layer).
+  // Tiles are asked for in CRS:84 (lon/lat bbox); over one tile the difference from Web Mercator is below a pixel.
+  const SPPN_WMS = { url: 'https://wms.um.warszawa.pl/serwis', layers: 'KOMUNIKACJA_STREFA_PLATNEGO_PARKOWANIA',
+    crs: L.extend({}, L.CRS.EPSG4326, { code: 'CRS:84' }) }; // a copy, so Leaflet keeps the lon,lat order of CRS:84
   const SCT_URL = '/data/strefa-czystego-transportu.geojson', SCT_COLOR = '#00A878';
   const ZONE_INFO = {
     sppn: { badge: 'SPPN', name: 'Strefa Płatnego Parkowania Niestrzeżonego', sub: 'Zarząd Dróg Miejskich · stan na październik 2026',
@@ -375,7 +378,7 @@
   const saveZonePrefs = () => { try { localStorage.setItem('waweye.strefy', JSON.stringify(zonePrefs)); } catch {} };
 
   map.createPane('zones').style.zIndex = 250; // above the base map, below vehicles and markers
-  const sppnLayer = L.tileLayer.wms(SPPN_WMS.url, { layers: SPPN_WMS.layers, format: 'image/png', transparent: true, version: '1.3.0',
+  const sppnLayer = L.tileLayer.wms(SPPN_WMS.url, { layers: SPPN_WMS.layers, crs: SPPN_WMS.crs, format: 'image/png', transparent: true, version: '1.3.0',
     pane: 'zones', opacity: 0.75, maxZoom: 19, attribution: 'SPPN: m.st. Warszawa' });
   const sctLayer = L.layerGroup();
 

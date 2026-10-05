@@ -251,7 +251,10 @@ function findChromium() {
       let z = await Z(); assert.ok(z.sppn && z.sppnBox && z.btn);
       await page.waitForFunction(() => document.querySelectorAll('.leaflet-zones-pane img').length > 0);
       const q = new URL(wms[0]).searchParams;
-      assert.equal(q.get('request'), 'GetMap'); assert.equal(q.get('crs'), 'EPSG:3857'); assert.ok(q.get('layers'));
+      assert.equal(q.get('request'), 'GetMap'); assert.equal(q.get('layers'), 'KOMUNIKACJA_STREFA_PLATNEGO_PARKOWANIA');
+      assert.equal(q.get('crs'), 'CRS:84'); // the server has no EPSG:3857
+      const [w, s, e, n] = q.get('bbox').split(',').map(Number); // CRS:84 is lon,lat
+      assert.ok(w > 20 && w < 22 && e > w && s > 51 && s < 53 && n > s, q.get('bbox'));
       await menu(true); await page.uncheck('#z-sppn');
       z = await Z(); assert.ok(!z.sppn && !z.btn); assert.equal(z.prefs.sppnHidden, true);
       assert.equal(await page.locator('.leaflet-zones-pane img').count(), 0);
