@@ -84,7 +84,7 @@ Linie utrudnień muszą używać tego samego renderera canvas co pojazdy (`rende
 ## Odłożone / pomysły (kolejność wg wartości)
 Pełna analiza i plan rozwoju w fazach: `ROADMAPA.md`.
 1. **Trasa wybranej linii** (pierwotny wymóg: zaznaczenie pojazdu pokazuje całą planowaną trasę linii) – zaparkowane. Potrzebny zbiór z rozkładami/przebiegiem linii z `dane.um.warszawa.pl`; poproś użytkownika o sekcję „Parametry API / Przykłady wywołań” albo odczytaj stronę, gdy domena jest dozwolona w sesji.
-2. **Metro** – brak w zbiorze pojazdów; opcje: statyczne linie M1/M2 i stacje albo osobny zbiór na żywo (nie znaleziono).
+2. **Metro** – statyczne linie M1/M2 i stacje zrobione 2026-10-05 (gałąź `funkcja/warstwa-metra`, opis w „Stan”). Pozycje pociągów: brak źródła (ani w API pojazdów, ani w GTFS ZTM), zadanie zablokowane w `ROADMAPA.md` (Faza 2).
 3. Drobne: opcjonalny filtr starych utrudnień; grupowanie gęstych znaczników/etykiet; ewentualnie ukrycie zakończonych utrudnień.
 
 ## Wideo promocyjne
