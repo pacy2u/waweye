@@ -64,3 +64,12 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: waweye/worker
           wranglerVersion: '4.147.0' # validated with --dry-run on 2026-10-02
+      - name: GTFS ZTM przez Workera (sonda z GitHub Actions, tylko raport)
+        if: env.HAS_CF_TOKEN == 'true'
+        continue-on-error: true
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PROXY_SECRET: ${{ secrets.PROXY_SECRET }}
+        run: node waweye/scripts/cloudflare-ops.js test-gtfs waweye-proxy | tee -a "$GITHUB_STEP_SUMMARY"

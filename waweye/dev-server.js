@@ -11,7 +11,7 @@ try {
   }
 } catch {}
 
-const { vehiclesHandler, parkingHandler, incidentsHandler, fleetHandler, sportHandler, eventsHandler } = require('./lib/handler');
+const { vehiclesHandler, parkingHandler, incidentsHandler, fleetHandler, sportHandler, eventsHandler, gtfsProbeHandler } = require('./lib/handler');
 const PUBLIC = path.join(__dirname, 'public');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.json': 'application/json', '.geojson': 'application/geo+json', '.webp': 'image/webp', '.mp4': 'video/mp4' };
 
@@ -24,6 +24,7 @@ function createServer(opts = {}) {
     if (pathname === '/api/incidents') return incidentsHandler(req, res, opts);
     if (pathname === '/api/sport') return sportHandler(req, res, opts);
     if (pathname === '/api/wydarzenia') return eventsHandler(req, res, opts);
+    if (pathname === '/api/sprawdz-gtfs') return gtfsProbeHandler(req, res, opts);
     // Clean URLs like Vercel's cleanUrls: /o-serwisie serves o-serwisie.html.
     const clean = pathname === '/' ? 'index.html' : path.extname(pathname) ? pathname : pathname + '.html';
     const file = path.normalize(path.join(PUBLIC, clean));

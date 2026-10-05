@@ -196,4 +196,25 @@ async function eventsHandler(req, res, { env = process.env, fetchImpl = fetch, g
   }
 }
 
-module.exports = { fleetHandler, vehiclesHandler, parkingHandler, incidentsHandler, sportHandler, eventsHandler };
+// Diagnostics: can this Vercel region (fra1) get the official ZTM GTFS, through the Worker and directly?
+// Answers only with statuses and sizes (the Worker's probe mode; the direct request is cut after the headers).
+async function gtfsProbeHandler(req, res, { env = process.env, fetchImpl = fetch } = {}) {
+  if (rejectUnlessRead(req, res)) return;
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store');
+  const timed = async (fn) => { const t0 = Date.now(); try { return { ...(await fn()), ms: Date.now() - t0 }; } catch (e) { return { error: e.cause ? `${e.message} (${e.cause.code || e.cause.message})` : e.message, ms: Date.now() - t0 }; } };
+  const viaWorker = env.UPSTREAM_URL ? await timed(async () => {
+    const u = env.UPSTREAM_URL + (env.UPSTREAM_URL.includes('?') ? '&' : '?') + 'resource=gtfs&probe=1';
+    const r = await fetchImpl(u, { headers: { 'x-proxy-secret': env.UPSTREAM_SECRET || '' }, signal: AbortSignal.timeout(25000) });
+    return { httpStatus: r.status, worker: await r.json().catch(() => null) };
+  }) : { error: 'brak UPSTREAM_URL (produkcja bez Workera)' };
+  const direct = await timed(async () => {
+    const r = await fetchImpl('https://gtfs.ztm.waw.pl/last', { redirect: 'follow', headers: { 'User-Agent': 'wawEye/1.0 (+https://github.com/pacy2u/waweye)' }, signal: AbortSignal.timeout(25000) });
+    try { if (r.body) await r.body.cancel(); } catch {}
+    return { status: r.status, url: r.url, length: r.headers.get('content-length'), modified: r.headers.get('last-modified') };
+  });
+  res.statusCode = 200;
+  res.end(JSON.stringify({ region: env.VERCEL_REGION || 'lokalnie', checked: new Date().toISOString(), viaWorker, direct }));
+}
+
+module.exports = { gtfsProbeHandler, fleetHandler, vehiclesHandler, parkingHandler, incidentsHandler, sportHandler, eventsHandler };
