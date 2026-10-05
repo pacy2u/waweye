@@ -96,6 +96,33 @@ function findChromium() {
       const d = await page.evaluate(() => { const { map, state } = window.__waweye; const p = map.latLngToContainerPoint(state.markers.get(state.selected).mk.getLatLng()); const s = map.getSize(); return Math.hypot(p.x - s.x / 2, p.y - s.y / 2); });
       assert.ok(d < 5, 'distance ' + d);
     });
+    await step(`${label}: the selected vehicle's line route is drawn with its stops, and cleared on deselect`, async () => {
+      const R = () => page.evaluate(() => { const { map, route } = window.__waweye; let lines = 0, stops = 0;
+        map.eachLayer((l) => { if (l instanceof L.Polyline && l.options.color === '#FC4C02' && !l.options.interactive) lines++; if (l instanceof L.CircleMarker && l.getTooltip && l.getTooltip()) stops++; });
+        return { lines, stops, shown: route.shown.length, want: route.shown.reduce((n, v) => n + v.stops.length, 0), text: document.getElementById('p-route').textContent,
+          hidden: document.getElementById('p-route').hidden }; });
+      const pick = (line) => page.evaluate((line) => { const { state, select } = window.__waweye; const m = [...state.markers.values()].find((x) => x.v.line === line); select(m.v.id); return m.v.id; }, line);
+      await pick('175');
+      await page.waitForFunction(() => window.__waweye.route.shown.length > 0);
+      let r = await R();
+      assert.ok(r.lines >= 1 && r.lines === r.shown, JSON.stringify(r)); assert.equal(r.stops, r.want); assert.ok(r.stops > 20);
+      assert.match(r.text, /Kierunek: /); assert.match(r.text, /Trasa wg rozkładu ZTM \(GTFS\) ważnego do \d/);
+      assert.equal(await page.locator('.leaflet-overlay-pane canvas').count(), 1, 'the route shares the vehicles canvas');
+      await page.screenshot({ path: `${SHOTS}/waweye-${label}-trasa.png` });
+      await page.click('#close'); r = await R();
+      assert.equal(r.lines + r.stops, 0, 'route cleared'); assert.ok(r.hidden);
+      // A line without a file, and a timetable past its last day.
+      await page.route('**/data/trasy/9.json', (rt) => rt.fulfill({ status: 404, body: 'Not found' }));
+      await page.route('**/data/trasy/186.json', async (rt) => { const res = await rt.fetch(); const d = await res.json(); d.valid.to = '2020-01-01'; rt.fulfill({ response: res, body: JSON.stringify(d) }); });
+      await page.evaluate(() => window.__waweye.route.cache.clear()); // earlier steps may have loaded these lines
+      await pick('9');
+      await page.waitForFunction(() => /brak trasy tej linii/.test(document.getElementById('p-route').textContent));
+      await pick('186');
+      await page.waitForFunction(() => /może być nieaktualna/.test(document.getElementById('p-route').textContent));
+      assert.ok(await page.evaluate(() => document.querySelector('.p-route-src').classList.contains('old')));
+      await page.unroute('**/data/trasy/9.json'); await page.unroute('**/data/trasy/186.json');
+      await pick('175'); // the next step closes the panel of a selected vehicle
+    });
     await step(`${label}: close panel deselects`, async () => {
       await page.click('#close'); const s = await S(); assert.equal(s.sel, null); assert.ok(!s.panel); assert.equal(await page.locator('.hl').count(), 0);
     });

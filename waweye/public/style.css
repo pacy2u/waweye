@@ -213,3 +213,9 @@ a.brand:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 #epanel .s-when { color: #7FD8DB; }
 @media (min-width: 700px) { #epanel { left: 10px; right: auto; } }
 @media (max-height: 480px) { #epanel { max-height: 40vh; } }
+
+/* Route of the selected vehicle's line (direction and timetable date in the vehicle panel; stop names as tooltips). */
+.p-route { margin-top: 4px; font-size: 12px; }
+.p-route-src { color: var(--muted); }
+.p-route-src.old { color: #FFB020; }
+.stop-tip { font-size: 12px; font-weight: 600; }
