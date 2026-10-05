@@ -118,6 +118,7 @@ Cel: aplikację da się zainstalować na telefonie i używać codziennie do spra
 | Odjazdy z przystanku: rozkład + pojazdy na żywo zbliżające się do przystanku | odpowiedź na „kiedy przyjedzie” | L |
 | Szacowanie opóźnienia pojazdu (dopasowanie linii i brygady do rozkładu) | najczęściej oczekiwana informacja | L |
 | Pozycje składów metra (szacowane z rozkładu, pokazywane razem z tramwajami) | prośba właściciela 2026-10-05; dziś mapa ma tylko linie i stacje | M – **zablokowane**: brak oficjalnego źródła pozycji i rozkładu metra (API pojazdów i GTFS ZTM go nie mają); bez społecznościowego GTFS |
+| Pociągi SKM, WKD, Koleje Mazowieckie na mapie (na żywo albo szacowane z rozkładu; same statyczne linie właściciel odrzucił 2026-10-05) | luka w obrazie komunikacji | M–L – **odłożone**: API pojazdów nie ma kolei; GTFS ZTM ma tylko SKM (pomijane w `scripts/trasy.js`); rozpoznanie i kierunki w [ANALIZA_DANYCH_KOLEJOWYCH.md](ANALIZA_DANYCH_KOLEJOWYCH.md) |
 | Filtr dostępności z danych o taborze: niskopodłogowe, klimatyzacja, miejsca na wózek | wartość dla osób z niepełnosprawnościami i z wózkami; dane już są | S |
 | Utrudnienia: domyślnie ukryte zakończone, grupowanie gęstych znaczników | czytelność mapy | S |
 | Dostępność: status ogłaszany tylko przy błędzie (D10), lista pojazdów linii obsługiwana klawiaturą (D11), testy e2e także w WebKit i Firefox | iOS/Safari to duża część telefonów; czytniki ekranu | M |
