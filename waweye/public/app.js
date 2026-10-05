@@ -455,6 +455,7 @@
       if (body.pending) sportRetry = setTimeout(pollSport, 60000); // the server is still looking up addresses
     } catch (e) {
       state.sportError = 'brak danych (' + e.message + ')';
+      sportRetry = setTimeout(pollSport, 60000); // a passing upstream error (e.g. 522) should not leave the layer empty for 30 min
     }
     renderStatus();
   }
