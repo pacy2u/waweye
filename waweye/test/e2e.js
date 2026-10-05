@@ -293,6 +293,54 @@ function findChromium() {
       assert.equal(await page.locator('.ic').count(), 0);
       assert.ok(await page.evaluate(() => document.getElementById('ipanel').hidden));
     });
+    await step(`${label}: Sport button shows classes for today, also ones placed from an address`, async () => {
+      await page.evaluate(() => { window.__waweye.map.setView([52.2500, 21.0358], 13, { animate: false }); });
+      assert.equal(await page.isVisible('#sfilter'), false);
+      await page.click('#t-sport');
+      await page.waitForFunction(() => window.__waweye.state.sportMarkers.size > 0);
+      assert.equal(await page.getAttribute('#t-sport', 'aria-pressed'), 'true');
+      assert.equal(await page.isVisible('#sfilter'), true);
+      assert.ok(await page.evaluate(() => window.__waweye.state.sportItems.some((i) => i.located === 'address')));
+      assert.match(await page.textContent('#status-text'), /sport: 7 dziś/);
+    });
+    await step(`${label}: sport marker opens a panel with the classes there; panels exclude each other`, async () => {
+      const first = [...(await page.evaluate(() => [...window.__waweye.state.markers.keys()]))][0];
+      await page.locator('.sp', { hasText: '2' }).click();
+      assert.equal(await page.isVisible('#spanel'), true);
+      assert.equal(await page.textContent('#sp-name'), 'ul. Jagiellońska 7');
+      assert.match(await page.textContent('#sp-addr'), /Praga-Północ · 2 zajęcia dziś/);
+      assert.deepEqual(await page.$$eval('#sp-list .s-title', (els) => els.map((e) => e.textContent)), ['Taneczne piątki dla seniorów', 'Zdrowy kręgosłup']);
+      assert.match(await page.textContent('#sp-list .s-when'), /^Dziś, 10:00 · co tydzień$/);
+      const href = await page.getAttribute('#sp-list a', 'href');
+      assert.match(href, /^https:\/\/sport\.um\.warszawa\.pl\//);
+      assert.equal(await page.locator('.sp.sel').count(), 1);
+      await page.evaluate((id) => window.__waweye.select(id), first);
+      assert.equal(await page.isVisible('#spanel'), false); assert.equal(await page.locator('.sp.sel').count(), 0);
+      await page.evaluate(() => window.__waweye.selectSport([...window.__waweye.state.sportMarkers.keys()][0]));
+      assert.equal(await page.isVisible('#panel'), false); assert.equal(await page.isVisible('#spanel'), true);
+      await page.click('#sclose');
+      assert.equal(await page.isVisible('#spanel'), false);
+    });
+    await step(`${label}: Dziś / Jutro / 7 dni filter changes which classes count`, async () => {
+      const total = () => page.evaluate(() => [...window.__waweye.state.sportMarkers.values()].reduce((k, m) => k + m.place.entries.length, 0));
+      assert.equal(await total(), 7);
+      await page.click('#sfilter [data-range="tomorrow"]');
+      assert.equal(await total(), 6); // the dated run is today and in 3 days only
+      assert.equal(await page.getAttribute('#sfilter [data-range="tomorrow"]', 'aria-pressed'), 'true');
+      assert.match(await page.textContent('#status-text'), /sport: 6 jutro/);
+      await page.click('#sfilter [data-range="week"]');
+      assert.equal(await total(), 7);
+      const run = await page.evaluate(() => { const m = [...window.__waweye.state.sportMarkers.values()].find((x) => x.place.entries.some((e) => e.it.title.startsWith('Bieg'))); window.__waweye.selectSport(m.place.id); return document.querySelector('#sp-list .s-when').textContent; });
+      assert.match(run, /^Dziś, 08:00 \(\+1 termin\)$/);
+      await page.screenshot({ path: `${SHOTS}/waweye-${label}-sport.png` });
+      await page.click('#sfilter [data-range="today"]');
+    });
+    await step(`${label}: Sport button off hides markers, panel and filter`, async () => {
+      await page.click('#t-sport');
+      assert.equal(await page.locator('.sp').count(), 0);
+      assert.equal(await page.isVisible('#spanel'), false); assert.equal(await page.isVisible('#sfilter'), false);
+      assert.doesNotMatch(await page.textContent('#status-text'), /sport/);
+    });
     await step(`${label}: status count always matches the visible vehicles, also after a layer error`, async () => {
       await page.route('**/api/incidents', (route) => route.fulfill({ status: 502, contentType: 'application/json', body: '{"error":"HTTP 400 (bad type)"}' }));
       await page.click('#t-inc');
