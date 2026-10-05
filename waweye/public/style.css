@@ -228,3 +228,9 @@ a.brand:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .m-badge { min-width: 44px; height: 44px; padding: 0 6px; border-radius: 10px; display: grid; place-items: center; font-weight: 800; font-size: 17px; color: #fff; }
 @media (min-width: 700px) { #mpanel { left: 10px; right: auto; } }
 @media (max-height: 480px) { #mpanel { max-height: 40vh; } }
+
+/* Route of the selected vehicle's line (direction and timetable date in the vehicle panel; stop names as tooltips). */
+.p-route { margin-top: 4px; font-size: 12px; }
+.p-route-src { color: var(--muted); }
+.p-route-src.old { color: #FFB020; }
+.stop-tip { font-size: 12px; font-weight: 600; }

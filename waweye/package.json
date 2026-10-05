@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node dev-server.js",
     "mock": "MOCK=1 node dev-server.js",
-    "test": "node --test test/unit.test.js test/operacje.test.js test/strefy.test.js test/metro.test.js",
+    "test": "node --test test/unit.test.js test/operacje.test.js test/strefy.test.js test/metro.test.js test/trasy.test.js",
     "test:e2e": "node test/e2e.js"
   },
   "engines": { "node": ">=18" },
