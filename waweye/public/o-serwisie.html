@@ -55,6 +55,14 @@ h1 em { font-style: normal; color: var(--orange); }
 .video video { display: block; width: 100%; height: 100%; }
 .video-cap { margin-top: 10px; font-size: 13px; color: var(--muted); }
 
+/* Materiały o projekcie: film o architekturze i podcast */
+.explainers { margin-top: 28px; display: grid; gap: 28px; grid-template-columns: 1fr; }
+@media (min-width: 880px) { .explainers { grid-template-columns: 1.4fr 1fr; align-items: start; } }
+.explainers h3 { font-size: 18px; font-weight: 800; margin-bottom: 12px; }
+.explainers .video-cap { color: var(--fg-muted); }
+.audio { background: var(--charcoal); border-radius: 14px; padding: 18px; box-shadow: 0 10px 40px rgba(0,0,0,.25); }
+.audio audio { display: block; width: 100%; }
+
 /* Sekcje */
 main section { padding-block: clamp(40px, 6vw, 72px); border-bottom: 1px solid var(--border); }
 main section:last-child { border-bottom: 0; }
@@ -273,6 +281,31 @@ body > footer a { color: inherit; }
       <a href="mailto:demo-only@no_contact_mail.com">demo-only@no_contact_mail.com</a>
       <a href="tel:+48123456789">+48 123 456 789</a>
     </address>
+  </div></section>
+
+  <section id="materialy"><div class="wrap">
+    <h2>Jak powstał wawEye</h2>
+    <p class="sub">Film o architekturze serwisu i podcast o tym, jak zbudowano wawEye na otwartych danych Warszawy.</p>
+    <div class="explainers">
+      <div>
+        <h3>Architektura wawEye</h3>
+        <div class="video">
+          <video controls preload="none" playsinline poster="/media/waweye-film-architektura-plakat.webp" aria-label="Film o architekturze wawEye, 10 minut">
+            <source src="/media/waweye-film-architektura.mp4" type="video/mp4">
+          </video>
+        </div>
+        <p class="video-cap">Film: architektura wawEye i wykorzystanie otwartych danych (10 min)</p>
+      </div>
+      <div>
+        <h3>Jak zbudowano wawEye za zero złotych</h3>
+        <div class="audio">
+          <audio controls preload="none" aria-label="Podcast: jak zbudowano wawEye za zero złotych, 2 minuty">
+            <source src="/media/waweye-podcast-jak-zbudowano.m4a" type="audio/mp4">
+          </audio>
+        </div>
+        <p class="video-cap">Podcast o projekcie (2 min)</p>
+      </div>
+    </div>
   </div></section>
 </main>
 
