@@ -245,6 +245,10 @@ function findChromium() {
       await pickNth(0);
       await page.waitForFunction(() => document.querySelectorAll('#p-fleet dt').length > 3);
       let p = await P(); assert.ok(!p.min && p.fleet && p.exp === 'true', JSON.stringify(p)); const h0 = p.h;
+      const btns = await page.evaluate(() => { const c = document.getElementById('collapse').getBoundingClientRect(), x = document.getElementById('close').getBoundingClientRect(),
+        f = document.getElementById('follow').getBoundingClientRect(); return { c, x, f }; });
+      assert.ok(Math.abs(btns.c.top - btns.x.top) < 2 && btns.c.right <= btns.x.left + 1, '⌄ next to ×, on its left');
+      assert.ok(btns.f.top >= btns.x.bottom || btns.f.right <= btns.c.left, '"Śledź" clear of ⌄ and ×');
       await page.click('#collapse'); await page.waitForTimeout(300);
       p = await P(); assert.ok(p.min && !p.fleet && p.exp === 'false' && p.pref === '1', JSON.stringify(p));
       assert.ok(p.h < 80 && p.h < h0 / 2, `collapsed height ${p.h} (expanded ${h0})`); assert.ok(!p.overlap, 'locate button covered by the bar');
@@ -281,6 +285,18 @@ function findChromium() {
       assert.equal(panel.free, '234'); assert.match(panel.of, /wolnych miejsc z 506/); // free 233+0+1, capacity 500+2+4
       assert.match(panel.rows, /Standardowe233 wolnych z 500/); assert.match(panel.rows, /Cennik/);
       await page.screenshot({ path: `${SHOTS}/waweye-${label}-parking.png` });
+    });
+    await step(`${label}: the other panels collapse too (parking), sharing the remembered choice`, async () => {
+      const Q = () => page.evaluate(() => { const p = document.getElementById('ppanel');
+        return { min: p.classList.contains('min'), h: p.getBoundingClientRect().height, free: getComputedStyle(p.querySelector('.p-free')).display !== 'none',
+          name: getComputedStyle(document.getElementById('pp-name')).display !== 'none', pref: localStorage.getItem('waweye.panelMin'),
+          exp: p.querySelector('.p-collapse').getAttribute('aria-expanded') }; });
+      let q = await Q(); assert.ok(!q.min && q.free && q.exp === 'true', JSON.stringify(q));
+      await page.click('#ppanel .p-collapse'); await page.waitForTimeout(300);
+      q = await Q(); assert.ok(q.min && !q.free && q.name && q.h < 80 && q.pref === '1' && q.exp === 'false', JSON.stringify(q));
+      await page.screenshot({ path: `${SHOTS}/waweye-${label}-parking-zwiniety.png` });
+      await page.click('#ppanel .p-head'); await page.waitForTimeout(300);
+      q = await Q(); assert.ok(!q.min && q.free && q.pref === '0', JSON.stringify(q));
     });
     await step(`${label}: parking and vehicle panels are mutually exclusive`, async () => {
       await page.evaluate(() => { const { state, select } = window.__waweye; select([...state.markers.keys()][0]); });
