@@ -236,6 +236,27 @@ function findChromium() {
       await page.click('#close'); await page.waitForTimeout(400);
       r = await rects(); assert.ok(!r.lifted, 'button back in the corner');
     });
+    await step(`${label}: the vehicle panel collapses to one bar (remembered), expands from the bar, and following collapses it on a phone`, async () => {
+      const P = () => page.evaluate(() => { const p = document.getElementById('panel'), b = document.getElementById('locate').getBoundingClientRect(), r = p.getBoundingClientRect();
+        return { min: p.classList.contains('min'), h: r.height, exp: document.getElementById('collapse').getAttribute('aria-expanded'),
+          fleet: getComputedStyle(document.getElementById('p-fleet')).display !== 'none', pref: localStorage.getItem('waweye.panelMin'),
+          overlap: b.left < r.right && b.right > r.left && b.top < r.bottom && b.bottom > r.top }; });
+      const pickNth = (n) => page.evaluate((n) => { const { state, select } = window.__waweye; select([...state.markers.keys()][n]); }, n);
+      await pickNth(0);
+      await page.waitForFunction(() => document.querySelectorAll('#p-fleet dt').length > 3);
+      let p = await P(); assert.ok(!p.min && p.fleet && p.exp === 'true', JSON.stringify(p)); const h0 = p.h;
+      await page.click('#collapse'); await page.waitForTimeout(300);
+      p = await P(); assert.ok(p.min && !p.fleet && p.exp === 'false' && p.pref === '1', JSON.stringify(p));
+      assert.ok(p.h < 80 && p.h < h0 / 2, `collapsed height ${p.h} (expanded ${h0})`); assert.ok(!p.overlap, 'locate button covered by the bar');
+      await page.screenshot({ path: `${SHOTS}/waweye-${label}-panel-zwiniety.png` });
+      await pickNth(1); p = await P(); assert.ok(p.min, 'the choice carries over to the next vehicle');
+      await page.click('#panel .meta'); await page.waitForTimeout(300);
+      p = await P(); assert.ok(!p.min && p.fleet && p.pref === '0', JSON.stringify(p));
+      await page.click('#follow'); p = await P(); assert.equal(p.min, label === 'mobile');
+      assert.equal(p.pref, '0', 'collapsing for following is not remembered');
+      await page.click('#follow'); await pickNth(2); p = await P(); assert.ok(!p.min);
+      await page.click('#close');
+    });
     await step(`${label}: following a vehicle and following the user exclude each other`, async () => {
       await page.evaluate(() => { const { state, select } = window.__waweye; select([...state.markers.keys()][0]); });
       await page.click('#follow');

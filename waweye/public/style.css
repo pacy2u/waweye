@@ -25,7 +25,7 @@ a.brand:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .chip { background: #34343a; color: var(--muted); border: 1px solid var(--line); border-radius: 999px;
   padding: 7px 12px; font-size: 13px; font-weight: 600; cursor: pointer; }
 .chip.on { background: var(--orange); border-color: var(--orange); color: #fff; }
-.chip:focus-visible, #close:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.chip:focus-visible, #close:focus-visible, #collapse:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 
 @media (max-width: 699px) { .leaflet-top.leaflet-right { margin-top: 150px; } body.when-on .leaflet-top.leaflet-right { margin-top: 190px; } }
 #status { position: fixed; left: 10px; bottom: max(10px, env(safe-area-inset-bottom)); z-index: 1000;
@@ -49,8 +49,21 @@ a.brand:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .meta { flex: 1; min-width: 0; }
 #p-type { font-weight: 700; }
 #p-details { color: var(--muted); font-size: 12px; }
-#close { position: absolute; top: 4px; right: 6px; width: 32px; height: 32px; border: 0; background: none;
-  color: var(--muted); font-size: 24px; cursor: pointer; }
+/* × stays in its corner, ⌄ (collapse) under it; side by side on the collapsed bar. */
+.p-ctrl { position: absolute; top: 4px; right: 6px; display: flex; flex-direction: column; }
+#close, #collapse { width: 32px; height: 32px; border: 0; background: none; color: var(--muted); font-size: 24px; cursor: pointer;
+  display: grid; place-items: center; padding: 0; }
+#collapse svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round;
+  transition: transform .2s; }
+/* Collapsed panel: one bar with the line, direction and "Śledź", so the map stays visible (tap the bar or ⌃ to expand). */
+#panel.min { flex-wrap: nowrap; gap: 10px; padding: 8px 76px 8px 12px; overflow: hidden; }
+#panel.min .p-ctrl { top: 50%; transform: translateY(-50%); flex-direction: row-reverse; }
+#panel.min #collapse svg { transform: rotate(180deg); }
+#panel.min .line-badge { min-width: 44px; padding: 4px 8px; font-size: 18px; }
+#panel.min .meta { cursor: pointer; }
+#panel.min #p-details, #panel.min .p-route-src, #panel.min #p-fleet { display: none; }
+#panel.min #p-type, #panel.min #p-route, #panel.min #p-route > div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#panel.min #p-route { margin-top: 0; color: var(--muted); }
 
 .hl { width: 44px; height: 44px; border-radius: 50%; border: 3px solid var(--orange); background: rgba(252,76,2,.2);
   animation: ring 1.6s ease-out infinite; }
