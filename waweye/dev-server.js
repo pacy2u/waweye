@@ -13,7 +13,7 @@ try {
 
 const { vehiclesHandler, parkingHandler, incidentsHandler, fleetHandler, sportHandler, eventsHandler, gtfsProbeHandler, routeHandler, routesRefreshHandler } = require('./lib/handler');
 const PUBLIC = path.join(__dirname, 'public');
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.json': 'application/json', '.geojson': 'application/geo+json', '.webp': 'image/webp', '.mp4': 'video/mp4' };
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.json': 'application/json', '.geojson': 'application/geo+json', '.webp': 'image/webp', '.mp4': 'video/mp4', '.m4a': 'audio/mp4' };
 
 function createServer(opts = {}) {
   return http.createServer((req, res) => {
