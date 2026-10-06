@@ -82,6 +82,17 @@
     renderStatus();
   }
 
+  // Collapsed vehicle panel: only the line, direction and "Śledź" stay, to uncover the map on phones.
+  // The viewer's choice is remembered (waweye.panelMin) for the next vehicles; following on a phone collapses it for this vehicle only.
+  let panelMinPref = false;
+  try { panelMinPref = localStorage.getItem('waweye.panelMin') === '1'; } catch {}
+  function setPanelMin(on, remember) {
+    $('panel').classList.toggle('min', on);
+    const b = $('collapse'), txt = on ? 'Rozwiń szczegóły' : 'Zwiń szczegóły';
+    b.setAttribute('aria-expanded', String(!on)); b.setAttribute('aria-label', txt); b.title = txt;
+    if (remember) { panelMinPref = on; try { localStorage.setItem('waweye.panelMin', on ? '1' : '0'); } catch {} }
+  }
+
   function select(id) {
     closeZone(); closeStation();
     if (state.selectedPark) deselectPark();
@@ -92,7 +103,7 @@
     const m = state.markers.get(id);
     if (!m) return;
     const v = m.v;
-    $('panel').hidden = false;
+    $('panel').hidden = false; setPanelMin(panelMinPref, false);
     $('p-line').textContent = v.line;
     $('p-type').textContent = (v.type === 'bus' ? 'Autobus' : 'Tramwaj') + ' ' + v.line;
     $('p-details').textContent = `Pojazd ${v.vehicle}${v.brigade ? ' · brygada ' + v.brigade : ''}${v.time ? ' · ' + new Date(v.time).toLocaleTimeString('pl-PL') : ''}${isStale(v) ? ` · dane sprzed ${Math.round((state.lastOk - v.time) / 60000)} min` : ''}`;
@@ -1029,9 +1040,12 @@
     refresh(); // last: it also redraws the status line with the new counts
   };
   $('close').onclick = deselect;
+  $('collapse').onclick = () => setPanelMin(!$('panel').classList.contains('min'), true);
+  document.querySelector('#panel .meta').onclick = () => { if ($('panel').classList.contains('min')) setPanelMin(false, true); };
   $('follow').onclick = (e) => {
     state.follow = !state.follow; e.currentTarget.classList.toggle('on', state.follow);
     if (state.follow && me.centered) setCentered(false); // following a vehicle takes the map off the user
+    if (state.follow && matchMedia('(max-width: 699px)').matches) setPanelMin(true, false); // on a phone the map matters while following
     const s = state.markers.get(state.selected); if (state.follow && s) map.setView(s.mk.getLatLng(), Math.max(map.getZoom(), 15));
   };
   map.on('click', () => { if (state.selected) deselect(); if (state.selectedPark) deselectPark(); if (state.selectedInc !== null) deselectInc(); if (state.selectedSport) deselectSport(); if (state.selectedEvent) deselectEvent(); closeZone(); closeStation(); showZoneMenu(false); });
