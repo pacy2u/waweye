@@ -25,7 +25,7 @@ a.brand:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .chip { background: #34343a; color: var(--muted); border: 1px solid var(--line); border-radius: 999px;
   padding: 7px 12px; font-size: 13px; font-weight: 600; cursor: pointer; }
 .chip.on { background: var(--orange); border-color: var(--orange); color: #fff; }
-.chip:focus-visible, #close:focus-visible, #collapse:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.chip:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 
 @media (max-width: 699px) { .leaflet-top.leaflet-right { margin-top: 150px; } body.when-on .leaflet-top.leaflet-right { margin-top: 190px; } }
 #status { position: fixed; left: 10px; bottom: max(10px, env(safe-area-inset-bottom)); z-index: 1000;
@@ -39,7 +39,7 @@ a.brand:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 @keyframes pulse { 50% { opacity: .35; } }
 
 #panel { position: fixed; z-index: 1000; left: 10px; right: 10px; bottom: calc(max(10px, env(safe-area-inset-bottom)) + 40px);
-  max-width: 420px; max-height: 55vh; overflow: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 40px 12px 12px;
+  max-width: 420px; max-height: 55vh; overflow: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px;
   background: var(--panel); border-radius: 14px; box-shadow: 0 4px 16px rgba(0,0,0,.4); }
 #panel[hidden] { display: none; }
 #p-fleet { flex: 1 0 100%; margin: 0; padding-top: 8px; border-top: 1px solid var(--line); }
@@ -49,21 +49,30 @@ a.brand:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .meta { flex: 1; min-width: 0; }
 #p-type { font-weight: 700; }
 #p-details { color: var(--muted); font-size: 12px; }
-/* × stays in its corner, ⌄ (collapse) under it; side by side on the collapsed bar. */
-.p-ctrl { position: absolute; top: 4px; right: 6px; display: flex; flex-direction: column; }
-#close, #collapse { width: 32px; height: 32px; border: 0; background: none; color: var(--muted); font-size: 24px; cursor: pointer;
+/* Every panel: ⌄ (collapse) next to × in the top right corner; "Śledź" sits at the bottom of the first row, clear of them. */
+.p-ctrl { position: absolute; top: 4px; right: 6px; display: flex; }
+.p-ctrl button { width: 32px; height: 32px; border: 0; background: none; color: var(--muted); font-size: 24px; cursor: pointer;
   display: grid; place-items: center; padding: 0; }
-#collapse svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round;
+.p-ctrl button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.p-collapse svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round;
   transition: transform .2s; }
-/* Collapsed panel: one bar with the line, direction and "Śledź", so the map stays visible (tap the bar or ⌃ to expand). */
-#panel.min { flex-wrap: nowrap; gap: 10px; padding: 8px 76px 8px 12px; overflow: hidden; }
-#panel.min .p-ctrl { top: 50%; transform: translateY(-50%); flex-direction: row-reverse; }
-#panel.min #collapse svg { transform: rotate(180deg); }
+#follow { align-self: flex-end; margin-top: 36px; }
+.sheet .p-head { padding-right: 64px; }
+/* Collapsed panel: one bar with the badge and the name (vehicles: line, direction and "Śledź"), so the map stays visible.
+   Tapping the bar or ⌃ expands it. */
+#panel.min, .sheet.min { padding: 8px 76px 8px 12px; overflow: hidden; }
+.min .p-ctrl { top: 50%; transform: translateY(-50%); }
+.min .p-collapse svg { transform: rotate(180deg); }
+#panel.min { flex-wrap: nowrap; gap: 10px; }
+#panel.min #follow { align-self: center; margin-top: 0; }
 #panel.min .line-badge { min-width: 44px; padding: 4px 8px; font-size: 18px; }
-#panel.min .meta { cursor: pointer; }
+#panel.min .meta, .sheet.min .p-head { cursor: pointer; }
 #panel.min #p-details, #panel.min .p-route-src, #panel.min #p-fleet { display: none; }
 #panel.min #p-type, #panel.min #p-route, #panel.min #p-route > div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #panel.min #p-route { margin-top: 0; color: var(--muted); }
+.sheet.min > :not(.p-ctrl):not(.p-head) { display: none; }
+.sheet.min .p-head { padding-right: 0; }
+.sheet.min .p-name, .sheet.min .p-addr { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .hl { width: 44px; height: 44px; border-radius: 50%; border: 3px solid var(--orange); background: rgba(252,76,2,.2);
   animation: ring 1.6s ease-out infinite; }
@@ -83,10 +92,9 @@ a.brand:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .chip.on .pico rect { fill: #fff; }
 
 #ppanel { position: fixed; z-index: 1000; left: 10px; right: 10px; bottom: calc(max(10px, env(safe-area-inset-bottom)) + 40px);
-  max-width: 420px; max-height: 55vh; overflow: auto; padding: 12px 40px 12px 12px; background: var(--panel);
+  max-width: 420px; max-height: 55vh; overflow: auto; padding: 12px; background: var(--panel);
   border-radius: 14px; box-shadow: 0 4px 16px rgba(0,0,0,.4); }
 #ppanel[hidden] { display: none; }
-#pclose { position: absolute; top: 4px; right: 6px; width: 32px; height: 32px; border: 0; background: none; color: var(--muted); font-size: 24px; cursor: pointer; }
 .p-head { display: flex; gap: 12px; align-items: center; }
 .p-badge { min-width: 44px; height: 44px; border-radius: 10px; display: grid; place-items: center; font-weight: 800; font-size: 22px; background: #00A878; }
 .p-badge.none { background: #D93025; }
@@ -103,10 +111,9 @@ a.brand:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 @media (min-width: 700px) { #ppanel { left: 10px; right: auto; } }
 
 #ipanel { position: fixed; z-index: 1000; left: 10px; right: 10px; bottom: calc(max(10px, env(safe-area-inset-bottom)) + 40px);
-  max-width: 420px; max-height: 55vh; overflow: auto; padding: 12px 40px 12px 12px; background: var(--panel);
+  max-width: 420px; max-height: 55vh; overflow: auto; padding: 12px; background: var(--panel);
   border-radius: 14px; box-shadow: 0 4px 16px rgba(0,0,0,.4); }
 #ipanel[hidden] { display: none; }
-#iclose { position: absolute; top: 4px; right: 6px; width: 32px; height: 32px; border: 0; background: none; color: var(--muted); font-size: 24px; cursor: pointer; }
 .i-badge { min-width: 44px; height: 44px; border-radius: 10px; display: grid; place-items: center; font-weight: 800; font-size: 24px; background: #F5A100; color: #242428; }
 .i-badge.planned { background: #7A8BA6; } .i-badge.ended { background: #5a5a63; color: #ddd; }
 .i-status { margin: 10px 0 6px; font-weight: 700; font-size: 13px; }
@@ -165,14 +172,13 @@ a.brand:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .z-sw.sct { background: rgba(0,168,120,.2); border: 2px dashed #00A878; }
 .z-info { width: 26px; height: 26px; flex: none; border-radius: 50%; border: 1px solid var(--line); background: #34343a; color: #fff;
   font: italic 700 14px Georgia, serif; cursor: pointer; }
-.z-info:focus-visible, #zclose:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.z-info:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .z-note { margin-top: 6px; color: var(--muted); font-size: 12px; }
 
 #zpanel { position: fixed; z-index: 1000; left: 10px; right: 10px; bottom: calc(max(10px, env(safe-area-inset-bottom)) + 40px);
-  max-width: 420px; max-height: 55vh; overflow: auto; padding: 12px 40px 12px 12px; background: var(--panel);
+  max-width: 420px; max-height: 55vh; overflow: auto; padding: 12px; background: var(--panel);
   border-radius: 14px; box-shadow: 0 4px 16px rgba(0,0,0,.4); }
 #zpanel[hidden] { display: none; }
-#zclose { position: absolute; top: 4px; right: 6px; width: 32px; height: 32px; border: 0; background: none; color: var(--muted); font-size: 24px; cursor: pointer; }
 .z-badge { min-width: 44px; height: 44px; padding: 0 6px; border-radius: 10px; display: grid; place-items: center; font-weight: 800; font-size: 15px; }
 .z-badge.sppn { background: #D64550; } .z-badge.sct { background: #00A878; }
 .z-foot { margin: 10px 0 6px; color: var(--muted); font-size: 12px; }
@@ -194,10 +200,9 @@ a.brand:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .sp svg { width: 14px; height: 14px; flex: none; }
 .sp.sel { background: var(--orange); outline: 3px solid rgba(252,76,2,.4); }
 #spanel { position: fixed; z-index: 1000; left: 10px; right: 10px; bottom: calc(max(10px, env(safe-area-inset-bottom)) + 40px);
-  max-width: 420px; max-height: 55vh; overflow: auto; padding: 12px 40px 12px 12px; background: var(--panel);
+  max-width: 420px; max-height: 55vh; overflow: auto; padding: 12px; background: var(--panel);
   border-radius: 14px; box-shadow: 0 4px 16px rgba(0,0,0,.4); }
 #spanel[hidden] { display: none; }
-#sclose { position: absolute; top: 4px; right: 6px; width: 32px; height: 32px; border: 0; background: none; color: var(--muted); font-size: 24px; cursor: pointer; }
 .s-badge { min-width: 44px; height: 44px; border-radius: 10px; display: grid; place-items: center; background: var(--sport); color: #fff; }
 .s-badge svg { width: 26px; height: 26px; }
 .s-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 10px; }
@@ -220,10 +225,9 @@ a.brand:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .ev svg { width: 15px; height: 15px; flex: none; }
 .ev.sel { background: var(--orange); --picon-bg: var(--orange); outline: 3px solid rgba(252,76,2,.4); }
 #epanel { position: fixed; z-index: 1000; left: 10px; right: 10px; bottom: calc(max(10px, env(safe-area-inset-bottom)) + 40px);
-  max-width: 420px; max-height: 55vh; overflow: auto; padding: 12px 40px 12px 12px; background: var(--panel);
+  max-width: 420px; max-height: 55vh; overflow: auto; padding: 12px; background: var(--panel);
   border-radius: 14px; box-shadow: 0 4px 16px rgba(0,0,0,.4); }
 #epanel[hidden] { display: none; }
-#eclose { position: absolute; top: 4px; right: 6px; width: 32px; height: 32px; border: 0; background: none; color: var(--muted); font-size: 24px; cursor: pointer; }
 .e-badge { min-width: 44px; height: 44px; border-radius: 10px; display: grid; place-items: center; background: var(--events); color: #fff; }
 .e-badge svg { width: 28px; height: 28px; }
 #epanel .s-when { color: #7FD8DB; }
@@ -232,11 +236,9 @@ a.brand:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 
 /* Metro (M1, M2): station panel like the zone panel, line badges in the line colours (set by app.js). */
 #mpanel { position: fixed; z-index: 1000; left: 10px; right: 10px; bottom: calc(max(10px, env(safe-area-inset-bottom)) + 40px);
-  max-width: 420px; max-height: 55vh; overflow: auto; padding: 12px 40px 12px 12px; background: var(--panel);
+  max-width: 420px; max-height: 55vh; overflow: auto; padding: 12px; background: var(--panel);
   border-radius: 14px; box-shadow: 0 4px 16px rgba(0,0,0,.4); }
 #mpanel[hidden] { display: none; }
-#mclose { position: absolute; top: 4px; right: 6px; width: 32px; height: 32px; border: 0; background: none; color: var(--muted); font-size: 24px; cursor: pointer; }
-#mclose:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .m-badges { display: flex; gap: 4px; flex: none; }
 .m-badge { min-width: 44px; height: 44px; padding: 0 6px; border-radius: 10px; display: grid; place-items: center; font-weight: 800; font-size: 17px; color: #fff; }
 @media (min-width: 700px) { #mpanel { left: 10px; right: auto; } }

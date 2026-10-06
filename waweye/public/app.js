@@ -82,16 +82,19 @@
     renderStatus();
   }
 
-  // Collapsed vehicle panel: only the line, direction and "Śledź" stay, to uncover the map on phones.
-  // The viewer's choice is remembered (waweye.panelMin) for the next vehicles; following on a phone collapses it for this vehicle only.
+  // Collapsed panels: only the badge and the name stay (vehicles: line, direction and "Śledź"), to uncover the map on phones.
+  // One choice for all panels, remembered (waweye.panelMin); following a vehicle on a phone collapses its panel for that vehicle only.
+  const PANELS = ['panel', 'ppanel', 'ipanel', 'spanel', 'epanel', 'zpanel', 'mpanel'];
   let panelMinPref = false;
   try { panelMinPref = localStorage.getItem('waweye.panelMin') === '1'; } catch {}
-  function setPanelMin(on, remember) {
-    $('panel').classList.toggle('min', on);
-    const b = $('collapse'), txt = on ? 'Rozwiń szczegóły' : 'Zwiń szczegóły';
-    b.setAttribute('aria-expanded', String(!on)); b.setAttribute('aria-label', txt); b.title = txt;
+  function setPanelMin(on, remember, ids = PANELS) {
+    for (const id of ids) {
+      const p = $(id), b = p.querySelector('.p-collapse'), txt = on ? 'Rozwiń szczegóły' : 'Zwiń szczegóły';
+      p.classList.toggle('min', on); b.setAttribute('aria-expanded', String(!on)); b.setAttribute('aria-label', txt); b.title = txt;
+    }
     if (remember) { panelMinPref = on; try { localStorage.setItem('waweye.panelMin', on ? '1' : '0'); } catch {} }
   }
+  setPanelMin(panelMinPref, false);
 
   function select(id) {
     closeZone(); closeStation();
@@ -103,7 +106,7 @@
     const m = state.markers.get(id);
     if (!m) return;
     const v = m.v;
-    $('panel').hidden = false; setPanelMin(panelMinPref, false);
+    $('panel').hidden = false; setPanelMin(panelMinPref, false, ['panel']);
     $('p-line').textContent = v.line;
     $('p-type').textContent = (v.type === 'bus' ? 'Autobus' : 'Tramwaj') + ' ' + v.line;
     $('p-details').textContent = `Pojazd ${v.vehicle}${v.brigade ? ' · brygada ' + v.brigade : ''}${v.time ? ' · ' + new Date(v.time).toLocaleTimeString('pl-PL') : ''}${isStale(v) ? ` · dane sprzed ${Math.round((state.lastOk - v.time) / 60000)} min` : ''}`;
@@ -1019,11 +1022,11 @@
   // Like Google's button riding on top of the bottom sheet: lift it above an open panel that covers it (phones).
   function liftLocate() {
     const b = $('locate'), br = b.getBoundingClientRect();
-    const tops = ['panel', 'ppanel', 'ipanel', 'spanel', 'epanel', 'zpanel', 'mpanel'].map($).filter((p) => !p.hidden).map((p) => p.getBoundingClientRect())
+    const tops = PANELS.map($).filter((p) => !p.hidden).map((p) => p.getBoundingClientRect())
       .filter((r) => r.right > br.left && r.left < br.right).map((r) => r.top);
     b.style.bottom = tops.length ? `${document.documentElement.clientHeight - Math.min(...tops) + 10}px` : '';
   }
-  if (window.ResizeObserver) { const ro = new ResizeObserver(liftLocate); for (const id of ['panel', 'ppanel', 'ipanel', 'spanel', 'epanel', 'zpanel', 'mpanel']) ro.observe($(id)); }
+  if (window.ResizeObserver) { const ro = new ResizeObserver(liftLocate); for (const id of PANELS) ro.observe($(id)); }
   window.addEventListener('resize', liftLocate);
 
   function toggleType(key, btn) {
@@ -1040,12 +1043,15 @@
     refresh(); // last: it also redraws the status line with the new counts
   };
   $('close').onclick = deselect;
-  $('collapse').onclick = () => setPanelMin(!$('panel').classList.contains('min'), true);
-  document.querySelector('#panel .meta').onclick = () => { if ($('panel').classList.contains('min')) setPanelMin(false, true); };
+  for (const id of PANELS) {
+    const p = $(id);
+    p.querySelector('.p-collapse').onclick = () => setPanelMin(!p.classList.contains('min'), true);
+    p.querySelector(id === 'panel' ? '.meta' : '.p-head').addEventListener('click', () => { if (p.classList.contains('min')) setPanelMin(false, true); });
+  }
   $('follow').onclick = (e) => {
     state.follow = !state.follow; e.currentTarget.classList.toggle('on', state.follow);
     if (state.follow && me.centered) setCentered(false); // following a vehicle takes the map off the user
-    if (state.follow && matchMedia('(max-width: 699px)').matches) setPanelMin(true, false); // on a phone the map matters while following
+    if (state.follow && matchMedia('(max-width: 699px)').matches) setPanelMin(true, false, ['panel']); // on a phone the map matters while following
     const s = state.markers.get(state.selected); if (state.follow && s) map.setView(s.mk.getLatLng(), Math.max(map.getZoom(), 15));
   };
   map.on('click', () => { if (state.selected) deselect(); if (state.selectedPark) deselectPark(); if (state.selectedInc !== null) deselectInc(); if (state.selectedSport) deselectSport(); if (state.selectedEvent) deselectEvent(); closeZone(); closeStation(); showZoneMenu(false); });
