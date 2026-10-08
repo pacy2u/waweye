@@ -4,6 +4,9 @@
   const COLORS = { bus: '#2B2B33', tram: '#0073E6', sel: '#FC4C02' };
   const state = { range: 'today', events: false, eventItems: [], selectedEvent: null, eventMarkers: new Map(), eventError: null, eventMeta: null, sport: false, sportItems: [], selectedSport: null, sportMarkers: new Map(), sportError: null, sportMeta: null, inc: false, incidents: [], selectedInc: null, incLayers: new Map(), incError: null, park: false, parkings: [], selectedPark: null, parkMarkers: new Map(), parkError: null, types: { bus: true, tram: true }, query: '', words: [], selected: null, follow: false, markers: new Map(), lastOk: 0, data: [] };
 
+  // Timelapse (section "Timelapse" below): positions recorded since the page was opened, replayed up to 100× faster.
+  const lapse = { on: false, speed: 10, t: 0, last: 0, snaps: [], ids: new Map(), meta: [], markers: [], dirty: false };
+
   const map = L.map('map', { zoomControl: false, preferCanvas: true, minZoom: 9, maxZoom: 19 }).setView([52.2297, 21.0122], 12);
   L.control.zoom({ position: 'topright' }).addTo(map);
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -69,7 +72,7 @@
   function refresh() {
     const showLabels = map.getZoom() >= LABEL_ZOOM, bounds = map.getBounds().pad(0.1);
     for (const m of state.markers.values()) {
-      const show = visible(m.v) || state.selected === m.v.id;
+      const show = !lapse.on && (visible(m.v) || state.selected === m.v.id); // the timelapse draws its own markers
       if (show) { if (!map.hasLayer(m.mk)) m.mk.addTo(map); m.mk.setStyle(style(m.v)); if (state.selected === m.v.id) m.mk.bringToFront(); }
       else if (map.hasLayer(m.mk)) m.mk.remove();
       const wantLabel = show && showLabels && bounds.contains(m.mk.getLatLng());
@@ -285,6 +288,7 @@
 
   // Smooth movement between polls.
   function frame(now) {
+    if (lapse.on) lapseFrame(now);
     let moving = false;
     for (const m of state.markers.values()) {
       if (!m.to) continue;
@@ -311,6 +315,7 @@
       if (!res.ok) throw new Error(body.error || 'HTTP ' + res.status);
       state.error = null; state.lastOk = body.updated; state.source = body.source; state.received = body.received;
       sync(body.vehicles, new Set(types.map((t) => (t === 1 ? 'bus' : 'tram'))));
+      record(body.updated, body.vehicles);
       if (state.selected) updateRoute();
     } catch (e) {
       state.error = 'Brak danych: ' + e.message + (state.lastOk ? ' (pokazuję ostatnie)' : '');
@@ -1022,22 +1027,23 @@
   // Like Google's button riding on top of the bottom sheet: lift it above an open panel that covers it (phones).
   function liftLocate() {
     const b = $('locate'), br = b.getBoundingClientRect();
-    const tops = PANELS.map($).filter((p) => !p.hidden).map((p) => p.getBoundingClientRect())
+    const tops = [...PANELS, 'lapse'].map($).filter((p) => !p.hidden).map((p) => p.getBoundingClientRect())
       .filter((r) => r.right > br.left && r.left < br.right).map((r) => r.top);
     b.style.bottom = tops.length ? `${document.documentElement.clientHeight - Math.min(...tops) + 10}px` : '';
   }
-  if (window.ResizeObserver) { const ro = new ResizeObserver(liftLocate); for (const id of PANELS) ro.observe($(id)); }
+  if (window.ResizeObserver) { const ro = new ResizeObserver(liftLocate); for (const id of [...PANELS, 'lapse']) ro.observe($(id)); }
   window.addEventListener('resize', liftLocate);
 
   function toggleType(key, btn) {
     state.types[key] = !state.types[key];
     btn.classList.toggle('on', state.types[key]); btn.setAttribute('aria-pressed', state.types[key]);
     if (key === 'tram') { if (state.types.tram && !metroPrefs.hidden) setMetro(true, true); else if (!state.types.tram && metro.auto) setMetro(false); }
-    refresh(); poll();
+    lapse.dirty = true; refresh(); poll();
   }
   $('t-bus').onclick = (e) => toggleType('bus', e.currentTarget);
   $('t-tram').onclick = (e) => toggleType('tram', e.currentTarget);
   $('search').oninput = (e) => {
+    lapse.dirty = true;
     state.query = e.target.value.trim().toLowerCase(); state.words = state.query ? fold(state.query).split(/\s+/) : [];
     renderParkings(); if (state.inc) renderIncidents(); renderSport(); renderEvents();
     refresh(); // last: it also redraws the status line with the new counts
@@ -1057,7 +1063,109 @@
   map.on('click', () => { if (state.selected) deselect(); if (state.selectedPark) deselectPark(); if (state.selectedInc !== null) deselectInc(); if (state.selectedSport) deselectSport(); if (state.selectedEvent) deselectEvent(); closeZone(); closeStation(); showZoneMenu(false); });
   map.on('zoomend moveend', refresh);
 
-  window.__waweye = { state, zones, me, map, poll, select, deselect, selectPark, deselectPark, selectInc, deselectInc, selectSport, deselectSport, selectEvent, deselectEvent, openZone, closeZone, metro, openStation, closeStation, route };
+  // ---- Timelapse ----
+  // The city publishes no history of vehicle positions, so the page records what it receives (one snapshot per poll, only
+  // while the tab is visible) and replays it with time running 0–100× faster; 0 stops it. The playhead starts at the
+  // beginning of the recording and, having caught up, follows the live data. Snapshots are compact: one Float32Array of
+  // lat/lon per poll indexed by a vehicle number (~20 kB per poll, an hour at most).
+  const LAPSE_MAX = 360; // snapshots kept: 1 h at one per 10 s
+  const lapseLayer = L.layerGroup();
+  try { const s = localStorage.getItem('waweye.lapseSpeed'); if (s != null && +s >= 0 && +s <= 100) lapse.speed = Math.round(+s); } catch {}
+  const clock = (t) => new Date(t).toLocaleTimeString('pl-PL');
+
+  function record(t, vehicles) {
+    const S = lapse.snaps;
+    if (!t || (S.length && t <= S[S.length - 1].t)) return; // the same response again (cache)
+    for (const v of vehicles) {
+      const k = lapse.ids.get(v.id);
+      if (k == null) { lapse.ids.set(v.id, lapse.meta.length); lapse.meta.push(v); } else lapse.meta[k] = v;
+    }
+    const pos = new Float32Array(2 * lapse.meta.length).fill(NaN);
+    for (const v of vehicles) { const k = lapse.ids.get(v.id); pos[2 * k] = v.lat; pos[2 * k + 1] = v.lon; }
+    S.push({ t, pos }); if (S.length > LAPSE_MAX) S.shift();
+    lapse.dirty = true;
+    if (lapse.on) renderLapse();
+  }
+
+  // Position of vehicle k at time t: between the two snapshots around t; shown until the snapshot in which it disappears.
+  function lapseAt(k, i, f) {
+    const a = lapse.snaps[i].pos, b = lapse.snaps[i + 1] && lapse.snaps[i + 1].pos;
+    const la = 2 * k < a.length ? a[2 * k] : NaN, lb = b && 2 * k < b.length ? b[2 * k] : NaN;
+    if (Number.isNaN(la)) return f >= 1 && !Number.isNaN(lb) ? [lb, b[2 * k + 1]] : null;
+    if (Number.isNaN(lb)) return [la, a[2 * k + 1]];
+    return [la + (lb - la) * f, a[2 * k + 1] + (b[2 * k + 1] - a[2 * k + 1]) * f];
+  }
+
+  function lapseFrame(now) {
+    const S = lapse.snaps, dt = lapse.last ? Math.min(now - lapse.last, 250) : 0; // a background tab does not jump ahead
+    lapse.last = now;
+    if (!S.length) return;
+    const t = Math.max(S[0].t, Math.min(S[S.length - 1].t, lapse.t + dt * lapse.speed));
+    if (t === lapse.t && !lapse.dirty) return;
+    lapse.t = t; lapse.dirty = false;
+    let lo = 0, hi = S.length - 1; // last snapshot not later than t
+    while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (S[mid].t <= t) lo = mid; else hi = mid - 1; }
+    const f = lo + 1 < S.length ? (t - S[lo].t) / (S[lo + 1].t - S[lo].t) : 0;
+    const r = radius();
+    for (let k = 0; k < lapse.meta.length; k++) {
+      const v = lapse.meta[k], p = visible(v) ? lapseAt(k, lo, f) : null;
+      let mk = lapse.markers[k];
+      if (!p) { if (mk && lapseLayer.hasLayer(mk)) lapseLayer.removeLayer(mk); continue; }
+      if (!mk) mk = lapse.markers[k] = L.circleMarker(p, { renderer: canvas, interactive: false, radius: r, color: '#fff', weight: 1.5, fillColor: COLORS[v.type], fillOpacity: 1 });
+      else { mk.setLatLng(p); if (mk.options.radius !== r) mk.setRadius(r); }
+      if (!lapseLayer.hasLayer(mk)) lapseLayer.addLayer(mk);
+    }
+    renderLapse();
+  }
+
+  function renderLapse() {
+    const S = lapse.snaps, el = $('lapse-time');
+    $('lapse-speed-out').textContent = lapse.speed ? '×' + lapse.speed : '×0 · pauza';
+    if (S.length < 2) {
+      el.textContent = 'Nagrywanie…';
+      $('lapse-note').textContent = 'Miasto nie publikuje historii pozycji, więc wawEye nagrywa je od otwarcia strony (co 10 s, gdy karta jest widoczna). Odtwarzanie ruszy po kolejnym odświeżeniu.';
+      $('lapse-pos').disabled = true; return;
+    }
+    const t0 = S[0].t, t1 = S[S.length - 1].t, live = lapse.t >= t1;
+    el.textContent = clock(lapse.t) + (live ? ' · na żywo' : '');
+    el.classList.toggle('live', live);
+    const pos = $('lapse-pos');
+    pos.disabled = false;
+    if (document.activeElement !== pos) pos.value = Math.round(((lapse.t - t0) / (t1 - t0)) * 1000);
+    pos.setAttribute('aria-valuetext', clock(lapse.t));
+    $('lapse-note').textContent = `Nagranie z tej karty: ${clock(t0)}–${clock(t1)} (${Math.max(1, Math.round((t1 - t0) / 60000))} min). ${lapse.speed ? `1 s oglądania = ${lapse.speed} s ruchu.` : 'Czas zatrzymany.'}`;
+  }
+
+  function setLapse(on) {
+    lapse.on = on;
+    const btn = $('t-lapse');
+    btn.classList.toggle('on', on); btn.setAttribute('aria-pressed', on);
+    $('lapse').hidden = !on;
+    if (on) {
+      if (state.selected) deselect(); // the replay has no live vehicle to show details of
+      lapse.t = lapse.snaps.length ? lapse.snaps[0].t : 0; lapse.last = 0; lapse.dirty = true;
+      lapseLayer.addTo(map); renderLapse();
+    } else { map.removeLayer(lapseLayer); lapseLayer.clearLayers(); }
+    refresh(); liftLocate();
+  }
+  function setLapseSpeed(n) {
+    lapse.speed = Math.max(0, Math.min(100, Math.round(n)));
+    $('lapse-speed').value = lapse.speed; $('lapse-speed').setAttribute('aria-valuetext', lapse.speed ? lapse.speed + ' razy szybciej' : 'pauza');
+    try { localStorage.setItem('waweye.lapseSpeed', String(lapse.speed)); } catch {}
+    renderLapse();
+  }
+  setLapseSpeed(lapse.speed);
+  $('t-lapse').onclick = () => setLapse(!lapse.on);
+  $('lapse-close').onclick = () => setLapse(false);
+  $('lapse-speed').oninput = (e) => setLapseSpeed(+e.target.value);
+  $('lapse-pos').oninput = (e) => {
+    const S = lapse.snaps; if (S.length < 2) return;
+    lapse.t = S[0].t + (S[S.length - 1].t - S[0].t) * (+e.target.value / 1000); lapse.dirty = true;
+  };
+  $('lapse-restart').onclick = () => { if (lapse.snaps.length) { lapse.t = lapse.snaps[0].t; lapse.dirty = true; } };
+  map.on('zoomend', () => { lapse.dirty = true; }); // marker size follows the zoom
+
+  window.__waweye = { lapse, setLapse, setLapseSpeed, state, zones, me, map, poll, select, deselect, selectPark, deselectPark, selectInc, deselectInc, selectSport, deselectSport, selectEvent, deselectEvent, openZone, closeZone, metro, openStation, closeStation, route };
   poll(); setInterval(poll, POLL_MS);
   // Polling and location tracking pause while the tab is hidden (saves requests, transfer and battery) and catch up when it is shown again.
   document.addEventListener('visibilitychange', () => {

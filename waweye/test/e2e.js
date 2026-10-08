@@ -616,6 +616,38 @@ function findChromium() {
       assert.ok(r.shown > 50); assert.ok(r.text.startsWith(`${r.shown} pojazdów`), r.text + ' vs ' + r.shown);
       await page.click('#t-inc'); await page.unroute('**/api/incidents');
     });
+    await step(`${label}: timelapse replays the recorded positions 0–100× faster, × returns to live`, async () => {
+      const L = () => page.evaluate(() => { const { lapse, map } = window.__waweye;
+        return { t: lapse.t, snaps: lapse.snaps.length, end: lapse.snaps.length ? lapse.snaps[lapse.snaps.length - 1].t : 0, start: lapse.snaps.length ? lapse.snaps[0].t : 0,
+          drawn: lapse.markers.filter((m) => m && map.hasLayer(m)).length, speed: lapse.speed }; });
+      const speed = (n) => page.evaluate((n) => { const el = document.getElementById('lapse-speed'); el.value = n; el.dispatchEvent(new Event('input')); }, n);
+      // Two more snapshots so there is something to replay.
+      await page.evaluate(async () => { await window.__waweye.poll(); await new Promise((r) => setTimeout(r, 20)); await window.__waweye.poll(); });
+      await speed(0);
+      await page.click('#t-lapse');
+      assert.equal(await page.getAttribute('#t-lapse', 'aria-pressed'), 'true');
+      assert.ok(await page.isVisible('#lapse'));
+      await page.waitForTimeout(300);
+      let l = await L();
+      assert.ok(l.snaps >= 2, 'snapshots: ' + l.snaps);
+      assert.equal(l.t, l.start, 'starts at the beginning of the recording');
+      assert.equal((await S()).shown, 0, 'live markers are hidden'); assert.ok(l.drawn > 50, 'replayed: ' + l.drawn);
+      assert.match(await page.textContent('#lapse-speed-out'), /pauza/);
+      await page.waitForTimeout(300);
+      assert.equal((await L()).t, l.start, 'speed 0 stops the time');
+      await speed(100);
+      assert.equal(await page.textContent('#lapse-speed-out'), '×100');
+      await page.waitForFunction(() => { const { lapse } = window.__waweye; return lapse.t >= lapse.snaps[lapse.snaps.length - 1].t; }, null, { timeout: 15000 });
+      assert.match(await page.textContent('#lapse-time'), /na żywo/);
+      await page.click('#lapse-restart'); await page.waitForTimeout(50);
+      assert.ok((await L()).t < (await L()).end);
+      await page.screenshot({ path: `${SHOTS}/waweye-${label}-timelapse.png` });
+      await speed(10);
+      await page.click('#lapse-close');
+      assert.equal(await page.isVisible('#lapse'), false);
+      assert.equal(await page.getAttribute('#t-lapse', 'aria-pressed'), 'false');
+      l = await L(); assert.equal(l.drawn, 0); assert.ok((await S()).shown > 50);
+    });
     await step(`${label}: hidden tab does not poll, showing it again polls at once`, async () => {
       const urls = [], onReq = (r) => { if (r.url().includes('/api/')) urls.push(r.url()); };
       await page.evaluate(() => Object.defineProperty(document, 'hidden', { configurable: true, get: () => true }));
