@@ -305,6 +305,7 @@
   function frame(now) {
     requestAnimationFrame(frame);
     if (document.hidden) return; // nothing to draw (also how tests freeze the vehicles)
+    if (lapse.on) lapseFrame(now);
     let moving = false;
     for (const m of state.markers.values()) {
       if (!m.to) continue;
