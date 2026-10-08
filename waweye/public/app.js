@@ -1069,7 +1069,7 @@
   // ---- Timelapse ----
   // The city publishes no timetable positions or trips, so the timelapse is a prediction (public/prognoza.js): from the
   // latest data each vehicle keeps going along its line's route, in the direction it was moving, at an average speed, and
-  // turns back at the terminus. Time runs 0–1000× faster (the Tempo slider is logarithmic); the Time slider moves through
+  // turns back at the terminus. Time runs 0–1000× faster (the Tempo slider is logarithmic); the Czas slider moves through
   // the next LAPSE_H; ↻ starts again from fresh data. Vehicles off their route or of a line without one stay put, faded.
   // Closing the card (× or the chip) brings the map back to real time, and so does clicking a vehicle, which then gets
   // selected with its route. A panel covering the card does not: the prediction goes on underneath.
@@ -1077,8 +1077,7 @@
   const lapseLayer = L.layerGroup();
   const sliderToSpeed = (x) => (x <= 0 ? 0 : Math.pow(10, (3 * (x - 1)) / 99)); // 0 → stopped, 1…100 → ×1…×1000
   const speedTxt = (m) => (m === 0 ? '×0 · pauza' : '×' + (m < 10 ? m.toFixed(1).replace('.', ',') : Math.round(m)));
-  const ymdWaw = (t) => new Date(t).toLocaleDateString('sv-SE', { timeZone: 'Europe/Warsaw' });
-  const clock = (t) => (ymdWaw(t) !== ymdWaw(lapse.t0) ? 'jutro ' : '') + new Date(t).toLocaleTimeString('pl-PL', { timeZone: 'Europe/Warsaw' });
+  const clock = (t) => new Date(t).toLocaleTimeString('pl-PL', { timeZone: 'Europe/Warsaw', hour: '2-digit', minute: '2-digit', second: '2-digit' }); // hh:mm:ss
   const ahead = (ms) => (ms < 60000 ? `+${Math.round(ms / 1000)} s` : ms < 3600000 ? `+${Math.floor(ms / 60000)} min`
     : `+${Math.floor(ms / 3600000)} h ${String(Math.floor(ms / 60000) % 60).padStart(2, '0')} min`);
   try { const s = localStorage.getItem('waweye.lapseSlider'); if (s != null && +s >= 0 && +s <= 100) lapse.slider = Math.round(+s); } catch {}

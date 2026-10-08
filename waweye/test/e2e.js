@@ -616,7 +616,7 @@ function findChromium() {
       assert.ok(r.shown > 50); assert.ok(r.text.startsWith(`${r.shown} pojazdów`), r.text + ' vs ' + r.shown);
       await page.click('#t-inc'); await page.unroute('**/api/incidents');
     });
-    await step(`${label}: timelapse predicts movement along the routes, Tempo 0–100 → ×0–×1000 (log), Time 24 h, ↻; closing the card or a vehicle click return to live, a covering panel does not`, async () => {
+    await step(`${label}: timelapse predicts movement along the routes, Tempo 0–100 → ×0–×1000 (log), Czas 24 h, ↻; closing the card or a vehicle click return to live, a covering panel does not`, async () => {
       // Three buses of line 175 on its route (public/data/trasy/175.json) and one of a line without a route.
       const shape = JSON.parse(fs.readFileSync(__dirname + '/../public/data/trasy/175.json', 'utf8')).variants[0].shape;
       const bus = (id, line, [lat, lon]) => ({ id, type: 'bus', line, vehicle: id, brigade: '1', lat, lon, time: Date.now() });
@@ -642,7 +642,8 @@ function findChromium() {
       assert.equal(l.d, 0); assert.equal(await page.textContent('#lapse-time'), 'teraz');
       await page.waitForTimeout(300);
       assert.equal((await L()).d, 0, 'Tempo 0 stops the time');
-      assert.match(await page.textContent('#lapse-pos-out'), /^\d{1,2}:\d{2}:\d{2}$/);
+      assert.match(await page.textContent('#lapse-pos-out'), /^\d{2}:\d{2}:\d{2}$/);
+      assert.equal(await page.textContent('label[for=lapse-pos] span'), 'Czas');
       await tempo(100);
       await page.waitForTimeout(600);
       const l2 = await L();
@@ -653,9 +654,9 @@ function findChromium() {
       await tempo(0);
       await page.evaluate(() => { const el = document.getElementById('lapse-pos'); el.value = 500; el.dispatchEvent(new Event('input')); });
       await page.waitForTimeout(100);
-      assert.equal((await L()).d, 12 * 3600000, 'Time: the middle of the slider is 12 h ahead');
-      const shown = await page.evaluate(() => { const { lapse } = window.__waweye; return new Date(lapse.t).toLocaleTimeString('pl-PL', { timeZone: 'Europe/Warsaw' }); });
-      assert.ok((await page.textContent('#lapse-pos-out')).endsWith(shown), 'Time shows the moment on the map');
+      assert.equal((await L()).d, 12 * 3600000, 'Czas: the middle of the slider is 12 h ahead');
+      const shown = await page.evaluate(() => { const { lapse } = window.__waweye; return new Date(lapse.t).toLocaleTimeString('pl-PL', { timeZone: 'Europe/Warsaw', hour: '2-digit', minute: '2-digit', second: '2-digit' }); });
+      assert.equal(await page.textContent('#lapse-pos-out'), shown, 'Czas shows the moment on the map');
       await page.screenshot({ path: `${SHOTS}/waweye-${label}-timelapse.png` });
       await page.waitForTimeout(20);
       await page.click('#lapse-refresh');
