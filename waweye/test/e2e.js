@@ -616,7 +616,7 @@ function findChromium() {
       assert.ok(r.shown > 50); assert.ok(r.text.startsWith(`${r.shown} pojazdów`), r.text + ' vs ' + r.shown);
       await page.click('#t-inc'); await page.unroute('**/api/incidents');
     });
-    await step(`${label}: timelapse predicts movement along the routes, Tempo 0–100 → ×0–×1000 (log), Time 24 h, ↻; ×, a covering panel or a vehicle click return to live`, async () => {
+    await step(`${label}: timelapse predicts movement along the routes, Tempo 0–100 → ×0–×1000 (log), Time 24 h, ↻; closing the card or a vehicle click return to live, a covering panel does not`, async () => {
       // Three buses of line 175 on its route (public/data/trasy/175.json) and one of a line without a route.
       const shape = JSON.parse(fs.readFileSync(__dirname + '/../public/data/trasy/175.json', 'utf8')).variants[0].shape;
       const bus = (id, line, [lat, lon]) => ({ id, type: 'bus', line, vehicle: id, brigade: '1', lat, lon, time: Date.now() });
@@ -678,13 +678,14 @@ function findChromium() {
       assert.equal(await page.evaluate(() => window.__waweye.lapse.on), false);
       assert.equal((await S()).sel, '1-2'); assert.ok((await S()).panel);
       await page.click('#close');
-      // A panel opening over the card (phones) also goes back to real time; on a wide screen they sit side by side.
+      // A panel opening over the card (phones) only covers it: the prediction goes on until the card is closed.
       await page.click('#t-lapse');
       await page.evaluate(() => { const w = window.__waweye; w.__parkings = w.state.parkings; w.state.parkings = [{ id: 'x', name: 'P', lat: 52.23, lon: 21.0, free: { standard: 1, disabled: 0, electric: 0 }, capacity: { standard: 1, disabled: 0, electric: 0 }, carTariff: [] }]; w.selectPark('x'); });
       await page.waitForTimeout(100);
-      assert.equal(await page.evaluate(() => window.__waweye.lapse.on), label === 'desktop');
+      assert.equal(await page.evaluate(() => window.__waweye.lapse.on), true);
+      assert.equal((await S()).shown, 0);
       await page.evaluate(() => { const w = window.__waweye; w.deselectPark(); w.state.parkings = w.__parkings; });
-      if (label === 'desktop') await page.click('#lapse-close');
+      await page.click('#lapse-close');
       assert.equal((await S()).shown, 4);
       await page.unroute('**/api/vehicles**');
       await page.evaluate(() => window.__waweye.poll());

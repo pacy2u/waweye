@@ -1071,8 +1071,8 @@
   // latest data each vehicle keeps going along its line's route, in the direction it was moving, at an average speed, and
   // turns back at the terminus. Time runs 0–1000× faster (the Tempo slider is logarithmic); the Time slider moves through
   // the next LAPSE_H; ↻ starts again from fresh data. Vehicles off their route or of a line without one stay put, faded.
-  // The prediction lasts only while its card is in sight: closing it, covering it with another panel or clicking a vehicle
-  // (which then gets selected, with its route) brings the map back to real time.
+  // Closing the card (× or the chip) brings the map back to real time, and so does clicking a vehicle, which then gets
+  // selected with its route. A panel covering the card does not: the prediction goes on underneath.
   const LAPSE_H = 24 * 3600000;
   const lapseLayer = L.layerGroup();
   const sliderToSpeed = (x) => (x <= 0 ? 0 : Math.pow(10, (3 * (x - 1)) / 99)); // 0 → stopped, 1…100 → ×1…×1000
@@ -1159,13 +1159,6 @@
     refresh(); liftLocate();
   }
   const overlaps = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
-  // A panel opening over the card hides it: back to real time.
-  const lapseCover = new MutationObserver(() => {
-    if (!lapse.on) return;
-    const r = $('lapse').getBoundingClientRect();
-    if (PANELS.map($).some((p) => !p.hidden && overlaps(p.getBoundingClientRect(), r))) setLapse(false);
-  });
-  for (const id of PANELS) lapseCover.observe($(id), { attributes: true, attributeFilter: ['hidden'] });
   function setLapseSlider(x) {
     lapse.slider = Math.max(0, Math.min(100, Math.round(x))); lapse.speed = sliderToSpeed(lapse.slider);
     const el = $('lapse-speed');
