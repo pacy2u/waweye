@@ -250,7 +250,7 @@ a.brand:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .p-route-src.old { color: #FFB020; }
 .stop-tip { font-size: 12px; font-weight: 600; }
 
-/* Timelapse bar: above the status line; on wide screens on the right, clear of the details panels on the left. */
+/* Timelapse bar (prediction): above the status line; on wide screens on the right, clear of the details panels on the left. */
 #lapse { position: fixed; z-index: 1000; left: 10px; right: 10px; bottom: calc(max(10px, env(safe-area-inset-bottom)) + 40px);
   max-width: 420px; padding: 10px 12px; background: var(--panel); border-radius: 14px; box-shadow: 0 4px 16px rgba(0,0,0,.4); }
 #lapse[hidden] { display: none; }
@@ -258,11 +258,13 @@ a.brand:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .l-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .l-title { font-weight: 700; }
 .l-time { flex: 1; color: var(--muted); font-variant-numeric: tabular-nums; }
-.l-time.live { color: #3ddc84; }
+.l-head button svg { width: 20px; height: 20px; display: block; margin: auto; }
+.l-head button.busy svg { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 .l-head button { width: 32px; height: 32px; border: 0; background: none; color: var(--muted); font-size: 22px; cursor: pointer; padding: 0; }
 .l-head button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .l-row { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); }
 .l-row span { width: 46px; flex: none; }
 .l-row input { flex: 1; min-width: 0; accent-color: var(--orange); height: 28px; }
-.l-row output { width: 70px; flex: none; text-align: right; color: var(--ink); font-weight: 700; font-variant-numeric: tabular-nums; }
+.l-row output { width: 92px; flex: none; text-align: right; color: var(--ink); font-weight: 700; font-variant-numeric: tabular-nums; }
 .l-note { margin: 4px 0 0; font-size: 11px; color: var(--muted); }

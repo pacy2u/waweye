@@ -616,37 +616,58 @@ function findChromium() {
       assert.ok(r.shown > 50); assert.ok(r.text.startsWith(`${r.shown} pojazdów`), r.text + ' vs ' + r.shown);
       await page.click('#t-inc'); await page.unroute('**/api/incidents');
     });
-    await step(`${label}: timelapse replays the recorded positions 0–100× faster, × returns to live`, async () => {
-      const L = () => page.evaluate(() => { const { lapse, map } = window.__waweye;
-        return { t: lapse.t, snaps: lapse.snaps.length, end: lapse.snaps.length ? lapse.snaps[lapse.snaps.length - 1].t : 0, start: lapse.snaps.length ? lapse.snaps[0].t : 0,
-          drawn: lapse.markers.filter((m) => m && map.hasLayer(m)).length, speed: lapse.speed }; });
-      const speed = (n) => page.evaluate((n) => { const el = document.getElementById('lapse-speed'); el.value = n; el.dispatchEvent(new Event('input')); }, n);
-      // Two more snapshots so there is something to replay.
-      await page.evaluate(async () => { await window.__waweye.poll(); await new Promise((r) => setTimeout(r, 20)); await window.__waweye.poll(); });
-      await speed(0);
+    await step(`${label}: timelapse predicts movement along the routes, Tempo 0–100 → ×0–×1000 (log), Time, ↻, × returns to live`, async () => {
+      // Three buses of line 175 on its route (public/data/trasy/175.json) and one of a line without a route.
+      const shape = JSON.parse(fs.readFileSync(__dirname + '/../public/data/trasy/175.json', 'utf8')).variants[0].shape;
+      const bus = (id, line, [lat, lon]) => ({ id, type: 'bus', line, vehicle: id, brigade: '1', lat, lon, time: Date.now() });
+      await page.route('**/api/vehicles**', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ updated: Date.now(), source: 'mock', received: 4,
+        vehicles: [bus('1-1', '175', shape[10]), bus('1-2', '175', shape[40]), bus('1-3', '175', shape[80]), bus('1-4', 'X99', [52.23, 21.0])] }) }));
+      await page.evaluate(() => window.__waweye.poll());
+      const tempo = (n) => page.evaluate((n) => { const el = document.getElementById('lapse-speed'); el.value = n; el.dispatchEvent(new Event('input')); }, n);
+      for (const [x, txt] of [[0, '×0 · pauza'], [1, '×1,0'], [34, '×10'], [100, '×1000']]) { await tempo(x); assert.equal(await page.textContent('#lapse-speed-out'), txt); }
+      assert.ok(Math.abs(await page.evaluate(() => window.__waweye.sliderToSpeed(67)) - 100) < 1e-9, 'logarithmic: the middle of 1…100 is ×100');
+      await tempo(0);
       await page.click('#t-lapse');
       assert.equal(await page.getAttribute('#t-lapse', 'aria-pressed'), 'true');
       assert.ok(await page.isVisible('#lapse'));
-      await page.waitForTimeout(300);
+      await page.waitForFunction(() => { const { lapse } = window.__waweye; return lapse.lines.total === 2 && lapse.lines.done === 2; });
+      await page.waitForTimeout(100);
+      const L = () => page.evaluate(() => { const { lapse, map } = window.__waweye;
+        return { d: lapse.t - lapse.t0, t0: lapse.t0, plans: lapse.list.map((x) => x.plan && x.plan.variant.headsign),
+          mk: Object.fromEntries([...lapse.markers].map(([id, m]) => [id, { ll: m.getLatLng(), op: m.options.fillOpacity, on: map.hasLayer(m) }])) }; });
       let l = await L();
-      assert.ok(l.snaps >= 2, 'snapshots: ' + l.snaps);
-      assert.equal(l.t, l.start, 'starts at the beginning of the recording');
-      assert.equal((await S()).shown, 0, 'live markers are hidden'); assert.ok(l.drawn > 50, 'replayed: ' + l.drawn);
-      assert.match(await page.textContent('#lapse-speed-out'), /pauza/);
+      assert.equal((await S()).shown, 0, 'live markers are hidden');
+      assert.deepEqual(l.plans.map(Boolean), [true, true, true, false]);
+      assert.ok(Object.values(l.mk).every((m) => m.on)); assert.equal(l.mk['1-4'].op, 0.4, 'no route: faded');
+      assert.equal(l.d, 0); assert.equal(await page.textContent('#lapse-time'), 'teraz');
       await page.waitForTimeout(300);
-      assert.equal((await L()).t, l.start, 'speed 0 stops the time');
-      await speed(100);
-      assert.equal(await page.textContent('#lapse-speed-out'), '×100');
-      await page.waitForFunction(() => { const { lapse } = window.__waweye; return lapse.t >= lapse.snaps[lapse.snaps.length - 1].t; }, null, { timeout: 15000 });
-      assert.match(await page.textContent('#lapse-time'), /na żywo/);
-      await page.click('#lapse-restart'); await page.waitForTimeout(50);
-      assert.ok((await L()).t < (await L()).end);
+      assert.equal((await L()).d, 0, 'Tempo 0 stops the time');
+      assert.match(await page.textContent('#lapse-pos-out'), /^\d{1,2}:\d{2}:\d{2}$/);
+      await tempo(100);
+      await page.waitForTimeout(600);
+      const l2 = await L();
+      assert.ok(l2.d > 100000, 'at ×1000 over 100 s pass in 0.6 s: ' + l2.d);
+      assert.ok(Math.abs(l2.mk['1-1'].ll.lat - l.mk['1-1'].ll.lat) + Math.abs(l2.mk['1-1'].ll.lng - l.mk['1-1'].ll.lng) > 0.001, 'the bus moved along');
+      assert.deepEqual(l2.mk['1-4'].ll, l.mk['1-4'].ll, 'without a route it stays');
+      assert.match(await page.textContent('#lapse-time'), /^\+/);
+      await tempo(0);
+      await page.evaluate(() => { const el = document.getElementById('lapse-pos'); el.value = 500; el.dispatchEvent(new Event('input')); });
+      await page.waitForTimeout(100);
+      assert.equal((await L()).d, 3 * 3600000, 'Time: the middle of the slider is 3 h ahead');
+      const shown = await page.evaluate(() => { const { lapse } = window.__waweye; return new Date(lapse.t).toLocaleTimeString('pl-PL', { timeZone: 'Europe/Warsaw' }); });
+      assert.ok((await page.textContent('#lapse-pos-out')).endsWith(shown), 'Time shows the moment on the map');
       await page.screenshot({ path: `${SHOTS}/waweye-${label}-timelapse.png` });
-      await speed(10);
+      await page.waitForTimeout(20);
+      await page.click('#lapse-refresh');
+      await page.waitForFunction((t0) => { const { lapse } = window.__waweye; return lapse.t0 > t0 && lapse.t === lapse.t0; }, l.t0);
+      await tempo(34);
       await page.click('#lapse-close');
       assert.equal(await page.isVisible('#lapse'), false);
       assert.equal(await page.getAttribute('#t-lapse', 'aria-pressed'), 'false');
-      l = await L(); assert.equal(l.drawn, 0); assert.ok((await S()).shown > 50);
+      assert.equal((await S()).shown, 4);
+      await page.unroute('**/api/vehicles**');
+      await page.evaluate(() => window.__waweye.poll());
+      await page.waitForFunction(() => window.__waweye.state.markers.size > 50);
     });
     await step(`${label}: hidden tab does not poll, showing it again polls at once`, async () => {
       const urls = [], onReq = (r) => { if (r.url().includes('/api/')) urls.push(r.url()); };

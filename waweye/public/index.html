@@ -53,7 +53,7 @@
     <button id="t-events" class="chip" aria-pressed="false" title="Wydarzenia z kalendarza miasta (um.warszawa.pl)">
       <svg class="pico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 7.5A1.5 1.5 0 0 1 4 6h16a1.5 1.5 0 0 1 1.5 1.5V10a2 2 0 0 0 0 4v2.5A1.5 1.5 0 0 1 20 18H4a1.5 1.5 0 0 1-1.5-1.5V14a2 2 0 0 0 0-4z" fill="currentColor"/><path d="M15 7.5v9" stroke="var(--picon-bg,#242428)" stroke-width="1.8" stroke-dasharray="1.8 1.6"/></svg>DziejeSię
     </button>
-    <button id="t-lapse" class="chip icon" aria-pressed="false" aria-controls="lapse" title="Timelapse: przyspieszony ruch pojazdów (0–100×)" aria-label="Timelapse">
+    <button id="t-lapse" class="chip icon" aria-pressed="false" aria-controls="lapse" title="Timelapse: przewidywany ruch pojazdów, przyspieszony do 1000×" aria-label="Timelapse">
       <svg class="pico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 1-7.4 3.9" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M8.2 1.8 2.4 4.6l4.7 4.1z" fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/><path d="M12 12.5 8.6 10M12 12.5l4.3-4.6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="12.5" r="1.8" fill="currentColor"/></svg>
     </button>
   </div>
@@ -91,16 +91,16 @@
   </div>
 </div>
 
-<!-- Timelapse (public/app.js, "Timelapse"): replays the positions recorded since the page was opened, 0–100× faster. -->
+<!-- Timelapse (public/app.js, "Timelapse"; prediction in public/prognoza.js): vehicles moving on along their routes, 0–1000× faster. -->
 <section id="lapse" aria-label="Timelapse" hidden>
   <div class="l-head">
     <span class="l-title">Timelapse</span>
-    <span id="lapse-time" class="l-time" aria-live="off"></span>
-    <button id="lapse-restart" type="button" title="Odtwarzaj od początku nagrania" aria-label="Od początku nagrania">⟲</button>
+    <span id="lapse-time" class="l-time"></span>
+    <button id="lapse-refresh" type="button" title="Odśwież: prognoza od najnowszych danych" aria-label="Odśwież prognozę od najnowszych danych"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.6-5.9" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M20.5 3v5.5H15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     <button id="lapse-close" type="button" title="Wróć na żywo" aria-label="Zamknij timelapse i wróć na żywo">×</button>
   </div>
-  <label class="l-row" for="lapse-speed"><span>Tempo</span><input id="lapse-speed" type="range" min="0" max="100" step="1" value="10"><output id="lapse-speed-out" for="lapse-speed"></output></label>
-  <label class="l-row" for="lapse-pos"><span>Chwila</span><input id="lapse-pos" type="range" min="0" max="1000" step="1" value="0"></label>
+  <label class="l-row" for="lapse-speed"><span>Tempo</span><input id="lapse-speed" type="range" min="0" max="100" step="1" value="34"><output id="lapse-speed-out" for="lapse-speed"></output></label>
+  <label class="l-row" for="lapse-pos"><span>Time</span><input id="lapse-pos" type="range" min="0" max="1000" step="1" value="0"><output id="lapse-pos-out" for="lapse-pos"></output></label>
   <p id="lapse-note" class="l-note"></p>
 </section>
 
@@ -202,6 +202,7 @@
 <script src="vendor/leaflet.js"></script>
 <script src="pl2000.js"></script>
 <script src="trasa.js"></script>
+<script src="prognoza.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
