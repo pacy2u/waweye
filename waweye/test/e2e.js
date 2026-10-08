@@ -45,6 +45,17 @@ function findChromium() {
       assert.ok((await S()).shown > 50);
       assert.match(await page.textContent('#status-text'), /pojazdów/);
     });
+    await step(`${label}: vehicles glide at a steady speed between polls instead of jumping`, async () => {
+      const at = () => page.evaluate(() => { const m = [...window.__waweye.state.markers.values()].find((x) => x.to);
+        return m && { id: m.v.id, dur: m.dur, p: m.mk.getLatLng() }; });
+      await page.waitForFunction(() => [...window.__waweye.state.markers.values()].some((m) => m.to), null, { timeout: 15000 });
+      const a = await at();
+      assert.ok(a.dur >= 10000, 'the move lasts the whole poll interval, not a short hop');
+      await page.waitForTimeout(2000);
+      const b = await page.evaluate((id) => { const m = window.__waweye.state.markers.get(id); return { moving: !!m.to, p: m.mk.getLatLng() }; }, a.id);
+      assert.ok(b.moving, 'still moving 2 s later');
+      assert.notDeepEqual(b.p, a.p);
+    });
     await step(`${label}: zoom in/out`, async () => {
       const z0 = (await S()).z;
       await page.click('.leaflet-control-zoom-in'); await page.waitForTimeout(500);
@@ -59,7 +70,6 @@ function findChromium() {
       let pt;
       try {
         await page.waitForTimeout(200);
-        await page.waitForFunction(() => [...window.__waweye.state.markers.values()].every((m) => !m.to));
         await page.evaluate(() => { const { map, state } = window.__waweye; const m = [...state.markers.values()][5]; map.setView(m.mk.getLatLng(), 16, { animate: false }); });
         await page.waitForTimeout(300);
         // A vehicle on its own and not under the top bar, the status or the buttons.
@@ -212,7 +222,6 @@ function findChromium() {
       await page.evaluate(() => Object.defineProperty(document, 'hidden', { configurable: true, get: () => true })); // freeze vehicles, as above
       try {
         await page.waitForTimeout(200);
-        await page.waitForFunction(() => [...window.__waweye.state.markers.values()].every((m) => !m.to));
         const v = await page.evaluate(() => { const { map, state } = window.__waweye; const shown = [...state.markers.values()].filter((x) => map.hasLayer(x.mk));
           const px = (x) => map.latLngToContainerPoint(x.mk.getLatLng()); // pixel distances do not depend on where the map is centred
           const m = shown.find((x) => shown.every((o) => o === x || px(o).distanceTo(px(x)) > 24)); const p = m.mk.getLatLng(); return { lat: p.lat, lng: p.lng, id: m.v.id }; });
@@ -359,7 +368,6 @@ function findChromium() {
       await page.evaluate(() => Object.defineProperty(document, 'hidden', { configurable: true, get: () => true })); // freeze vehicles, as above
       try {
         await page.waitForTimeout(200);
-        await page.waitForFunction(() => [...window.__waweye.state.markers.values()].every((m) => !m.to));
         const pts = await page.evaluate(() => { const { map, state } = window.__waweye; const r = map.getContainer().getBoundingClientRect(), sz = map.getSize();
           return [...state.markers.values()].filter((m) => map.hasLayer(m.mk)).map((m) => { const p = map.latLngToContainerPoint(m.mk.getLatLng()); return { x: r.left + p.x, y: r.top + p.y, cx: p.x, cy: p.y, id: m.v.id }; })
             .filter((p, _, all) => p.cy > 170 && p.cy < sz.y - 120 && p.cx > 40 && p.cx < sz.x - 80 && all.every((q) => q === p || Math.hypot(q.cx - p.cx, q.cy - p.cy) > 20)).slice(0, 3); });
@@ -462,7 +470,6 @@ function findChromium() {
       await page.evaluate(() => Object.defineProperty(document, 'hidden', { configurable: true, get: () => true }));
       try {
         await page.waitForTimeout(200); // a request already in flight may still land
-        await page.waitForFunction(() => [...window.__waweye.state.markers.values()].every((m) => !m.to));
         const pts = await page.evaluate(() => { const { map, state } = window.__waweye; const r = map.getContainer().getBoundingClientRect(); const sz = map.getSize();
           return [...state.markers.values()].filter((m) => map.getBounds().contains(m.mk.getLatLng())).map((m) => { const p = map.latLngToContainerPoint(m.mk.getLatLng());
             return { x: r.left + p.x, y: r.top + p.y, cy: p.y, cx: p.x, id: m.v.id, w: sz.x, h: sz.y }; }).filter((p, _, all) => p.cy > 160 && p.cy < p.h - 120 && p.cx > 40 && p.cx < p.w - 80 && all.every((q) => q === p || Math.hypot(q.cx - p.cx, q.cy - p.cy) > 20)
