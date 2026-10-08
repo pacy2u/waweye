@@ -1,6 +1,9 @@
 'use strict';
 (function () {
-  const POLL_MS = 10000, ANIM_MS = 900, LABEL_ZOOM = 14;
+  const POLL_MS = 10000, LABEL_ZOOM = 14;
+  // Vehicles glide at a constant speed from one reported position to the next over the time between the two reports
+  // (clamped), so they keep moving between polls instead of jumping; the price is showing them up to that long behind.
+  const ANIM_MIN = POLL_MS, ANIM_MAX = 3 * POLL_MS, JUMP_DEG = 0.02; // a jump of over ~2 km (e.g. back from a depot) is not animated
   const COLORS = { bus: '#2B2B33', tram: '#0073E6', sel: '#FC4C02' };
   const state = { range: 'today', events: false, eventItems: [], selectedEvent: null, eventMarkers: new Map(), eventError: null, eventMeta: null, sport: false, sportItems: [], selectedSport: null, sportMarkers: new Map(), sportError: null, sportMeta: null, inc: false, incidents: [], selectedInc: null, incLayers: new Map(), incError: null, park: false, parkings: [], selectedPark: null, parkMarkers: new Map(), parkError: null, types: { bus: true, tram: true }, query: '', words: [], selected: null, follow: false, markers: new Map(), lastOk: 0, data: [] };
 
@@ -62,8 +65,16 @@
         m.mk.on('click', (e) => { L.DomEvent.stopPropagation(e); select(m.v.id); });
         state.markers.set(v.id, m);
       } else {
-        const p = m.mk.getLatLng();
-        m.from = [p.lat, p.lng]; m.to = [v.lat, v.lon]; m.t0 = now; m.v = v;
+        const last = m.to || m.from || [m.v.lat, m.v.lon]; // the newest position already being shown or headed to
+        if (v.lat !== last[0] || v.lon !== last[1]) {
+          const p = m.mk.getLatLng();
+          if (Math.abs(v.lat - p.lat) + Math.abs(v.lon - p.lng) > JUMP_DEG) { m.mk.setLatLng([v.lat, v.lon]); if (m.label) m.label.setLatLng([v.lat, v.lon]); m.from = [v.lat, v.lon]; m.to = null; }
+          else {
+            const dt = v.time && m.v.time ? v.time - m.v.time : 0;
+            m.from = [p.lat, p.lng]; m.to = [v.lat, v.lon]; m.t0 = now; m.dur = Math.max(ANIM_MIN, Math.min(ANIM_MAX, dt || POLL_MS));
+          }
+        }
+        m.v = v;
       }
     }
     for (const [id, m] of state.markers) {
@@ -292,21 +303,21 @@
 
   // Smooth movement between polls.
   function frame(now) {
-    if (lapse.on) lapseFrame(now);
+    requestAnimationFrame(frame);
+    if (document.hidden) return; // nothing to draw (also how tests freeze the vehicles)
     let moving = false;
     for (const m of state.markers.values()) {
       if (!m.to) continue;
-      const k = Math.min(1, (now - m.t0) / ANIM_MS);
+      const k = Math.min(1, (now - m.t0) / m.dur);
       m.mk.setLatLng([m.from[0] + (m.to[0] - m.from[0]) * k, m.from[1] + (m.to[1] - m.from[1]) * k]);
       if (m.label) m.label.setLatLng(m.mk.getLatLng());
-      if (k >= 1) m.to = null; else moving = true;
+      if (k >= 1) { m.from = m.to; m.to = null; } else moving = true;
     }
     if (moving || state.selected) {
       updateHighlight();
       const s = state.selected && state.markers.get(state.selected);
       if (state.follow && s) map.panTo(s.mk.getLatLng(), { animate: false });
     }
-    requestAnimationFrame(frame);
   }
 
   async function poll() {

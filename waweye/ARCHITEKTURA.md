@@ -211,7 +211,7 @@ sequenceDiagram
             F-->>E: 200 {updated, source, errors, vehicles}<br/>Cache-Control: s-maxage=5
             E-->>B: 200
         end
-        B->>B: płynna animacja do nowych pozycji (900 ms)
+        B->>B: ruch ze stałą prędkością do nowych pozycji przez czas między odczytami GPS (10–30 s)
     end
 ```
 
