@@ -623,6 +623,82 @@ function findChromium() {
       assert.ok(r.shown > 50); assert.ok(r.text.startsWith(`${r.shown} pojazdów`), r.text + ' vs ' + r.shown);
       await page.click('#t-inc'); await page.unroute('**/api/incidents');
     });
+    await step(`${label}: timelapse predicts movement along the routes, Tempo 0–100 → ×0–×1000 (log), Czas 24 h, ↻; closing the card or a vehicle click return to live, a covering panel does not`, async () => {
+      // Three buses of line 175 on its route (public/data/trasy/175.json) and one of a line without a route.
+      const shape = JSON.parse(fs.readFileSync(__dirname + '/../public/data/trasy/175.json', 'utf8')).variants[0].shape;
+      const bus = (id, line, [lat, lon]) => ({ id, type: 'bus', line, vehicle: id, brigade: '1', lat, lon, time: Date.now() });
+      await page.route('**/api/vehicles**', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ updated: Date.now(), source: 'mock', received: 4,
+        vehicles: [bus('1-1', '175', shape[10]), bus('1-2', '175', shape[40]), bus('1-3', '175', shape[80]), bus('1-4', 'X99', [52.23, 21.0])] }) }));
+      await page.evaluate(() => window.__waweye.poll());
+      const tempo = (n) => page.evaluate((n) => { const el = document.getElementById('lapse-speed'); el.value = n; el.dispatchEvent(new Event('input')); }, n);
+      for (const [x, txt] of [[0, '×0 · pauza'], [1, '×1,0'], [34, '×10'], [100, '×1000']]) { await tempo(x); assert.equal(await page.textContent('#lapse-speed-out'), txt); }
+      assert.ok(Math.abs(await page.evaluate(() => window.__waweye.sliderToSpeed(67)) - 100) < 1e-9, 'logarithmic: the middle of 1…100 is ×100');
+      await tempo(0);
+      await page.click('#t-lapse');
+      assert.equal(await page.getAttribute('#t-lapse', 'aria-pressed'), 'true');
+      assert.ok(await page.isVisible('#lapse'));
+      await page.waitForFunction(() => { const { lapse } = window.__waweye; return lapse.lines.total === 2 && lapse.lines.done === 2; });
+      await page.waitForTimeout(100);
+      const L = () => page.evaluate(() => { const { lapse, map } = window.__waweye;
+        return { d: lapse.t - lapse.t0, t0: lapse.t0, plans: lapse.list.map((x) => x.plan && x.plan.variant.headsign),
+          mk: Object.fromEntries([...lapse.markers].map(([id, m]) => [id, { ll: m.getLatLng(), op: m.options.fillOpacity, on: map.hasLayer(m) }])) }; });
+      let l = await L();
+      assert.equal((await S()).shown, 0, 'live markers are hidden');
+      assert.deepEqual(l.plans.map(Boolean), [true, true, true, false]);
+      assert.ok(Object.values(l.mk).every((m) => m.on)); assert.equal(l.mk['1-4'].op, 0.4, 'no route: faded');
+      assert.equal(l.d, 0); assert.equal(await page.textContent('#lapse-time'), 'teraz');
+      await page.waitForTimeout(300);
+      assert.equal((await L()).d, 0, 'Tempo 0 stops the time');
+      assert.match(await page.textContent('#lapse-pos-out'), /^\d{2}:\d{2}:\d{2}$/);
+      assert.equal(await page.textContent('label[for=lapse-pos] span'), 'Czas');
+      await tempo(100);
+      await page.waitForTimeout(600);
+      const l2 = await L();
+      assert.ok(l2.d > 100000, 'at ×1000 over 100 s pass in 0.6 s: ' + l2.d);
+      assert.ok(Math.abs(l2.mk['1-1'].ll.lat - l.mk['1-1'].ll.lat) + Math.abs(l2.mk['1-1'].ll.lng - l.mk['1-1'].ll.lng) > 0.001, 'the bus moved along');
+      assert.deepEqual(l2.mk['1-4'].ll, l.mk['1-4'].ll, 'without a route it stays');
+      assert.match(await page.textContent('#lapse-time'), /^\+/);
+      await tempo(0);
+      await page.evaluate(() => { const el = document.getElementById('lapse-pos'); el.value = 500; el.dispatchEvent(new Event('input')); });
+      await page.waitForTimeout(100);
+      assert.equal((await L()).d, 12 * 3600000, 'Czas: the middle of the slider is 12 h ahead');
+      const shown = await page.evaluate(() => { const { lapse } = window.__waweye; return new Date(lapse.t).toLocaleTimeString('pl-PL', { timeZone: 'Europe/Warsaw', hour: '2-digit', minute: '2-digit', second: '2-digit' }); });
+      assert.equal(await page.textContent('#lapse-pos-out'), shown, 'Czas shows the moment on the map');
+      await page.screenshot({ path: `${SHOTS}/waweye-${label}-timelapse.png` });
+      await page.waitForTimeout(20);
+      await page.click('#lapse-refresh');
+      await page.waitForFunction((t0) => { const { lapse } = window.__waweye; return lapse.t0 > t0 && lapse.t === lapse.t0; }, l.t0);
+      await tempo(34);
+      await page.click('#lapse-close');
+      assert.equal(await page.isVisible('#lapse'), false);
+      assert.equal(await page.getAttribute('#t-lapse', 'aria-pressed'), 'false');
+      assert.equal((await S()).shown, 4);
+      // Clicking a predicted vehicle goes back to real time and selects it, with its route.
+      await page.click('#t-lapse'); await tempo(0);
+      await page.waitForFunction(() => window.__waweye.lapse.lines.done === 2);
+      await page.evaluate(() => { const el = document.getElementById('lapse-pos'); el.value = 20; el.dispatchEvent(new Event('input')); });
+      await page.waitForTimeout(100);
+      const pt = await page.evaluate(() => { const { map, lapse } = window.__waweye; const m = lapse.markers.get('1-2'); map.setView(m.getLatLng(), 15, { animate: false });
+        const r = map.getContainer().getBoundingClientRect(), q = map.latLngToContainerPoint(m.getLatLng()); return { x: r.left + q.x, y: r.top + q.y }; });
+      await page.waitForTimeout(100);
+      await page.mouse.click(pt.x, pt.y);
+      await page.waitForFunction(() => window.__waweye.route.data && window.__waweye.route.shown.length > 0);
+      assert.equal(await page.evaluate(() => window.__waweye.lapse.on), false);
+      assert.equal((await S()).sel, '1-2'); assert.ok((await S()).panel);
+      await page.click('#close');
+      // A panel opening over the card (phones) only covers it: the prediction goes on until the card is closed.
+      await page.click('#t-lapse');
+      await page.evaluate(() => { const w = window.__waweye; w.__parkings = w.state.parkings; w.state.parkings = [{ id: 'x', name: 'P', lat: 52.23, lon: 21.0, free: { standard: 1, disabled: 0, electric: 0 }, capacity: { standard: 1, disabled: 0, electric: 0 }, carTariff: [] }]; w.selectPark('x'); });
+      await page.waitForTimeout(100);
+      assert.equal(await page.evaluate(() => window.__waweye.lapse.on), true);
+      assert.equal((await S()).shown, 0);
+      await page.evaluate(() => { const w = window.__waweye; w.deselectPark(); w.state.parkings = w.__parkings; });
+      await page.click('#lapse-close');
+      assert.equal((await S()).shown, 4);
+      await page.unroute('**/api/vehicles**');
+      await page.evaluate(() => window.__waweye.poll());
+      await page.waitForFunction(() => window.__waweye.state.markers.size > 50);
+    });
     await step(`${label}: hidden tab does not poll, showing it again polls at once`, async () => {
       const urls = [], onReq = (r) => { if (r.url().includes('/api/')) urls.push(r.url()); };
       await page.evaluate(() => Object.defineProperty(document, 'hidden', { configurable: true, get: () => true }));

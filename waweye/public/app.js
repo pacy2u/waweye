@@ -7,6 +7,9 @@
   const COLORS = { bus: '#2B2B33', tram: '#0073E6', sel: '#FC4C02' };
   const state = { range: 'today', events: false, eventItems: [], selectedEvent: null, eventMarkers: new Map(), eventError: null, eventMeta: null, sport: false, sportItems: [], selectedSport: null, sportMarkers: new Map(), sportError: null, sportMeta: null, inc: false, incidents: [], selectedInc: null, incLayers: new Map(), incError: null, park: false, parkings: [], selectedPark: null, parkMarkers: new Map(), parkError: null, types: { bus: true, tram: true }, query: '', words: [], selected: null, follow: false, markers: new Map(), lastOk: 0, data: [] };
 
+  // Timelapse (section "Timelapse" below): predicted movement of the vehicles, up to 1000× faster than real time.
+  const lapse = { on: false, slider: 34, speed: 10, t0: 0, t: 0, last: 0, gen: 0, list: [], tracks: new Map(), markers: new Map(), lines: { done: 0, total: 0 }, dirty: false };
+
   const map = L.map('map', { zoomControl: false, preferCanvas: true, minZoom: 9, maxZoom: 19 }).setView([52.2297, 21.0122], 12);
   L.control.zoom({ position: 'topright' }).addTo(map);
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -52,6 +55,10 @@
     const seen = new Set(), now = performance.now();
     for (const v of vehicles) {
       seen.add(v.id);
+      // Recent positions of every vehicle: the timelapse tells its direction from them.
+      const tr = lapse.tracks.get(v.id), lp = tr && tr[tr.length - 1];
+      if (!tr) lapse.tracks.set(v.id, [[v.lat, v.lon]]);
+      else if (lp[0] !== v.lat || lp[1] !== v.lon) { tr.push([v.lat, v.lon]); if (tr.length > 6) tr.shift(); }
       let m = state.markers.get(v.id);
       if (!m) {
         m = { v, mk: L.circleMarker([v.lat, v.lon], { ...style(v), renderer: canvas }), from: null, to: null, t0: 0, label: null };
@@ -72,7 +79,7 @@
     }
     for (const [id, m] of state.markers) {
       // Markers of types we did not ask for are kept (hidden) so re-enabling a type does not flash an empty map.
-      if (!seen.has(id) && requested.has(m.v.type)) { m.mk.remove(); if (m.label) m.label.remove(); state.markers.delete(id); if (state.selected === id) deselect(); }
+      if (!seen.has(id) && requested.has(m.v.type)) { m.mk.remove(); if (m.label) m.label.remove(); state.markers.delete(id); lapse.tracks.delete(id); if (state.selected === id) deselect(); }
     }
     refresh();
   }
@@ -80,7 +87,7 @@
   function refresh() {
     const showLabels = map.getZoom() >= LABEL_ZOOM, bounds = map.getBounds().pad(0.1);
     for (const m of state.markers.values()) {
-      const show = visible(m.v) || state.selected === m.v.id;
+      const show = !lapse.on && (visible(m.v) || state.selected === m.v.id); // the timelapse draws its own markers
       if (show) { if (!map.hasLayer(m.mk)) m.mk.addTo(map); m.mk.setStyle(style(m.v)); if (state.selected === m.v.id) m.mk.bringToFront(); }
       else if (map.hasLayer(m.mk)) m.mk.remove();
       const wantLabel = show && showLabels && bounds.contains(m.mk.getLatLng());
@@ -298,6 +305,7 @@
   function frame(now) {
     requestAnimationFrame(frame);
     if (document.hidden) return; // nothing to draw (also how tests freeze the vehicles)
+    if (lapse.on) lapseFrame(now);
     let moving = false;
     for (const m of state.markers.values()) {
       if (!m.to) continue;
@@ -1034,22 +1042,23 @@
   // Like Google's button riding on top of the bottom sheet: lift it above an open panel that covers it (phones).
   function liftLocate() {
     const b = $('locate'), br = b.getBoundingClientRect();
-    const tops = PANELS.map($).filter((p) => !p.hidden).map((p) => p.getBoundingClientRect())
+    const tops = [...PANELS, 'lapse'].map($).filter((p) => !p.hidden).map((p) => p.getBoundingClientRect())
       .filter((r) => r.right > br.left && r.left < br.right).map((r) => r.top);
     b.style.bottom = tops.length ? `${document.documentElement.clientHeight - Math.min(...tops) + 10}px` : '';
   }
-  if (window.ResizeObserver) { const ro = new ResizeObserver(liftLocate); for (const id of PANELS) ro.observe($(id)); }
+  if (window.ResizeObserver) { const ro = new ResizeObserver(liftLocate); for (const id of [...PANELS, 'lapse']) ro.observe($(id)); }
   window.addEventListener('resize', liftLocate);
 
   function toggleType(key, btn) {
     state.types[key] = !state.types[key];
     btn.classList.toggle('on', state.types[key]); btn.setAttribute('aria-pressed', state.types[key]);
     if (key === 'tram') { if (state.types.tram && !metroPrefs.hidden) setMetro(true, true); else if (!state.types.tram && metro.auto) setMetro(false); }
-    refresh(); poll();
+    lapse.dirty = true; refresh(); poll();
   }
   $('t-bus').onclick = (e) => toggleType('bus', e.currentTarget);
   $('t-tram').onclick = (e) => toggleType('tram', e.currentTarget);
   $('search').oninput = (e) => {
+    lapse.dirty = true;
     state.query = e.target.value.trim().toLowerCase(); state.words = state.query ? fold(state.query).split(/\s+/) : [];
     renderParkings(); if (state.inc) renderIncidents(); renderSport(); renderEvents();
     refresh(); // last: it also redraws the status line with the new counts
@@ -1069,7 +1078,118 @@
   map.on('click', () => { if (state.selected) deselect(); if (state.selectedPark) deselectPark(); if (state.selectedInc !== null) deselectInc(); if (state.selectedSport) deselectSport(); if (state.selectedEvent) deselectEvent(); closeZone(); closeStation(); showZoneMenu(false); });
   map.on('zoomend moveend', refresh);
 
-  window.__waweye = { state, zones, me, map, poll, select, deselect, selectPark, deselectPark, selectInc, deselectInc, selectSport, deselectSport, selectEvent, deselectEvent, openZone, closeZone, metro, openStation, closeStation, route };
+  // ---- Timelapse ----
+  // The city publishes no timetable positions or trips, so the timelapse is a prediction (public/prognoza.js): from the
+  // latest data each vehicle keeps going along its line's route, in the direction it was moving, at an average speed, and
+  // turns back at the terminus. Time runs 0–1000× faster (the Tempo slider is logarithmic); the Czas slider moves through
+  // the next LAPSE_H; ↻ starts again from fresh data. Vehicles off their route or of a line without one stay put, faded.
+  // Closing the card (× or the chip) brings the map back to real time, and so does clicking a vehicle, which then gets
+  // selected with its route. A panel covering the card does not: the prediction goes on underneath.
+  const LAPSE_H = 24 * 3600000;
+  const lapseLayer = L.layerGroup();
+  const sliderToSpeed = (x) => (x <= 0 ? 0 : Math.pow(10, (3 * (x - 1)) / 99)); // 0 → stopped, 1…100 → ×1…×1000
+  const speedTxt = (m) => (m === 0 ? '×0 · pauza' : '×' + (m < 10 ? m.toFixed(1).replace('.', ',') : Math.round(m)));
+  const clock = (t) => new Date(t).toLocaleTimeString('pl-PL', { timeZone: 'Europe/Warsaw', hour: '2-digit', minute: '2-digit', second: '2-digit' }); // hh:mm:ss
+  const ahead = (ms) => (ms < 60000 ? `+${Math.round(ms / 1000)} s` : ms < 3600000 ? `+${Math.floor(ms / 60000)} min`
+    : `+${Math.floor(ms / 3600000)} h ${String(Math.floor(ms / 60000) % 60).padStart(2, '0')} min`);
+  try { const s = localStorage.getItem('waweye.lapseSlider'); if (s != null && +s >= 0 && +s <= 100) lapse.slider = Math.round(+s); } catch {}
+
+  function lapseStart() {
+    const gen = ++lapse.gen;
+    lapse.t0 = state.lastOk || Date.now(); lapse.t = lapse.t0; lapse.last = 0;
+    // plan: undefined while the line's route loads, null when the vehicle cannot be predicted.
+    lapse.list = [...state.markers.values()].map((m) => ({ v: m.v, track: (lapse.tracks.get(m.v.id) || [[m.v.lat, m.v.lon]]).slice(), data: null, plan: undefined }));
+    lapseLayer.clearLayers(); lapse.markers.clear();
+    const lines = [...new Set(lapse.list.map((x) => x.v.line))];
+    lapse.lines = { done: 0, total: lines.length };
+    let i = 0;
+    const worker = async () => {
+      while (i < lines.length) {
+        const line = lines[i++];
+        let data = null;
+        try { data = await loadRoute(line); } catch {}
+        if (gen !== lapse.gen) return;
+        lapse.lines.done++;
+        for (const x of lapse.list) if (x.v.line === line) { x.data = data; x.plan = data ? wawPrognoza.plan(data.variants, x.track) : null; }
+        lapse.dirty = true;
+      }
+    };
+    for (let k = 0; k < 6; k++) worker(); // a few lines at a time
+    lapse.dirty = true; renderLapse();
+  }
+
+  function lapseFrame(now) {
+    const dt = lapse.last ? Math.min(now - lapse.last, 250) : 0; // a background tab does not jump ahead
+    lapse.last = now;
+    const t = Math.min(lapse.t0 + LAPSE_H, lapse.t + dt * lapse.speed);
+    if (t === lapse.t && !lapse.dirty) return;
+    lapse.t = t; lapse.dirty = false;
+    const sec = (t - lapse.t0) / 1000, r = radius();
+    for (const x of lapse.list) {
+      let mk = lapse.markers.get(x.v.id);
+      if (!visible(x.v)) { if (mk && lapseLayer.hasLayer(mk)) lapseLayer.removeLayer(mk); continue; }
+      const p = x.plan ? wawPrognoza.positionAt(x.data.variants, x.plan, x.v.type, sec) : [x.v.lat, x.v.lon];
+      const op = x.plan || x.plan === undefined ? 1 : 0.4;
+      if (!mk) {
+        lapse.markers.set(x.v.id, (mk = L.circleMarker(p, { renderer: canvas, radius: r, color: '#fff', weight: 1.5, fillColor: COLORS[x.v.type], fillOpacity: op, opacity: op })));
+        const id = x.v.id;
+        mk.on('click', (e) => { L.DomEvent.stopPropagation(e); setLapse(false); if (state.markers.has(id)) select(id); });
+      }
+      else {
+        mk.setLatLng(p);
+        if (mk.options.radius !== r) mk.setRadius(r);
+        if (mk.options.fillOpacity !== op) mk.setStyle({ fillOpacity: op, opacity: op });
+      }
+      if (!lapseLayer.hasLayer(mk)) lapseLayer.addLayer(mk);
+    }
+    renderLapse();
+  }
+
+  function renderLapse() {
+    $('lapse-speed-out').textContent = speedTxt(lapse.speed);
+    const pos = $('lapse-pos'), d = lapse.t - lapse.t0, when = clock(lapse.t);
+    if (document.activeElement !== pos) pos.value = Math.round((d / LAPSE_H) * 1000);
+    $('lapse-pos-out').textContent = when; pos.setAttribute('aria-valuetext', when);
+    $('lapse-time').textContent = d < 1000 ? 'teraz' : ahead(d);
+    const lost = lapse.list.filter((x) => x.plan === null).length, { done, total } = lapse.lines;
+    $('lapse-note').textContent = done < total ? `Wczytywanie tras linii: ${done} z ${total}…`
+      : `Prognoza z danych z ${clock(lapse.t0)}: pojazdy jadą dalej po trasach swoich linii ze średnią prędkością (autobus ok. 20 km/h, tramwaj ok. 18 km/h), na pętli czekają 4 min. To przybliżenie, bez rozkładu jazdy.${lost ? ` ${lost} poj. bez trasy stoi w miejscu (wyblakłe).` : ''}`;
+  }
+
+  function setLapse(on) {
+    lapse.on = on;
+    const btn = $('t-lapse');
+    btn.classList.toggle('on', on); btn.setAttribute('aria-pressed', on);
+    $('lapse').hidden = !on;
+    if (on) {
+      if (state.selected) deselect(); // predicted positions have no live vehicle to show details of
+      const r = $('lapse').getBoundingClientRect(); // panels in the card's place (phones) close, so the card stays in sight
+      for (const p of PANELS.map($)) if (!p.hidden && overlaps(p.getBoundingClientRect(), r)) p.querySelector('.p-ctrl button:last-child').click();
+      lapseLayer.addTo(map); lapseStart();
+    } else { lapse.gen++; map.removeLayer(lapseLayer); lapseLayer.clearLayers(); lapse.markers.clear(); lapse.list = []; }
+    refresh(); liftLocate();
+  }
+  const overlaps = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+  function setLapseSlider(x) {
+    lapse.slider = Math.max(0, Math.min(100, Math.round(x))); lapse.speed = sliderToSpeed(lapse.slider);
+    const el = $('lapse-speed');
+    el.value = lapse.slider; el.setAttribute('aria-valuetext', lapse.speed ? speedTxt(lapse.speed).slice(1) + ' razy szybciej' : 'pauza');
+    try { localStorage.setItem('waweye.lapseSlider', String(lapse.slider)); } catch {}
+    renderLapse();
+  }
+  setLapseSlider(lapse.slider);
+  $('t-lapse').onclick = () => setLapse(!lapse.on);
+  $('lapse-close').onclick = () => setLapse(false);
+  $('lapse-speed').oninput = (e) => setLapseSlider(+e.target.value);
+  $('lapse-pos').oninput = (e) => { lapse.t = lapse.t0 + LAPSE_H * (+e.target.value / 1000); lapse.dirty = true; };
+  $('lapse-refresh').onclick = async (e) => {
+    const b = e.currentTarget; b.disabled = true; b.classList.add('busy');
+    try { await poll(); } finally { b.disabled = false; b.classList.remove('busy'); }
+    if (lapse.on) lapseStart();
+  };
+  map.on('zoomend', () => { lapse.dirty = true; }); // marker size follows the zoom
+
+  window.__waweye = { lapse, setLapse, setLapseSlider, sliderToSpeed, state, zones, me, map, poll, select, deselect, selectPark, deselectPark, selectInc, deselectInc, selectSport, deselectSport, selectEvent, deselectEvent, openZone, closeZone, metro, openStation, closeStation, route };
   poll(); setInterval(poll, POLL_MS);
   // Polling and location tracking pause while the tab is hidden (saves requests, transfer and battery) and catch up when it is shown again.
   document.addEventListener('visibilitychange', () => {
