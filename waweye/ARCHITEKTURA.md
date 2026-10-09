@@ -171,7 +171,7 @@ Odświeżanie zatrzymuje się w ukrytej karcie przeglądarki i wraca od razu po 
 
 - **Jeden canvas Leaflet** dla pojazdów, tras, metra, linii utrudnień, SCT i okręgu dokładności lokalizacji. Drugi canvas leżałby nad pierwszym i połykał kliknięcia (test e2e pilnuje, że pojazdy są klikalne przy włączonych utrudnieniach).
 - Osobny panel Leaflet `zones` pod pojazdami na kafelki WMS strefy SPPN; granicę rysuje filtr SVG `#sppn-edge` z `index.html`.
-- `public/trasa.js` – wybór wariantu trasy (kierunku) z ostatnich pozycji pojazdu; `public/pl2000.js` – przeliczenie WGS84 → PL-2000 strefa 7 (EPSG:2178) dla zapytań WMS.
+- `public/trasa.js` – wybór wariantu trasy (kierunku) z ostatnich pozycji pojazdu; `public/prognoza.js` – prognoza ruchu do timelapse (pojazdy po trasach linii ze średnią prędkością, liczba kursów w każdej godzinie z rozkładu GTFS z `/api/trasa?dzien=`); `public/pl2000.js` – przeliczenie WGS84 → PL-2000 strefa 7 (EPSG:2178) dla zapytań WMS.
 - Preferencje warstw w `localStorage` (`waweye.strefy`, `waweye.metro`). Pozycja użytkownika (Geolocation API) nie opuszcza przeglądarki.
 - Panele szczegółów (pojazd, parking, utrudnienie, sport, wydarzenie, strefa, stacja metra) wzajemnie się wykluczają.
 

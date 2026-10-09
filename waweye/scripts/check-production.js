@@ -93,7 +93,7 @@ function evaluate({ vehicles, parking, incidents, fleet, routes }, now = Date.no
     if (!problem && age === null) problem = 'brak daty odświeżenia';
     else if (!problem && age > ROUTES_MAX_AGE_MS) problem = `trasy nieodświeżane od ${Math.round(age / 3600e3)} h (${b.refreshed}) – sprawdź cron /api/odswiez-trasy w Vercel`;
     else if (!problem && b.valid && b.valid.to < today) problem = `rozkład w magazynie ważny tylko do ${b.valid.to}`;
-    add('Trasy linii (/api/trasa?meta=1)', problem, !problem && `${b.lines} linii, rozkład ${b.valid.from} – ${b.valid.to}, odświeżone ${Math.round(age / 3600e3)} h temu`);
+    add('Trasy linii (/api/trasa?meta=1)', problem, !problem && `${b.lines} linii, rozkład ${b.valid.from} – ${b.valid.to}, odświeżone ${Math.round(age / 3600e3)} h temu${b.days ? `, kursy na godziny: ${b.days.includes(today) ? b.days.length + ' dni' : 'brak na dziś (timelapse bez rozkładu)'}` : ''}`);
   }
   return { ok: rows.every((r) => r.ok), rows };
 }

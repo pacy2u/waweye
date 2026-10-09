@@ -33,3 +33,41 @@ test('positionAt moves along the route at the average speed, waits at the termin
   near(positionAt([north], p, 'bus', 10 * end), [52.21, 21.0]); // no way back: stays at the terminus
   near(positionAt(variants, p, 'bus', 6 * 3600), positionAt(variants, p, 'bus', 6 * 3600)); // finite, deterministic
 });
+
+// ---- With the timetable: departures per hour ----
+const { slots, simulate, positionOf, MIN_LAYOVER_S, MAX_WAIT_S } = require('../public/prognoza');
+const ride = length(north.shape) / SPEED.bus; // ~200 s
+
+test('slots spreads the departures of each hour evenly, within the horizon', () => {
+  assert.deepEqual(slots([{ at: 0, n: 2 }], 99999), [900, 2700]);
+  assert.deepEqual(slots([{ at: -1800, n: 2 }, { at: 1800, n: 4 }], 4000), [900, 2250, 3150]);
+});
+test('simulate: a vehicle takes the next departure at the terminus, extra trips start new vehicles, idle ones leave', () => {
+  // One bus going north, 100 s from the end; departures south at 600 s (it takes it) and 650 s (a new vehicle).
+  const live = [{ key: 'v1', plan: { variant: north, s: length(north.shape) - 100 * SPEED.bus } }];
+  const ents = simulate(variants, 'bus', live, [[], [600, 650]]);
+  assert.equal(ents.length, 2);
+  const [v1, extra] = ents;
+  assert.equal(v1.live, true); assert.equal(extra.live, false); assert.equal(extra.start, 650);
+  near(positionOf(v1, 50, 'bus'), [52.21 - (50 * SPEED.bus) / 111195, 21.0]);
+  near(positionOf(v1, 300, 'bus'), [52.21, 21.0]); // waits at the terminus
+  near(positionOf(v1, 700, 'bus'), [52.21 - (100 * SPEED.bus) / 111195, 21.0]); // on the way back
+  assert.equal(positionOf(extra, 600, 'bus'), null, 'not out yet');
+  near(positionOf(extra, 650, 'bus'), [52.21, 21.0]);
+  // Both reach the south end and nobody needs them: they wait, then go to the depot.
+  const back = 600 + ride;
+  near(positionOf(v1, back + 60, 'bus'), [52.2, 21.0]);
+  assert.equal(positionOf(v1, back + MAX_WAIT_S + 1, 'bus'), null);
+  assert.equal(v1.end, back + MAX_WAIT_S);
+});
+test('simulate: no departures at all = everyone goes to the depot; a waiting vehicle leaves on its departure', () => {
+  const live = [{ key: 'v1', plan: { variant: north, s: 0 } }, { key: 'v2', plan: { variant: south, s: 500 } }];
+  let [a, b] = simulate(variants, 'bus', live, [[], []]);
+  assert.ok(Number.isFinite(a.end) && Number.isFinite(b.end));
+  assert.ok(b.end <= (length(south.shape) - 500) / SPEED.bus + MAX_WAIT_S + 1);
+  // v1 stands at the start of the northbound variant: it waits for the departure at 900 s instead of leaving now.
+  [a] = simulate(variants, 'bus', live.slice(0, 1), [[900], []]);
+  near(positionOf(a, 600, 'bus'), [52.2, 21.0]);
+  near(positionOf(a, 1000, 'bus'), [52.2 + (100 * SPEED.bus) / 111195, 21.0]);
+  assert.ok(MIN_LAYOVER_S > 0);
+});
