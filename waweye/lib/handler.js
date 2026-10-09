@@ -242,7 +242,8 @@ async function routeMeta(env, fetchImpl, fresh = false) {
   return value;
 }
 
-// GET /api/trasa?linia=175 -> the line's variants with the timetable's validity; ?meta=1 -> validity and refresh time.
+// GET /api/trasa?linia=175 -> the line's variants with the timetable's validity; ?meta=1 -> validity and refresh time;
+// ?dzien=2026-10-09 -> departures per hour of every line on that day (scripts/trasy.js departures), for the timelapse.
 // 404 when the store has no such line (or there is no Worker): the app then falls back to public/data/trasy/<line>.json.
 async function routeHandler(req, res, { env = process.env, fetchImpl = fetch } = {}) {
   if (rejectUnlessRead(req, res)) return;
@@ -254,7 +255,15 @@ async function routeHandler(req, res, { env = process.env, fetchImpl = fetch } =
     if (url.searchParams.get('meta') === '1') {
       const m = await routeMeta(env, fetchImpl, true);
       if (!m) return send(404, { error: 'magazyn tras jest pusty' }, 'no-store');
-      return send(200, { source: m.source, valid: m.valid, refreshed: m.refreshed, lines: Object.keys(m.lines || {}).length }, 'public, s-maxage=60');
+      return send(200, { source: m.source, valid: m.valid, refreshed: m.refreshed, lines: Object.keys(m.lines || {}).length, days: Object.keys(m.dayHashes || {}) }, 'public, s-maxage=60');
+    }
+    const day = url.searchParams.get('dzien');
+    if (day !== null) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return send(400, { error: 'podaj dzień, np. ?dzien=2026-10-09' }, 'no-store');
+      const r = await workerFetch(env, fetchImpl, 'resource=trasy&dzien=' + day);
+      if (r.status === 404) return send(404, { error: 'brak rozkładu na ten dzień' }, 'public, s-maxage=300');
+      if (!r.ok) throw new Error(`magazyn tras: HTTP ${r.status}`);
+      return send(200, { date: day, lines: await r.json() }, 'public, s-maxage=3600, stale-while-revalidate=86400');
     }
     const line = url.searchParams.get('linia') || '';
     if (!ROUTE_LINE_RE.test(line)) return send(400, { error: 'podaj linię, np. ?linia=175' }, 'no-store');
@@ -299,7 +308,7 @@ async function routesRefreshHandler(req, res, { env = process.env, fetchImpl = f
       if (!r.ok) throw new Error(`GTFS niedostępny bezpośrednio (${e.message}) ani przez Workera (HTTP ${r.status})`);
       buf = Buffer.from(await r.arrayBuffer());
     }
-    const { lines, valid, problems } = await (build || trasy.fromZip)(buf);
+    const { lines, valid, problems, days = {} } = await (build || trasy.fromZip)(buf);
     if (problems.length) return send(502, { error: 'dane nie przeszły kontroli, magazyn bez zmian', problems: problems.slice(0, 20), via });
     const hashes = {}, changed = [];
     for (const L of lines) { hashes[L.line] = trasy.lineHash(L); if (!old || !old.hashes || old.hashes[L.line] !== hashes[L.line]) changed.push(L); }
@@ -307,6 +316,7 @@ async function routesRefreshHandler(req, res, { env = process.env, fetchImpl = f
     const post = async (payload) => {
       const r = await workerFetch(env, fetchImpl, 'resource=trasy', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       if (!r.ok) throw new Error(`zapis w magazynie tras: HTTP ${r.status} ${(await r.text()).slice(0, 120)}`);
+      return r.json().catch(() => ({}));
     };
     const batches = [];
     for (let i = 0; i < changed.length; i += 10) batches.push(changed.slice(i, i + 10)); // ~110 KB per request: little CPU for the Worker
@@ -314,11 +324,23 @@ async function routesRefreshHandler(req, res, { env = process.env, fetchImpl = f
       await Promise.all(batches.slice(i, i + 4).map((b) => post({ put: Object.fromEntries(b.map((L) => [L.line, JSON.stringify(trasy.lineBody(L))])) })));
     }
     for (let i = 0; i < removed.length; i += 100) await post({ del: removed.slice(i, i + 100) });
+    // Departures per hour: one key per day, written when it changed; days gone from the timetable are deleted.
+    // A Worker deployed before this feature answers without "days" and stores nothing: then no day counts as written,
+    // so the next refresh tries again.
+    let dayHashes = {}, daysNote = null;
+    const changedDays = [];
+    for (const [d, day] of Object.entries(days)) { dayHashes[d] = trasy.dayHash(day); if (!old || !old.dayHashes || old.dayHashes[d] !== dayHashes[d]) changedDays.push(d); }
+    for (let i = 0; i < changedDays.length; i += 3) {
+      const r = await post({ days: Object.fromEntries(changedDays.slice(i, i + 3).map((d) => [d, JSON.stringify(days[d])])) });
+      if (r.days === undefined) { dayHashes = {}; daysNote = 'Worker nie obsługuje dni (wdróż nowszy kod Workera)'; break; }
+    }
+    const removedDays = !daysNote && old && old.dayHashes ? Object.keys(old.dayHashes).filter((d) => !dayHashes[d]) : [];
+    if (removedDays.length) await post({ delDays: removedDays.slice(0, 100) });
     const refreshed = new Date(now()).toISOString();
     // The meta key goes last: until it is written, readers keep seeing the previous refresh as complete.
-    await post({ meta: JSON.stringify({ source: 'GTFS ZTM Warszawa (gtfs.ztm.waw.pl)', valid, refreshed, lines: Object.fromEntries(lines.map((L) => [L.line, L.type])), hashes }) });
+    await post({ meta: JSON.stringify({ source: 'GTFS ZTM Warszawa (gtfs.ztm.waw.pl)', valid, refreshed, lines: Object.fromEntries(lines.map((L) => [L.line, L.type])), hashes, dayHashes }) });
     routeMetaCache = { at: 0, value: undefined };
-    return send(200, { refreshed, valid, lines: lines.length, changed: changed.length, deleted: removed.length, via, ms: now() - t0 });
+    return send(200, { refreshed, valid, lines: lines.length, changed: changed.length, deleted: removed.length, days: Object.keys(days).length, changedDays: daysNote ? 0 : changedDays.length, ...(daysNote && { daysNote }), via, ms: now() - t0 });
   } catch (e) {
     return send(502, { error: e.message });
   }

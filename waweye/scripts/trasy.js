@@ -16,6 +16,8 @@ const MIN_SHARE = 0.3; // a variant with at least this share of the main one's t
 const MAX_VARIANTS = 3; // per direction
 const AREA = { lat: [51.9, 52.6], lon: [20.5, 21.6] }; // Warsaw and the suburbs ZTM lines reach
 const MIN_LINES = 250, MUST_HAVE = { 175: 'bus', 17: 'tram', N25: 'bus' };
+const HOURS = 30; // GTFS times of a service day go past 24:00 (night trips), up to ~29:59
+const MIN_DAYS = 3, MIN_DEPARTURES = 5000; // per day in the real timetable (~20 thousand)
 
 // ---- Pure part (unit-tested) ----
 
@@ -89,6 +91,68 @@ function buildLines({ routes, trips, stopTimes, shapes, stops }) {
   return out.sort((a, b) => a.line.localeCompare(b.line, 'pl', { numeric: true }));
 }
 
+// ---- Departures per hour (the timelapse in the app: how many vehicles a line runs at a given time) ----
+
+// Dates 'YYYY-MM-DD' a service runs on, from calendar.txt (weekdays within a range) and calendar_dates.txt (1 = added,
+// 2 = removed). Returns Map service_id -> Set of dates.
+function serviceDates(calendar, calendarDates = []) {
+  const iso = (d) => `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`;
+  const DAY_COL = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  const out = new Map();
+  const add = (sid, date) => { if (!out.has(sid)) out.set(sid, new Set()); out.get(sid).add(date); };
+  for (const c of calendar) {
+    if (!/^\d{8}$/.test(c.start_date || '') || !/^\d{8}$/.test(c.end_date || '')) continue;
+    const end = Date.parse(iso(c.end_date) + 'T12:00:00Z');
+    for (let t = Date.parse(iso(c.start_date) + 'T12:00:00Z'), n = 0; t <= end && n < 400; t += 864e5, n++) {
+      if (c[DAY_COL[new Date(t).getUTCDay()]] === '1') add(c.service_id, new Date(t).toISOString().slice(0, 10));
+    }
+  }
+  for (const d of calendarDates) {
+    if (!/^\d{8}$/.test(d.date || '')) continue;
+    if (d.exception_type === '1') add(d.service_id, iso(d.date));
+    else if (d.exception_type === '2' && out.has(d.service_id)) out.get(d.service_id).delete(iso(d.date));
+  }
+  return out;
+}
+
+// Trips leaving the first stop in each hour of the service day, per date, line and direction:
+// { 'YYYY-MM-DD': { '175': [[...dir 0], [...dir 1]] } }; index = hour (0–29), trailing zeros dropped.
+// firstHour: Map trip_id -> hour of its first departure.
+function departures({ routes, trips, calendar, calendarDates, firstHour }) {
+  const routeOf = new Map(routes.filter((r) => TYPES[r.route_type]).map((r) => [r.route_id, r]));
+  const dates = serviceDates(calendar, calendarDates);
+  const days = {};
+  for (const t of trips) {
+    const r = routeOf.get(t.route_id), h = firstHour.get(t.trip_id), on = dates.get(t.service_id);
+    if (!r || h == null || h >= HOURS || !on) continue;
+    const dir = +(t.direction_id || 0) ? 1 : 0;
+    for (const date of on) {
+      const day = days[date] || (days[date] = {});
+      const L = day[r.route_short_name] || (day[r.route_short_name] = [[], []]);
+      const a = L[dir];
+      while (a.length <= h) a.push(0);
+      a[h]++;
+    }
+  }
+  return Object.fromEntries(Object.keys(days).sort().map((d) => [d, days[d]]));
+}
+const dayTotal = (day) => Object.values(day).reduce((n, L) => n + L[0].reduce((a, b) => a + b, 0) + L[1].reduce((a, b) => a + b, 0), 0);
+const dayHash = (day) => require('crypto').createHash('sha1').update(JSON.stringify(day)).digest('hex').slice(0, 16);
+
+function checkDays(days) {
+  const problems = [], dates = Object.keys(days);
+  if (dates.length < MIN_DAYS) problems.push(`rozkład godzinowy tylko na ${dates.length} dni (oczekiwane co najmniej ${MIN_DAYS})`);
+  for (const d of dates) {
+    const n = dayTotal(days[d]);
+    if (n < MIN_DEPARTURES) problems.push(`${d}: tylko ${n} kursów (oczekiwane co najmniej ${MIN_DEPARTURES})`);
+    for (const line of Object.keys(MUST_HAVE)) if (!days[d][line]) problems.push(`${d}: brak kursów linii ${line}`);
+    // Night lines run at night: N25 has departures after 23:00 or before 5:00.
+    const N = days[d].N25;
+    if (N && !N.some((a) => a.some((x, h) => x && (h >= 23 || h < 5)))) problems.push(`${d}: linia N25 bez kursów nocą`);
+  }
+  return problems;
+}
+
 // Problems that make the data unusable (empty list = fine).
 function checkLines(lines) {
   const problems = [];
@@ -132,9 +196,10 @@ async function fromZip(buf) {
   const data = await load(require('../lib/zip').readZip(buf));
   const valid = validity(data.calendar);
   const lines = buildLines(data);
-  const problems = checkLines(lines);
+  const days = departures(data);
+  const problems = [...checkLines(lines), ...checkDays(days)];
   if (!valid) problems.push('brak dat w calendar.txt');
-  return { lines, valid, problems, trips: data.trips.length };
+  return { lines, valid, problems, trips: data.trips.length, days };
 }
 
 // ---- File part ----
@@ -172,10 +237,11 @@ async function load(src) {
   const g = gtfsFiles(src), f = g.open;
   const parts = g.names.filter((n) => /^stop_times(_part\d+)?\.txt$/.test(n)).sort().map(f);
   if (!parts.length) throw new Error('brak stop_times.txt ani stop_times_part*.txt');
-  const routes = [], trips = [], calendar = [];
+  const routes = [], trips = [], calendar = [], calendarDates = [];
   await readCsv(f('routes.txt'), (r) => routes.push(r));
-  await readCsv(f('trips.txt'), (t) => trips.push({ route_id: t.route_id, trip_id: t.trip_id, direction_id: t.direction_id, shape_id: t.shape_id, trip_headsign: t.trip_headsign }));
+  await readCsv(f('trips.txt'), (t) => trips.push({ route_id: t.route_id, service_id: t.service_id, trip_id: t.trip_id, direction_id: t.direction_id, shape_id: t.shape_id, trip_headsign: t.trip_headsign }));
   await readCsv(f('calendar.txt'), (c) => calendar.push(c));
+  if (g.names.includes('calendar_dates.txt')) await readCsv(f('calendar_dates.txt'), (c) => calendarDates.push(c));
   // Only the trips and shapes of the chosen variants are kept from the big files (stop_times is ~380 MB).
   const needTrips = new Set(), needShapes = new Set();
   const routeOf = new Map(routes.map((r) => [r.route_id, r]));
@@ -196,7 +262,14 @@ async function load(src) {
   }
   for (const [line, m] of counts) for (const v of pickVariants(m)) { needShapes.add(v.shape); needTrips.add(keyOf.get(`${line}|${v.dir}|${v.shape}`)); }
   const stopTimes = new Map(), shapes = new Map(), stops = new Map();
+  // First departure of every bus and tram trip (the row with the lowest stop_sequence), packed as seq * 64 + hour.
+  const busTram = new Set(trips.filter((t) => { const r = routeOf.get(t.route_id); return r && TYPES[r.route_type]; }).map((t) => t.trip_id));
+  const first = new Map();
   await readCsv(parts, (s) => {
+    if (busTram.has(s.trip_id)) {
+      const seq = +s.stop_sequence, h = parseInt(s.departure_time || s.arrival_time, 10), old = first.get(s.trip_id);
+      if (Number.isFinite(seq) && h >= 0 && (old === undefined || seq < Math.floor(old / 64))) first.set(s.trip_id, seq * 64 + Math.min(h, 63));
+    }
     if (!needTrips.has(s.trip_id)) return;
     if (!stopTimes.has(s.trip_id)) stopTimes.set(s.trip_id, []);
     stopTimes.get(s.trip_id).push({ stop_id: s.stop_id, seq: +s.stop_sequence });
@@ -207,7 +280,8 @@ async function load(src) {
     shapes.get(s.shape_id).push([+s.shape_pt_sequence, +s.shape_pt_lat, +s.shape_pt_lon]);
   });
   await readCsv(f('stops.txt'), (s) => stops.set(s.stop_id, { name: s.stop_name, lat: +s.stop_lat, lon: +s.stop_lon }));
-  return { routes, trips, stopTimes, shapes, stops, calendar };
+  const firstHour = new Map([...first].map(([k, v]) => [k, v % 64]));
+  return { routes, trips, stopTimes, shapes, stops, calendar, calendarDates, firstHour };
 }
 
 async function main(dir, log, outDir = OUT_DIR) {
@@ -219,6 +293,9 @@ async function main(dir, log, outDir = OUT_DIR) {
   const problems = checkLines(lines);
   if (!valid) problems.push('brak dat w calendar.txt');
   const nVar = lines.reduce((s, L) => s + L.variants.length, 0);
+  const days = departures(data);
+  problems.push(...checkDays(days));
+  log(`Kursy z pętli na godziny: ${Object.keys(days).length} dni (${Object.entries(days).map(([d, x]) => `${d}: ${dayTotal(x)}`).join(', ')}); w aplikacji z magazynu tras (/api/trasa?dzien=), bez plików.`);
   log(`Linii: ${lines.length} (autobusy ${lines.filter((L) => L.type === 'bus').length}, tramwaje ${lines.filter((L) => L.type === 'tram').length}), wariantów tras: ${nVar}.`);
   if (problems.length) throw new Error('dane nie przeszły kontroli, pliki nie zostały zmienione: ' + problems.slice(0, 20).join('; ') + (problems.length > 20 ? ` (i ${problems.length - 20} więcej)` : ''));
   fs.rmSync(outDir, { recursive: true, force: true });
@@ -241,4 +318,4 @@ if (require.main === module) {
   main(dir, (s) => console.log(s)).then(() => process.exit(0), (e) => { console.log(`**Błąd tras:** ${e.message}\n`); process.exit(1); });
 }
 
-module.exports = { splitCsv, pickVariants, buildLines, checkLines, validity, readCsv, load, main, fromZip, lineBody, lineHash, TYPES };
+module.exports = { splitCsv, pickVariants, buildLines, checkLines, validity, readCsv, load, main, fromZip, lineBody, lineHash, TYPES, serviceDates, departures, checkDays, dayHash, dayTotal };

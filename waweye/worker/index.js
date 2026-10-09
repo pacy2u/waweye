@@ -66,32 +66,41 @@ async function geocodes(request, env) {
 
 // Routes of the lines (lib/handler.js routesRefreshHandler writes them once a day from the ZTM GTFS, routeHandler reads
 // them for the app), in the same KV namespace as the geocodes under their own prefix. One key per line plus a meta key
-// (timetable validity, refresh time, fingerprints of the lines). GET &linia=175 | GET &meta=1 | POST {put, del, meta}.
+// (timetable validity, refresh time, fingerprints of the lines), and one key per day with the departures per hour of
+// every line (the timelapse). GET &linia=175 | GET &dzien=2026-10-09 | GET &meta=1 | POST {put, del, days, delDays, meta}.
 const ROUTE_PREFIX = 'trasy:v1:';
 const ROUTE_MAX_PUT = 20; // per request, so parsing stays within the free plan's CPU time
 const ROUTE_MAX_VALUE = 300000; // characters; a line is ~11 KB, the biggest ~60 KB
 const goodLine = (l) => typeof l === 'string' && /^[A-Za-z0-9-]{1,10}$/.test(l);
+const goodDay = (d) => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d);
+const DAY_MAX_PUT = 3; // a day is ~50 KB
 
 async function routes(request, env, params) {
   if (!env.GEOKODY) return json({ error: 'worker has no GEOKODY binding' }, 501);
   if (request.method === 'GET') {
-    const key = params.get('meta') === '1' ? 'meta' : params.get('linia');
-    if (key !== 'meta' && !goodLine(key)) return json({ error: 'bad linia' }, 400);
-    const v = await env.GEOKODY.get(ROUTE_PREFIX + (key === 'meta' ? 'meta' : 'line:' + key));
+    const day = params.get('dzien');
+    if (day !== null && !goodDay(day)) return json({ error: 'bad dzien' }, 400);
+    const key = params.get('meta') === '1' ? 'meta' : day !== null ? 'day:' + day : params.get('linia');
+    if (key !== 'meta' && day === null && !goodLine(key)) return json({ error: 'bad linia' }, 400);
+    const v = await env.GEOKODY.get(ROUTE_PREFIX + (key === 'meta' || day !== null ? key : 'line:' + key));
     return v === null ? json({ error: 'not found' }, 404) : new Response(v, { status: 200, headers: { 'Content-Type': 'application/json' } });
   }
   if (request.method !== 'POST') return json({ error: 'use GET or POST' }, 405);
   let body;
   try { body = await request.json(); } catch { return json({ error: 'bad json' }, 400); }
   const put = Object.entries((body && body.put) || {}), del = (body && body.del) || [];
+  const days = Object.entries((body && body.days) || {}), delDays = (body && body.delDays) || [];
   const meta = body && body.meta;
   if (put.length > ROUTE_MAX_PUT || !put.every(([k, v]) => goodLine(k) && typeof v === 'string' && v.length <= ROUTE_MAX_VALUE)
-    || !Array.isArray(del) || del.length > 100 || !del.every(goodLine) || (meta !== undefined && (typeof meta !== 'string' || meta.length > ROUTE_MAX_VALUE))) {
-    return json({ error: `put: up to ${ROUTE_MAX_PUT} lines as JSON strings, del: up to 100 lines, meta: a JSON string` }, 400);
+    || !Array.isArray(del) || del.length > 100 || !del.every(goodLine) || (meta !== undefined && (typeof meta !== 'string' || meta.length > ROUTE_MAX_VALUE))
+    || days.length > DAY_MAX_PUT || !days.every(([k, v]) => goodDay(k) && typeof v === 'string' && v.length <= ROUTE_MAX_VALUE)
+    || !Array.isArray(delDays) || delDays.length > 100 || !delDays.every(goodDay)) {
+    return json({ error: `put: up to ${ROUTE_MAX_PUT} lines as JSON strings, del: up to 100 lines, days: up to ${DAY_MAX_PUT} days as JSON strings, delDays: up to 100 days, meta: a JSON string` }, 400);
   }
-  await Promise.all([...put.map(([k, v]) => env.GEOKODY.put(ROUTE_PREFIX + 'line:' + k, v)), ...del.map((k) => env.GEOKODY.delete(ROUTE_PREFIX + 'line:' + k))]);
+  await Promise.all([...put.map(([k, v]) => env.GEOKODY.put(ROUTE_PREFIX + 'line:' + k, v)), ...del.map((k) => env.GEOKODY.delete(ROUTE_PREFIX + 'line:' + k)),
+    ...days.map(([k, v]) => env.GEOKODY.put(ROUTE_PREFIX + 'day:' + k, v)), ...delDays.map((k) => env.GEOKODY.delete(ROUTE_PREFIX + 'day:' + k))]);
   if (meta !== undefined) await env.GEOKODY.put(ROUTE_PREFIX + 'meta', meta);
-  return json({ saved: put.length, deleted: del.length, meta: meta !== undefined }, 200);
+  return json({ saved: put.length, deleted: del.length, days: days.length, deletedDays: delDays.length, meta: meta !== undefined }, 200);
 }
 
 async function gtfs(request, fetchImpl, probe) {

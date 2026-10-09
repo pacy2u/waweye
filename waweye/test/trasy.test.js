@@ -232,3 +232,69 @@ test('refresh falls back to the Worker when the direct download fails; /api/tras
   assert.equal(r.status, 200, JSON.stringify(r.body)); assert.match(r.body.via, /przez Workera \(bezpośrednio: connect timeout\)/);
   assert.equal((await call(routeHandler, '/api/trasa?linia=175', { env: {}, fetchImpl: viaWorker })).status, 404);
 });
+
+// ---- Departures per hour (timelapse) ----
+const { serviceDates, departures, checkDays, dayHash } = require('../scripts/trasy');
+
+test('serviceDates: weekdays within the range, plus and minus calendar_dates', () => {
+  const cal = [{ service_id: 'W', monday: '1', tuesday: '0', wednesday: '0', thursday: '0', friday: '0', saturday: '1', sunday: '0', start_date: '20261005', end_date: '20261012' }];
+  const d = serviceDates(cal, [{ service_id: 'W', date: '20261010', exception_type: '2' }, { service_id: 'X', date: '20261011', exception_type: '1' }]);
+  assert.deepEqual([...d.get('W')], ['2026-10-05', '2026-10-12']);
+  assert.deepEqual([...d.get('X')], ['2026-10-11']);
+});
+test('departures counts the trips leaving the first stop in each hour, per date, line and direction', async () => {
+  const r = await fromZip(MINI);
+  assert.deepEqual(Object.keys(r.days), ['2026-10-05', '2026-10-12'], 'the mini timetable runs on Mondays');
+  assert.deepEqual(r.days['2026-10-05']['175'], [[0, 0, 0, 0, 0, 0, 1], [0, 0, 0, 0, 0, 0, 0, 1]], 'a0 at 6:00 north, b0 at 7:00 south; a1 has no stop times');
+  assert.deepEqual(r.days['2026-10-05']['17'], [[0, 0, 0, 0, 0, 0, 0, 0, 1], []]);
+  assert.ok(!r.days['2026-10-05'].S1, 'rail left out');
+  assert.ok(r.problems.some((p) => /rozkład godzinowy tylko na 2 dni/.test(p)));
+  // Night trips of a service day go past 24:00.
+  const days = departures({ routes: [{ route_id: 'n', route_short_name: 'N25', route_type: '3' }], trips: [{ route_id: 'n', service_id: 'S', trip_id: 'x', direction_id: '1' }],
+    calendar: [{ service_id: 'S', monday: '1', start_date: '20261005', end_date: '20261005' }], firstHour: new Map([['x', 25]]) });
+  assert.deepEqual(days['2026-10-05'].N25[1].length, 26); assert.equal(days['2026-10-05'].N25[1][25], 1);
+});
+test('checkDays wants enough days and trips, the must-have lines and N25 at night', () => {
+  const day = (n25) => ({ 175: [[5000], []], 17: [[1], []], N25: n25 });
+  const ok = { '2026-10-05': day([[0, 0, 0, 1], []]), '2026-10-06': day([[0, 1], []]), '2026-10-07': day([[], Array(24).fill(0).concat([1])]) };
+  assert.deepEqual(checkDays(ok), []);
+  assert.ok(checkDays({ ...ok, '2026-10-08': day([[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], []]) }).some((p) => /N25 bez kursów nocą/.test(p)));
+  assert.ok(checkDays({ '2026-10-05': { 175: [[3], []] } }).some((p) => /tylko 3 kursów/.test(p)));
+  assert.equal(dayHash(ok['2026-10-05']), dayHash(JSON.parse(JSON.stringify(ok['2026-10-05']))));
+});
+test('worker stores the days; refresh writes changed days only and deletes the old ones; /api/trasa?dzien= reads them', async () => {
+  const { routesRefreshHandler, routeHandler, resetRouteState } = require('../lib/handler');
+  const w = await fakeWorker();
+  const req = (q, init = {}) => new Request('https://w.dev/?resource=trasy' + q, { ...init, headers: { 'x-proxy-secret': 's' } });
+  assert.equal((await w.handle(req('&dzien=2026-1-5'), w.env)).status, 400);
+  assert.equal((await w.handle(req('', { method: 'POST', body: JSON.stringify({ days: { a: '{}' } }) }), w.env)).status, 400);
+  assert.equal((await w.handle(req('', { method: 'POST', body: JSON.stringify({ days: Object.fromEntries(['01', '02', '03', '04'].map((d) => ['2026-10-' + d, '{}'])) }) }), w.env)).status, 400, 'at most 3 days per request');
+  const built = await fromZip(MINI);
+  const days = { '2026-10-05': { 175: [[0, 1], [2]] }, '2026-10-06': { 175: [[3], []] }, '2026-10-07': { 175: [[], [4]] }, '2026-10-08': { 175: [[5], []] } };
+  let t = Date.parse('2026-10-06T02:00:00Z');
+  const now = () => t;
+  resetRouteState();
+  let r = await call(routesRefreshHandler, '/api/odswiez-trasy', { env: ENV, fetchImpl: w.fetchImpl, now, build: async () => ({ ...built, days, problems: [] }) });
+  assert.equal(r.status, 200, JSON.stringify(r.body)); assert.equal(r.body.days, 4); assert.equal(r.body.changedDays, 4);
+  assert.ok(w.writes.includes('trasy:v1:day:2026-10-08')); assert.equal(w.writes.at(-1), 'trasy:v1:meta');
+  const day = await call(routeHandler, '/api/trasa?dzien=2026-10-06', { env: ENV, fetchImpl: w.fetchImpl });
+  assert.equal(day.status, 200); assert.deepEqual(day.body, { date: '2026-10-06', lines: { 175: [[3], []] } }); assert.match(day.cache, /s-maxage=3600/);
+  assert.equal((await call(routeHandler, '/api/trasa?dzien=2026-11-01', { env: ENV, fetchImpl: w.fetchImpl })).status, 404);
+  assert.equal((await call(routeHandler, '/api/trasa?dzien=jutro', { env: ENV, fetchImpl: w.fetchImpl })).status, 400);
+  assert.deepEqual((await call(routeHandler, '/api/trasa?meta=1', { env: ENV, fetchImpl: w.fetchImpl })).body.days, Object.keys(days));
+  // Next day: the window moved by a day and one day changed.
+  t += 24 * 3600e3; resetRouteState(); w.writes.length = 0;
+  const next = { '2026-10-06': days['2026-10-06'], '2026-10-07': { 175: [[], [9]] }, '2026-10-08': days['2026-10-08'], '2026-10-09': { 175: [[1], [1]] } };
+  r = await call(routesRefreshHandler, '/api/odswiez-trasy', { env: ENV, fetchImpl: w.fetchImpl, now, build: async () => ({ ...built, days: next, problems: [] }) });
+  assert.equal(r.body.changedDays, 2);
+  assert.deepEqual(w.writes.filter((k) => /day:/.test(k)).sort(), ['-trasy:v1:day:2026-10-05', 'trasy:v1:day:2026-10-07', 'trasy:v1:day:2026-10-09']);
+  // A Worker without day support (deployed before this feature) stores nothing: the meta records no days, so it retries.
+  const oldWorker = async (url, init = {}) => {
+    if (init.method === 'POST' && /"days"/.test(init.body)) return new Response(JSON.stringify({ saved: 0, deleted: 0, meta: false }), { status: 200 });
+    return w.fetchImpl(url, init);
+  };
+  t += 24 * 3600e3; resetRouteState();
+  r = await call(routesRefreshHandler, '/api/odswiez-trasy', { env: ENV, fetchImpl: oldWorker, now, build: async () => ({ ...built, days: { ...next, '2026-10-10': { 175: [[2], []] } }, problems: [] }) });
+  assert.equal(r.status, 200); assert.match(r.body.daysNote, /nie obsługuje dni/);
+  assert.deepEqual(JSON.parse(w.kv.get('trasy:v1:meta')).dayHashes, {});
+});

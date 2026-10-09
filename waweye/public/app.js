@@ -8,7 +8,7 @@
   const state = { range: 'today', events: false, eventItems: [], selectedEvent: null, eventMarkers: new Map(), eventError: null, eventMeta: null, sport: false, sportItems: [], selectedSport: null, sportMarkers: new Map(), sportError: null, sportMeta: null, inc: false, incidents: [], selectedInc: null, incLayers: new Map(), incError: null, park: false, parkings: [], selectedPark: null, parkMarkers: new Map(), parkError: null, types: { bus: true, tram: true }, query: '', words: [], selected: null, follow: false, markers: new Map(), lastOk: 0, data: [] };
 
   // Timelapse (section "Timelapse" below): predicted movement of the vehicles, up to 1000× faster than real time.
-  const lapse = { on: false, slider: 34, speed: 10, t0: 0, t: 0, last: 0, gen: 0, list: [], tracks: new Map(), markers: new Map(), lines: { done: 0, total: 0 }, dirty: false };
+  const lapse = { on: false, slider: 34, speed: 10, t0: 0, t: 0, last: 0, gen: 0, list: [], items: new Map(), sched: undefined, shown: 0, tracks: new Map(), markers: new Map(), lines: { done: 0, total: 0 }, dirty: false };
 
   const map = L.map('map', { zoomControl: false, preferCanvas: true, minZoom: 9, maxZoom: 19 }).setView([52.2297, 21.0122], 12);
   L.control.zoom({ position: 'topright' }).addTo(map);
@@ -1079,12 +1079,14 @@
   map.on('zoomend moveend', refresh);
 
   // ---- Timelapse ----
-  // The city publishes no timetable positions or trips, so the timelapse is a prediction (public/prognoza.js): from the
-  // latest data each vehicle keeps going along its line's route, in the direction it was moving, at an average speed, and
-  // turns back at the terminus. Time runs 0–1000× faster (the Tempo slider is logarithmic); the Czas slider moves through
-  // the next LAPSE_H; ↻ starts again from fresh data. Vehicles off their route or of a line without one stay put, faded.
-  // Closing the card (× or the chip) brings the map back to real time, and so does clicking a vehicle, which then gets
-  // selected with its route. A panel covering the card does not: the prediction goes on underneath.
+  // The city publishes no trips of the vehicles, so the timelapse is a prediction (public/prognoza.js): from the latest
+  // data each vehicle keeps going along its line's route, in the direction it was moving, at an average speed. With the
+  // timetable's departures per hour (/api/trasa?dzien=, from the ZTM GTFS) a line runs as many trips as planned: vehicles
+  // at a terminus take the next departure or go off to the depot, new ones start when more trips are planned (night
+  // lines at night); without it they turn back at the terminus forever. Time runs 0–1000× faster (the Tempo slider is
+  // logarithmic); the Czas slider moves through the next LAPSE_H; ↻ starts again from fresh data. Vehicles off their
+  // route or of a line without one stay put, faded. Closing the card (× or the chip) brings the map back to real time,
+  // and so does clicking a vehicle seen live, which then gets selected with its route. A panel covering the card does not.
   const LAPSE_H = 24 * 3600000;
   const lapseLayer = L.layerGroup();
   const sliderToSpeed = (x) => (x <= 0 ? 0 : Math.pow(10, (3 * (x - 1)) / 99)); // 0 → stopped, 1…100 → ×1…×1000
@@ -1094,27 +1096,78 @@
     : `+${Math.floor(ms / 3600000)} h ${String(Math.floor(ms / 60000) % 60).padStart(2, '0')} min`);
   try { const s = localStorage.getItem('waweye.lapseSlider'); if (s != null && +s >= 0 && +s <= 100) lapse.slider = Math.round(+s); } catch {}
 
+  // The hours of the horizon in Warsaw time (whole hours there are whole hours in UTC) with the timetable for them:
+  // { hours: [{ at: seconds from t0, date, h, prev }], days: { date: { line: [[dir 0], [dir 1]] } } }, or null when the
+  // timetable is not available (no route store, or the days are not in it): the prediction then runs without it.
+  const WAW_PARTS = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Warsaw', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' });
+  const dayBefore = (d) => new Date(Date.parse(d + 'T12:00:00Z') - 864e5).toISOString().slice(0, 10);
+  async function loadSchedule(t0) {
+    const hours = [];
+    for (let k = 0, h0 = Math.floor(t0 / 3600e3) * 3600e3; k <= LAPSE_H / 3600e3 + 1; k++) {
+      const p = Object.fromEntries(WAW_PARTS.formatToParts(h0 + k * 3600e3).map((x) => [x.type, x.value]));
+      const date = `${p.year}-${p.month}-${p.day}`;
+      hours.push({ at: (h0 + k * 3600e3 - t0) / 1000, date, h: +p.hour, prev: dayBefore(date) });
+    }
+    const need = [...new Set(hours.map((x) => x.date))], all = [...new Set([...need, ...hours.map((x) => x.prev)])];
+    const got = await Promise.all(all.map((d) => fetch('/api/trasa?dzien=' + d).then((r) => (r.ok ? r.json() : null), () => null)));
+    const days = Object.fromEntries(got.filter(Boolean).map((x) => [x.date, x.lines]));
+    return need.every((d) => days[d]) ? { hours, days } : null; // a day before the timetable starts counts as no night trips
+  }
+  // Departure times of a line in the horizon (seconds from t0) per direction, or null when the timetable has no such line.
+  function lineSlots(sched, line) {
+    if (!Object.values(sched.days).some((d) => d[line])) return null;
+    const n = (date, d, h) => { const L = sched.days[date] && sched.days[date][line]; return (L && L[d] && L[d][h]) || 0; };
+    return [0, 1].map((d) => wawPrognoza.slots(sched.hours.map((x) => ({ at: x.at, n: n(x.date, d, x.h) + n(x.prev, d, x.h + 24) })), LAPSE_H / 1000));
+  }
+
+  // What the map shows for a line: items { key, type, line, id (vehicle seen live, clickable), faded, at(seconds) -> [lat, lon] | null }.
+  function buildLine(line, data, live) {
+    for (const x of live) x.plan = data ? wawPrognoza.plan(data.variants, x.track) : null;
+    const type = (data && data.type) || (live[0] && live[0].v.type) || 'bus';
+    const slotsOf = data && lapse.sched ? lineSlots(lapse.sched, line) : null;
+    const add = (key, id, faded, at) => lapse.items.set(key, { key, type, line, id, faded, at });
+    // Without a route: stays where it was, faded (gone when the timetable says the line does not run then).
+    const running = (sec) => !slotsOf || slotsOf.some((a) => a.some((t) => Math.abs(t - sec) < 3600));
+    for (const x of live) if (!x.plan) add(x.v.id, x.v.id, true, (sec) => (running(sec) ? [x.v.lat, x.v.lon] : null));
+    const planned = live.filter((x) => x.plan);
+    if (slotsOf) {
+      for (const e of wawPrognoza.simulate(data.variants, type, planned.map((x) => ({ key: x.v.id, plan: x.plan })), slotsOf)) {
+        add(e.live ? e.key : `${line}:${e.key}`, e.live ? e.key : null, false, (sec) => wawPrognoza.positionOf(e, sec, type));
+      }
+    } else for (const x of planned) add(x.v.id, x.v.id, false, (sec) => wawPrognoza.positionAt(data.variants, x.plan, type, sec));
+    lapse.dirty = true;
+  }
+
   function lapseStart() {
     const gen = ++lapse.gen;
     lapse.t0 = state.lastOk || Date.now(); lapse.t = lapse.t0; lapse.last = 0;
-    // plan: undefined while the line's route loads, null when the vehicle cannot be predicted.
-    lapse.list = [...state.markers.values()].map((m) => ({ v: m.v, track: (lapse.tracks.get(m.v.id) || [[m.v.lat, m.v.lon]]).slice(), data: null, plan: undefined }));
+    lapse.list = [...state.markers.values()].map((m) => ({ v: m.v, track: (lapse.tracks.get(m.v.id) || [[m.v.lat, m.v.lon]]).slice(), plan: undefined }));
+    lapse.items.clear(); lapse.sched = undefined;
     lapseLayer.clearLayers(); lapse.markers.clear();
-    const lines = [...new Set(lapse.list.map((x) => x.v.line))];
-    lapse.lines = { done: 0, total: lines.length };
-    let i = 0;
-    const worker = async () => {
-      while (i < lines.length) {
-        const line = lines[i++];
-        let data = null;
-        try { data = await loadRoute(line); } catch {}
-        if (gen !== lapse.gen) return;
-        lapse.lines.done++;
-        for (const x of lapse.list) if (x.v.line === line) { x.data = data; x.plan = data ? wawPrognoza.plan(data.variants, x.track) : null; }
-        lapse.dirty = true;
-      }
-    };
-    for (let k = 0; k < 6; k++) worker(); // a few lines at a time
+    // Until a line is ready its vehicles stand where they were.
+    for (const x of lapse.list) lapse.items.set(x.v.id, { key: x.v.id, type: x.v.type, line: x.v.line, id: x.v.id, faded: false, at: () => [x.v.lat, x.v.lon] });
+    const liveLines = [...new Set(lapse.list.map((x) => x.v.line))];
+    lapse.lines = { done: 0, total: liveLines.length };
+    loadSchedule(lapse.t0).then((sched) => {
+      if (gen !== lapse.gen) return;
+      lapse.sched = sched;
+      // Lines with no vehicle out now but trips in the horizon (night lines in the evening, early-morning ones).
+      const more = sched ? [...new Set(Object.values(sched.days).flatMap((d) => Object.keys(d)))].filter((l) => !liveLines.includes(l) && lineSlots(sched, l).some((a) => a.length)) : [];
+      const lines = [...liveLines, ...more];
+      lapse.lines.total = lines.length;
+      let i = 0;
+      const worker = async () => {
+        while (i < lines.length) {
+          const line = lines[i++];
+          let data = null;
+          try { data = await loadRoute(line); } catch {}
+          if (gen !== lapse.gen) return;
+          lapse.lines.done++;
+          buildLine(line, data, lapse.list.filter((x) => x.v.line === line));
+        }
+      };
+      for (let k = 0; k < 6; k++) worker(); // a few lines at a time
+    });
     lapse.dirty = true; renderLapse();
   }
 
@@ -1125,23 +1178,26 @@
     if (t === lapse.t && !lapse.dirty) return;
     lapse.t = t; lapse.dirty = false;
     const sec = (t - lapse.t0) / 1000, r = radius();
-    for (const x of lapse.list) {
-      let mk = lapse.markers.get(x.v.id);
-      if (!visible(x.v)) { if (mk && lapseLayer.hasLayer(mk)) lapseLayer.removeLayer(mk); continue; }
-      const p = x.plan ? wawPrognoza.positionAt(x.data.variants, x.plan, x.v.type, sec) : [x.v.lat, x.v.lon];
-      const op = x.plan || x.plan === undefined ? 1 : 0.4;
+    let shown = 0;
+    for (const [key, mk] of lapse.markers) if (!lapse.items.has(key)) { lapseLayer.removeLayer(mk); lapse.markers.delete(key); } // replaced by the line's prediction
+    for (const it of lapse.items.values()) {
+      let mk = lapse.markers.get(it.key);
+      const p = visible(it) ? it.at(sec) : null;
+      if (!p) { if (mk && lapseLayer.hasLayer(mk)) lapseLayer.removeLayer(mk); continue; }
+      shown++;
+      const op = it.faded ? 0.4 : 1;
       if (!mk) {
-        lapse.markers.set(x.v.id, (mk = L.circleMarker(p, { renderer: canvas, radius: r, color: '#fff', weight: 1.5, fillColor: COLORS[x.v.type], fillOpacity: op, opacity: op })));
-        const id = x.v.id;
-        mk.on('click', (e) => { L.DomEvent.stopPropagation(e); setLapse(false); if (state.markers.has(id)) select(id); });
-      }
-      else {
+        lapse.markers.set(it.key, (mk = L.circleMarker(p, { renderer: canvas, radius: r, color: '#fff', weight: 1.5, fillColor: COLORS[it.type], fillOpacity: op, opacity: op, interactive: !!it.id })));
+        const id = it.id;
+        if (id) mk.on('click', (e) => { L.DomEvent.stopPropagation(e); setLapse(false); if (state.markers.has(id)) select(id); });
+      } else {
         mk.setLatLng(p);
         if (mk.options.radius !== r) mk.setRadius(r);
         if (mk.options.fillOpacity !== op) mk.setStyle({ fillOpacity: op, opacity: op });
       }
       if (!lapseLayer.hasLayer(mk)) lapseLayer.addLayer(mk);
     }
+    lapse.shown = shown;
     renderLapse();
   }
 
@@ -1152,8 +1208,12 @@
     $('lapse-pos-out').textContent = when; pos.setAttribute('aria-valuetext', when);
     $('lapse-time').textContent = d < 1000 ? 'teraz' : ahead(d);
     const lost = lapse.list.filter((x) => x.plan === null).length, { done, total } = lapse.lines;
-    $('lapse-note').textContent = done < total ? `Wczytywanie tras linii: ${done} z ${total}…`
-      : `Prognoza z danych z ${clock(lapse.t0)}: pojazdy jadą dalej po trasach swoich linii ze średnią prędkością (autobus ok. 20 km/h, tramwaj ok. 18 km/h), na pętli czekają 4 min. To przybliżenie, bez rozkładu jazdy.${lost ? ` ${lost} poj. bez trasy stoi w miejscu (wyblakłe).` : ''}`;
+    const speeds = 'ze średnią prędkością (autobus ok. 20 km/h, tramwaj ok. 18 km/h)';
+    $('lapse-note').textContent = lapse.sched === undefined ? 'Wczytywanie rozkładu…' : done < total ? `Wczytywanie tras linii: ${done} z ${total}…`
+      : `Na mapie ${lapse.shown} poj. Prognoza z danych z ${clock(lapse.t0)}: ` + (lapse.sched
+        ? `tyle kursów, ile rozkład ZTM przewiduje w każdej godzinie; pojazdy jadą po trasach ${speeds}, na pętli czekają na kolejny kurs albo zjeżdżają do zajezdni. Pozycje są przybliżone.`
+        : `pojazdy jadą dalej po trasach ${speeds}, na pętli czekają 4 min. Brak rozkładu godzinowego, więc liczba pojazdów się nie zmienia.`)
+      + (lost ? ` ${lost} poj. bez trasy stoi w miejscu (wyblakłe).` : '');
   }
 
   function setLapse(on) {
@@ -1166,7 +1226,7 @@
       const r = $('lapse').getBoundingClientRect(); // panels in the card's place (phones) close, so the card stays in sight
       for (const p of PANELS.map($)) if (!p.hidden && overlaps(p.getBoundingClientRect(), r)) p.querySelector('.p-ctrl button:last-child').click();
       lapseLayer.addTo(map); lapseStart();
-    } else { lapse.gen++; map.removeLayer(lapseLayer); lapseLayer.clearLayers(); lapse.markers.clear(); lapse.list = []; }
+    } else { lapse.gen++; map.removeLayer(lapseLayer); lapseLayer.clearLayers(); lapse.markers.clear(); lapse.list = []; lapse.items.clear(); }
     refresh(); liftLocate();
   }
   const overlaps = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
