@@ -138,6 +138,13 @@ Cel: wawEye wytrzymuje większy ruch i łączy komunikację z innymi danymi miej
 ### Pomysły na później (bez zobowiązań)
 Mapa cieplna punktualności, porównanie linii w czasie, „najstarszy tabor na mieście” i inne treści dla miłośników, tryb kiosku/tablicy dla przystanków lub biur.
 
+**Strefa SPPN bez łączenia się z serwerem miasta (odłożone 2026-10-09, właściciel: „być może wrócimy”).** Dziś kafelki strefy są pobierane na żywo z WMS miasta (`wms.um.warszawa.pl`), który odpowiada tylko z Polski: z VPN za granicą strefa znika bez komunikatu. Miasto nie publikuje granic jako pliku (GeoJSON/SHP/WFS); uchwały opisują je ulicami, a strefa rośnie etapami (np. wrzesień 2026 Praga-Południe i Wola, kolejny etap zapowiedziany na maj). Rozważone warianty:
+1. **(polecany)** `public/data/sppn.geojson` rysowany lokalnie jak SCT i metro. Skrypt `scripts/sppn.js` pobiera obraz strefy z WMS w EPSG:2178 (ok. 1 m/piksel, w kawałkach) i zamienia go na wielokąty. Musi być uruchamiany z Polski (komputer właściciela), po każdej uchwale lub co miesiąc z przypomnieniem; panel pokazuje „stan na”. Obrys jako zwykła przerywana linia, bez filtra `#sppn-edge`.
+2. Service worker z cache kafelków WMS (np. 30 dni, odświeżanie w tle): mała zmiana, ale pierwsze wyświetlenie dalej wymaga serwera miasta.
+3. Proxy z cache (Vercel/Worker): odpada, bo serwery poza Polską nie dostają odpowiedzi od WMS.
+
+Do czasu decyzji sposób wyświetlania strefy się nie zmienia. Niezależnie od wariantu można dodać komunikat w pasku stanu, gdy kafelki strefy się nie wczytują.
+
 ## 5. Mierniki sukcesu
 
 Decyzja: **bez analityki użytkowników**. Mierzymy wyłącznie technicznie – monitoring produkcji (`scripts/check-production.js`) i panel zużycia Vercel (liczba wywołań funkcji, transfer) jako przybliżenie ruchu, bez śledzenia osób.
