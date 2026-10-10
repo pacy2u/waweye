@@ -376,8 +376,8 @@ M.film({
       .concat(['400', '500', '600', '700'].map((w) => document.fonts.load(`${w} 40px ${UI}`, 'ąćęłńóśźż×'))));
   },
   images: {
-    mapD: 'assets/shots/desktop_viewport.png', mapM: 'assets/shots/mobile_viewport.png',
-    ...Object.fromEntries(FEAT.map((f) => [f.img, `assets/shots/m-${f.img}.png`])),
+    mapD: 'assets/shots/desktop_viewport.webp', mapM: 'assets/shots/mobile_viewport.webp',
+    ...Object.fromEntries(FEAT.map((f) => [f.img, `assets/shots/m-${f.img}.webp`])),
   },
   hits: HITS,
   draw(ctx, u, t, IMG) {

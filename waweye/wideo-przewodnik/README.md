@@ -20,8 +20,8 @@ Film powstał wtyczką Motion Reel (Claude Code): `film.js` to czysta funkcja cz
 cd waweye
 npm install                                           # playwright-core dla zrzuty.js
 NODE_USE_ENV_PROXY=1 node wideo-przewodnik/zrzuty.js   # → assets/shots/m-*.png, d-*.png (produkcja, telefon 390×844 @3x)
-# zrzuty w repo to WebP (assets/shots/*.webp); po nowych zrzutach przekonwertuj:
-#   for f in wideo-przewodnik/assets/shots/m-*.png; do convert "$f" -quality 92 -define webp:method=6 "${f%.png}.webp"; done
+# zrzuty w repo to WebP (assets/shots/*.webp, z nich czyta film.js); po nowych zrzutach przekonwertuj:
+#   for f in wideo-przewodnik/assets/shots/m-*.png wideo-przewodnik/assets/shots/*_viewport.png; do convert "$f" -quality 92 -define webp:method=6 "${f%.png}.webp"; done
 # skrypty wtyczki Motion Reel (<skill> = folder wtyczki), z folderu waweye/:
 uv run <skill>/scripts/beats.py wideo-przewodnik --synth --flavor house --mode major --tonic D --drop 2   # muzyka + beats.json
 node <skill>/scripts/render.mjs --film wideo-przewodnik --format 16x9 --video-only
@@ -35,7 +35,7 @@ Podgląd w przeglądarce: serwer HTTP w `wideo-przewodnik/` i `index.html` (spac
 - `lib/motion.js` – sprężyny w postaci zamkniętej, układ glifów, kadrowanie zrzutów (z wtyczki Motion Reel).
 - `zrzuty.js` – zrzuty każdej funkcji z produkcji; `beats.json` – zmierzona siatka rytmu.
 - `fonts/` – Archivo i JetBrains Mono (SIL Open Font License), te same co w `wideo-promocyjne/`.
-- `final_16x9.mp4`, `final_9x16.mp4` – gotowe filmy.
+- `final_16x9.mp4`, `final_9x16.mp4` – gotowe filmy (przekodowane do CRF 22 dla repozytorium, ok. 13 MB; render CRF 16 jest w `out/wideo-przewodnik/`); `plakat_16x9.png`, `plakat_9x16.png` – plakaty (klatka z 26,1 s).
 
 ## Źródła danych
 Pojazdy, tabor, parkingi, utrudnienia, zajęcia sportowe i wydarzenia: API m.st. Warszawy przez waweye.vercel.app. Mapa i metro: © współtwórcy OpenStreetMap (ODbL).
