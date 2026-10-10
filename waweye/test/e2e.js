@@ -764,6 +764,19 @@ function findChromium() {
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
       await page.screenshot({ path: `${SHOTS}/waweye-o-serwisie-${label}.png`, fullPage: true });
     });
+    await step(`${label}: "O serwisie": the guide film comes in the device's format (16:9 desktop, 9:16 phone)`, async () => {
+      const f = label === 'mobile' ? '9x16' : '16x9';
+      const g = await page.evaluate(() => {
+        const box = document.getElementById('przewodnik'), el = box.querySelector('video'), r = box.getBoundingClientRect();
+        return { src: el.getAttribute('src'), poster: el.getAttribute('poster'), preload: el.preload, tall: box.classList.contains('tall'), ratio: r.width / r.height };
+      });
+      assert.equal(g.src, `/media/waweye-przewodnik-${f}.mp4`);
+      assert.equal(g.poster, `/media/waweye-przewodnik-${f}-plakat.webp`);
+      assert.equal(g.preload, 'none');
+      assert.equal(g.tall, label === 'mobile');
+      assert.ok(Math.abs(g.ratio - (label === 'mobile' ? 9 / 16 : 16 / 9)) < 0.02, `box ratio ${g.ratio}`);
+      for (const u of [g.src, g.poster]) assert.equal((await page.request.get(new URL(u, page.url()).href)).status(), 200, u);
+    });
     await step(`${label}: "Mapa" goes back to the map`, async () => {
       await page.click('.top .back');
       await page.waitForFunction(() => window.__waweye && window.__waweye.state.markers.size > 50);
