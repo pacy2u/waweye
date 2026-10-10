@@ -164,10 +164,20 @@ const freeze = (page) => page.evaluate(() => { Object.defineProperty(document, '
     await page.evaluate(() => { const w = window.__waweye; const s = w.metro.stations.find((s) => s.name === 'Świętokrzyska'); w.map.setView([s.ll[0] - 0.01, s.ll[1]], 14, { animate: false }); w.openStation(s.name); });
     await settle(page, 2500);
   });
-  await take('m-lokalizacja', { ...phone, permissions: ['geolocation'], geolocation: { latitude: 52.2297, longitude: 21.0122, accuracy: 25 } }, async (page) => {
+  // Lokalizacja na pl. Zamkowym (mało znaczników wokół, więc kropka i okrąg dokładności są dobrze widoczne).
+  await take('m-lokalizacja', { ...phone, permissions: ['geolocation'], geolocation: { latitude: 52.2478, longitude: 21.0137, accuracy: 60 } }, async (page) => {
     await freeze(page);
     await page.click('#locate');
     await settle(page, 4000);
+  });
+  // „Śledź”: na telefonie panel zwija się do paska, a mapa jedzie za pojazdem.
+  await take('m-sledz', phone, async (page) => {
+    await freeze(page);
+    const v = (await pickBus(page, PKIN, '175')) || (await pickBus(page, PKIN));
+    await selectWithRoute(page, v, 15, 0);
+    await page.click('#follow');
+    await settle(page, 3000);
+    return v;
   });
   await browser.close();
 })().catch((e) => { console.error(e); process.exit(1); });
