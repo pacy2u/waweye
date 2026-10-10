@@ -1,0 +1,5 @@
+# Zrzuty PNG (ok. 50 MB) i dźwięk da się odtworzyć: zrzuty.js i beats.py (patrz docs/shotlist.md)
+assets/shots/*.png
+assets/logo/
+assets/fonts/
+audio/*.wav

@@ -1,0 +1,141 @@
+{
+ "url": "https://waweye.vercel.app",
+ "title": "wawEye – Warszawa na żywo",
+ "description": "",
+ "themeColor": [
+  "#242428"
+ ],
+ "text_colors": [
+  [
+   "#a7a7b1",
+   23
+  ],
+  [
+   "#ffffff",
+   9
+  ],
+  [
+   "#000000",
+   2
+  ],
+  [
+   "#333333",
+   2
+  ],
+  [
+   "#0078a8",
+   2
+  ],
+  [
+   "#242428",
+   2
+  ],
+  [
+   "#fc4c02",
+   1
+  ]
+ ],
+ "background_colors": [
+  [
+   "#e5e3df",
+   20
+  ],
+  [
+   "#34343a",
+   3
+  ],
+  [
+   "#ffffff",
+   0
+  ],
+  [
+   "#fc4c02",
+   0
+  ],
+  [
+   "#3ddc84",
+   0
+  ],
+  [
+   "#fdd8da",
+   0
+  ],
+  [
+   "#00a878",
+   0
+  ],
+  [
+   "#7b5cff",
+   0
+  ],
+  [
+   "#0b8a8f",
+   0
+  ]
+ ],
+ "font_families": [
+  [
+   "-apple-system",
+   23
+  ],
+  [
+   "Arial",
+   14
+  ],
+  [
+   "Lucida Console",
+   2
+  ],
+  [
+   "Georgia",
+   2
+  ]
+ ],
+ "font_weights": [
+  [
+   "-apple-system 400",
+   15
+  ],
+  [
+   "Arial 400",
+   11
+  ],
+  [
+   "-apple-system 700",
+   4
+  ],
+  [
+   "-apple-system 800",
+   3
+  ],
+  [
+   "Arial 600",
+   3
+  ],
+  [
+   "Lucida Console 700",
+   2
+  ],
+  [
+   "Georgia 700",
+   2
+  ],
+  [
+   "-apple-system 600",
+   1
+  ]
+ ],
+ "css_vars": {
+  "--orange": "#FC4C02",
+  "--charcoal": "#242428",
+  "--ink": "#fff",
+  "--muted": "#A7A7B1",
+  "--panel": "rgba(36,36,40,.94)",
+  "--line": "#3a3a41",
+  "--bus": "#2B2B33",
+  "--tram": "#0073E6",
+  "--sport": "#7B5CFF",
+  "--events": "#0B8A8F"
+ },
+ "wordmark": null
+}
