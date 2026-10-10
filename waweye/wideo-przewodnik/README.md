@@ -37,5 +37,12 @@ Podgląd w przeglądarce: serwer HTTP w `wideo-przewodnik/` i `index.html` (spac
 - `fonts/` – Archivo i JetBrains Mono (SIL Open Font License), te same co w `wideo-promocyjne/`.
 - `final_16x9.mp4`, `final_9x16.mp4` – gotowe filmy (przekodowane do CRF 22 dla repozytorium, ok. 13 MB; render CRF 16 jest w `out/wideo-przewodnik/`); `plakat_16x9.png`, `plakat_9x16.png` – plakaty (klatka z 26,1 s).
 
+## Na stronie „O serwisie”
+Wersje do strony (720p, CRF 24, ok. 5,5 MB) i plakaty z hakiem (klatka z 1,38 s) są w `public/media/waweye-przewodnik-*`. Strona pokazuje 9:16 na ekranie węższym niż 700 px w pionie, a w innych przypadkach 16:9 (skrypt na dole `public/o-serwisie.html`). Po nowym renderze:
+```bash
+ffmpeg -i out/wideo-przewodnik/final.mp4 -vf scale=1280:720 -c:v libx264 -crf 24 -preset slow -pix_fmt yuv420p -movflags +faststart -c:a aac -b:a 128k public/media/waweye-przewodnik-16x9.mp4
+ffmpeg -i out/wideo-przewodnik/final_9x16.mp4 -vf scale=720:1280 -c:v libx264 -crf 24 -preset slow -pix_fmt yuv420p -movflags +faststart -c:a aac -b:a 128k public/media/waweye-przewodnik-9x16.mp4
+```
+
 ## Źródła danych
 Pojazdy, tabor, parkingi, utrudnienia, zajęcia sportowe i wydarzenia: API m.st. Warszawy przez waweye.vercel.app. Mapa i metro: © współtwórcy OpenStreetMap (ODbL).

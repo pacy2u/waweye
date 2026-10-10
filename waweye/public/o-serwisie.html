@@ -55,6 +55,12 @@ h1 em { font-style: normal; color: var(--orange); }
 .video video { display: block; width: 100%; height: 100%; }
 .video-cap { margin-top: 10px; font-size: 13px; color: var(--muted); }
 
+/* Film-przewodnik „Pierwsze kroki”: 16:9 na komputerze, 9:16 na telefonie (wybór w skrypcie na dole strony) */
+.guide { margin-top: 28px; max-width: 880px; }
+.guide .video.tall { aspect-ratio: 9 / 16; width: min(100%, 420px, calc(82svh * 9 / 16)); margin-inline: auto; }
+.guide .video-cap { color: var(--fg-muted); }
+.guide .video.tall + .video-cap { text-align: center; }
+
 /* Materiały o projekcie: film o architekturze i podcast */
 .explainers { margin-top: 28px; display: grid; gap: 28px; grid-template-columns: 1fr; }
 @media (min-width: 880px) { .explainers { grid-template-columns: 1.4fr 1fr; align-items: start; } }
@@ -179,6 +185,12 @@ body > footer a { color: inherit; }
   <section id="funkcje"><div class="wrap">
     <h2>Co potrafi wawEye</h2>
     <p class="sub">Planery podróży mówią, jak dojechać z A do B. wawEye odpowiada na pytanie z przystanku: gdzie jest teraz mój autobus?</p>
+    <div class="guide">
+      <div class="video" id="przewodnik">
+        <video controls preload="none" playsinline src="/media/waweye-przewodnik-16x9.mp4" poster="/media/waweye-przewodnik-16x9-plakat.webp" aria-label="Film-przewodnik: pierwsze kroki z wawEye, 30 sekund"></video>
+      </div>
+      <p class="video-cap">Film: pierwsze kroki z wawEye – 11 funkcji w 30 sekund</p>
+    </div>
     <div class="features">
       <article class="feature">
         <div class="shot"><img width="480" height="1039" src="/media/ekran-mapa.webp" alt="Mapa Warszawy z pojazdami na żywo" loading="lazy"></div>
@@ -317,5 +329,25 @@ body > footer a { color: inherit; }
   <span>wawEye · niekomercyjny projekt na otwartych danych m.st. Warszawy</span>
   <span>Mapa © <a href="https://www.openstreetmap.org/copyright">współtwórcy OpenStreetMap</a></span>
 </div></footer>
+<script>
+// Film-przewodnik w formacie urządzenia: 9:16 na telefonie (wąski, pionowy ekran), 16:9 na komputerze.
+// Zmienia się przy obrocie albo zmianie okna, ale tylko zanim film ruszył.
+(function () {
+  var box = document.getElementById('przewodnik'), v = box && box.querySelector('video');
+  if (!v || !window.matchMedia) return;
+  var phone = window.matchMedia('(max-width: 699px) and (orientation: portrait)');
+  function pick() {
+    if (v.currentTime > 0 || !v.paused) return;
+    var f = phone.matches ? '9x16' : '16x9';
+    var src = '/media/waweye-przewodnik-' + f + '.mp4';
+    if (v.getAttribute('src') === src) return;
+    v.setAttribute('src', src);
+    v.setAttribute('poster', '/media/waweye-przewodnik-' + f + '-plakat.webp');
+    box.classList.toggle('tall', phone.matches);
+  }
+  pick();
+  if (phone.addEventListener) phone.addEventListener('change', pick); else phone.addListener(pick);
+})();
+</script>
 </body>
 </html>
