@@ -1,6 +1,6 @@
 # wawEye – testy i zapewnienie jakości
 
-Opis wszystkich testów i kontroli jakości w projekcie wawEye: co jest testowane, jak i kiedy testy się uruchamiają, gdzie trafiają wyniki i jak klasyfikuje się błędy. Dokument jest przeznaczony dla audytora oraz dla nowych osób w zespole. Na końcu jest szacunek ról i godzin dla klasycznego zespołu (bez AI).
+Opis wszystkich testów i kontroli jakości w projekcie wawEye: co jest testowane, jak i kiedy testy się uruchamiają, gdzie trafiają wyniki i jak klasyfikuje się błędy. Dokument jest przeznaczony dla audytora oraz dla nowych osób w zespole. Na końcu jest szacunek ról i godzin dla klasycznego zespołu (bez AI). Plan usunięcia luk z §11: `PLAN_NAPRAWCZY_TESTOW.md`.
 
 Stan na 2026-10-10 (commit `0f18edb` na `main`). Liczby testów pochodzą z uruchomienia obu zestawów tego dnia; statystyki przebiegów pochodzą z historii GitHub Actions repozytorium `pacy2u/waweye`.
 
@@ -166,7 +166,7 @@ Przy błędzie skrypt czeka 30 s i powtarza kontrolę raz, żeby pojedyncze zerw
 | wawEye – operacje Vercel | po operacjach wdrażających i dodaniu domeny | kontrola dotkniętych domen; błąd = czerwony przebieg |
 | wawEye – operacje Cloudflare | `test-workera`, `test-gtfs` na żądanie | sprawdza wszystkie zasoby Workera z sekretem i odmowę 403 bez sekretu |
 
-Historia (2026-10-04 – 2026-10-10): 25 przebiegów monitoringu, 17 zielonych, 8 czerwonych; 6 zgłoszeń „[monitoring]” założonych i zamkniętych automatycznie (#26, #36, #37, #61, #64, #67). Przyczyny poszczególnych awarii nie są opisane w repozytorium.
+Historia (2026-10-04 – 2026-10-10): 25 przebiegów monitoringu, 17 zielonych, 8 czerwonych; 6 zgłoszeń „[monitoring]” założonych i zamkniętych automatycznie (#26, #36, #37, #61, #64, #67). Przyczyny nie są opisane w zgłoszeniach; analiza ich treści (wszystkie 5 to chwilowy błąd 522 API miasta przez Workera, nigdy cała aplikacja) jest w `PLAN_NAPRAWCZY_TESTOW.md` §1.
 
 ### 5.3. Sygnały w samej aplikacji
 
@@ -276,7 +276,7 @@ Ocena pewności: **[Pewne]** – sprawdzone w repozytorium lub historii Actions;
 | # | Luka | Ryzyko | Rekomendacja | Pewność |
 |---|---|---|---|---|
 | 1 | Monitoring ma działać co 2 h, a w 6,5 dnia wykonał 25 przebiegów zamiast ok. 80 (średnio co ok. 6,5 h). Harmonogramy GitHub Actions są opóźniane lub pomijane. | awaria produkcji może trwać kilka godzin bez alarmu | zewnętrzny monitor dostępności (np. darmowy UptimeRobot, Cloudflare Health Checks) jako drugi kanał | [Pewne] |
-| 2 | 8 z 25 przebiegów monitoringu było czerwonych; przyczyny nie są udokumentowane, zgłoszenia zamykają się same. | nie wiadomo, czy to awarie aplikacji, API miasta czy fałszywe alarmy | krótka analiza przyczyn w zgłoszeniu przed zamknięciem; statystyka dostępności miesięcznie | [Pewne] |
+| 2 | 8 z 25 przebiegów monitoringu było czerwonych; zgłoszenia zamykają się same bez opisu przyczyny. Analiza 5 zgłoszeń (`PLAN_NAPRAWCZY_TESTOW.md` §1): za każdym razem chwilowy błąd 522 API miasta dla części zbiorów, drugi adres chwilę później działał. | monitoring nie odróżnia krótkiej awarii dostawcy od awarii aplikacji; alarmy tracą wartość | kategorie przyczyn i alarm dopiero po dwóch kolejnych błędach dostawcy (plan, zadanie A4) | [Pewne] |
 | 3 | Produkcja Vercel wdraża się po merge do `main` równolegle z testami na `main`, nie po nich. Bramką są zielone testy na PR i decyzja właściciela. | zmiana zielona na PR, ale czerwona po scaleniu z nowszym `main`, trafi na produkcję | wymagane checki i „branch must be up to date” w ochronie gałęzi | [Prawdopodobne] |
 | 4 | Ochrona gałęzi `main` (wymagane checki, wymagany przegląd) nie jest widoczna w repozytorium. | merge z czerwonymi testami jest technicznie możliwy | sprawdzić i włączyć w ustawieniach repozytorium | [Niezweryfikowane] |
 | 5 | Brak pomiaru pokrycia kodu (`c8`, `--experimental-test-coverage`). | nie da się wykazać pokrycia liczbowo | dodać raport pokrycia do CI (Node 22 ma go wbudowanego) | [Pewne] |

@@ -90,6 +90,7 @@ Opcjonalnie dodaj do tokenu Cloudflare uprawnienie Account Analytics: Read, wted
 - `scripts/check-production.js` – kontrola produkcji (monitoring); `scripts/vercel-ops.js`, `scripts/cloudflare-ops.js` – operacje wywoływane przez workflowy na żądanie
 - `PIERWSZE_KROKI.md` – krótki przewodnik dla nowych osób: funkcje aplikacji i uruchomienie lokalne
 - `TESTY_I_JAKOSC.md` – testy i jakość: rodzaje testów, uruchamianie, raportowanie, klasyfikacja błędów, luki dla audytora, szacunek ról i godzin bez AI
+- `PLAN_NAPRAWCZY_TESTOW.md` – plan usunięcia luk w testach: zadania P0–P2, kryteria odbioru, harmonogram, mierniki
 - `ARCHITEKTURA.md` – architektura: komponenty i ich lokalizacja, przepływy danych (diagramy), infrastruktura, CI/CD, monitoring, sekrety
 - `ROADMAPA.md` – analiza produktu i plan rozwoju; `CONTEXT.md` – notatki dla kolejnych sesji
 - `wideo-promocyjne/` – 30-sekundowy film promocyjny (`waweye-showreel.mp4`) i kod, który go generuje z prawdziwych danych; wykluczony z wdrożenia przez `.vercelignore`
