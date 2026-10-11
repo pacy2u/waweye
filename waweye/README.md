@@ -94,6 +94,7 @@ Opcjonalnie dodaj do tokenu Cloudflare uprawnienie Account Analytics: Read, wted
 - `TESTY_I_JAKOSC.md` – testy i jakość: rodzaje testów, uruchamianie, raportowanie, klasyfikacja błędów, luki dla audytora, szacunek ról i godzin bez AI
 - `LISTA_REGRESJI_RECZNEJ.md` – lista testów ręcznych przed wydaniem (iPhone, wolna sieć, wszystkie warstwy)
 - `PLAN_NAPRAWCZY_TESTOW.md` – plan usunięcia luk w testach: zadania P0–P2, kryteria odbioru, harmonogram, mierniki
+- `STAN_PRAC_I_OTWARTE_WATKI.md` – stan prac i otwarte wątki do podjęcia w następnej sesji
 - `ARCHITEKTURA.md` – architektura: komponenty i ich lokalizacja, przepływy danych (diagramy), infrastruktura, CI/CD, monitoring, sekrety
 - `ROADMAPA.md` – analiza produktu i plan rozwoju; `CONTEXT.md` – notatki dla kolejnych sesji
 - `wideo-promocyjne/` – 30-sekundowy film promocyjny (`waweye-showreel.mp4`) i kod, który go generuje z prawdziwych danych; wykluczony z wdrożenia przez `.vercelignore`
