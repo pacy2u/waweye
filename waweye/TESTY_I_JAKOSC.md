@@ -206,8 +206,8 @@ flowchart LR
 | Zdarzenie | Testy |
 |---|---|
 | PR ze zmianą kodu, workflowów lub danych | jednostkowe + E2E |
-| PR tylko z plikami `.md` | brak (oszczędność minut Actions) |
-| push do `main` | jednostkowe + E2E (równolegle z wdrożeniem produkcji na Vercel) |
+| PR albo push do `main` tylko z plikami `.md` | testy pominięte, `bramka` od razu zielona (kilka sekund) |
+| push do `main` | lint, jednostkowe z pokryciem, E2E (Chromium, WebKit informacyjnie); Vercel wystawia wdrożenie na produkcję dopiero po zielonej `bramka` (Deployment Checks, od 2026-10-12) |
 | push do `main` w `waweye/worker/**` | dodatkowo jednostkowe przed wdrożeniem Workera |
 | push skryptu danych na gałęzi innej niż `main` | generowanie danych z walidacją |
 | co 2 h | monitoring produkcji |
@@ -281,7 +281,7 @@ Ocena pewności: **[Pewne]** – sprawdzone w repozytorium lub historii Actions;
 |---|---|---|---|---|
 | 1 | Monitoring ma działać co 2 h, a w 6,5 dnia wykonał 25 przebiegów zamiast ok. 80 (średnio co ok. 6,5 h). Harmonogramy GitHub Actions są opóźniane lub pomijane. | awaria produkcji może trwać kilka godzin bez alarmu | zewnętrzny monitor dostępności (np. darmowy UptimeRobot, Cloudflare Health Checks) jako drugi kanał | [Pewne] |
 | 2 | 8 z 25 przebiegów monitoringu było czerwonych; zgłoszenia zamykają się same bez opisu przyczyny. Analiza 5 zgłoszeń (`PLAN_NAPRAWCZY_TESTOW.md` §1): za każdym razem chwilowy błąd 522 API miasta dla części zbiorów, drugi adres chwilę później działał. | monitoring nie odróżnia krótkiej awarii dostawcy od awarii aplikacji; alarmy tracą wartość | kategorie przyczyn i ponowna kontrola błędu dostawcy po 4 min (plan, zadanie A4) | [Pewne] |
-| 3 | Produkcja Vercel wdraża się po merge do `main` równolegle z testami na `main`, nie po nich. Bramką są zielone testy na PR i decyzja właściciela. | zmiana zielona na PR, ale czerwona po scaleniu z nowszym `main`, trafi na produkcję | wymagane checki i „branch must be up to date” w ochronie gałęzi | [Prawdopodobne] |
+| 3 | Produkcja Vercel wdraża się po merge do `main` równolegle z testami na `main`, nie po nich. Bramką są zielone testy na PR i decyzja właściciela. | zmiana zielona na PR, ale czerwona po scaleniu z nowszym `main`, trafi na produkcję | wymagane checki i „branch must be up to date” w ochronie gałęzi  **Zrobione 2026-10-12:** Vercel Deployment Checks czekają na `bramka`. Reguła gałęzi `main` zapisana, ale GitHub nie egzekwuje jej w prywatnym repozytorium bez organizacji Team (decyzja: zostaje bez egzekwowania). | [Prawdopodobne] |
 | 4 | Ochrona gałęzi `main` (wymagane checki, wymagany przegląd) nie jest widoczna w repozytorium. | merge z czerwonymi testami jest technicznie możliwy | sprawdzić i włączyć w ustawieniach repozytorium | [Niezweryfikowane] |
 | 5 | Brak pomiaru pokrycia kodu (`c8`, `--experimental-test-coverage`). | nie da się wykazać pokrycia liczbowo | dodać raport pokrycia do CI (Node 22 ma go wbudowanego) **Zrobione 2026-10-11:** pomiar w CI z progami (B1). | [Pewne] |
 | 6 | Brak lintera, formatera i analizy statycznej. | błędy wykrywalne statycznie trafiają do testów lub produkcji | ESLint + Prettier w CI **Zrobione 2026-10-11:** ESLint w CI; formater czeka na decyzję (B2). | [Pewne] |
