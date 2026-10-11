@@ -752,8 +752,12 @@ function findChromium() {
         return [...lapse.items.values()].filter((it) => it.line === line && it.at(x.at + 1800)).length; }, [line, hour]);
       assert.ok(await count('175', 12) >= 3, 'day: 175 runs (at least the vehicles seen live)');
       assert.equal(await count('N25', 12), 0, 'day: no night line');
-      assert.equal(await count('175', 2), 0, 'night: 175 has gone to the depot');
-      assert.ok(await count('N25', 2) >= 2, 'night: N25 is out');
+      // A night hour at least 3 h ahead: vehicles seen live just before it may still be finishing their trips
+      // (with 02:00 at 01:30 the check failed only when the suite ran at night).
+      const night = await page.evaluate(() => { const { lapse } = window.__waweye;
+        return [2, 3, 4, 1].find((h) => lapse.sched.hours.some((y) => y.h === h && y.at + 1800 >= 3 * 3600 && y.at + 1800 < 86400)); });
+      assert.equal(await count('175', night), 0, `night (${night}:30): 175 has gone to the depot`);
+      assert.ok(await count('N25', night) >= 2, `night (${night}:30): N25 is out`);
       await page.waitForTimeout(100);
       assert.match(await page.textContent('#lapse-note'), /^Na mapie \d+ poj\..*rozkład ZTM przewiduje w każdej godzinie/);
       await page.click('#lapse-close');
