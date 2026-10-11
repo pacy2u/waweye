@@ -20,6 +20,9 @@ permissions:
 
 jobs:
   metro:
+    # Not on Dependabot's branches: its action updates touch this workflow file, and a data commit pushed there
+    # (with GITHUB_TOKEN, which starts no workflows) would leave the update PR's head without test results.
+    if: github.event_name == 'workflow_dispatch' || !startsWith(github.ref_name, 'dependabot/')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
