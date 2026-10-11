@@ -228,7 +228,11 @@ function findChromium() {
     });
     await step(`${label}: compass turns the heading beam, the short way round`, async () => {
       const turn = (alpha) => page.evaluate((alpha) => {
-        window.dispatchEvent(new DeviceOrientationEvent('ondeviceorientationabsolute' in window ? 'deviceorientationabsolute' : 'deviceorientation', { alpha, beta: 0, gamma: 0, absolute: true }));
+        const type = 'ondeviceorientationabsolute' in window ? 'deviceorientationabsolute' : 'deviceorientation', init = { alpha, beta: 0, gamma: 0, absolute: true };
+        let ev;
+        // WebKit on Linux has no DeviceOrientationEvent constructor: a plain event with the same fields reaches the same handler.
+        try { ev = new DeviceOrientationEvent(type, init); } catch { ev = Object.assign(new Event(type), init); }
+        window.dispatchEvent(ev);
         return new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r({ on: !!document.querySelector('.me.heading'), t: document.querySelector('.me-beam').style.transform }))));
       }, alpha);
       assert.ok(!(await page.evaluate(() => !!document.querySelector('.me.heading'))), 'no beam without a heading');
