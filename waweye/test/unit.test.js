@@ -571,7 +571,7 @@ test('sport: direct POST to get_bmm_zajecia_sportowe; relay uses resource=sport'
 });
 
 // A fake clock: sleep() moves time forward, so throttling is checked without waiting.
-function fakeGeo(answers, { budgetMs } = {}) {
+function fakeGeo(answers) {
   let t = 1000; const calls = [];
   const fetchImpl = async (url, init) => {
     const q = new URL(url).searchParams.get('q'); calls.push({ q, at: t, ua: init.headers['User-Agent'], url });

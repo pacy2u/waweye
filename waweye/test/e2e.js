@@ -1,6 +1,8 @@
 'use strict';
 // Browser test against the mock API. Run: npm run test:e2e
-const { chromium } = require('playwright-core');
+// BROWSER=webkit runs it in WebKit (Safari's engine) instead of Chromium; the browser comes from
+// `npx playwright-core install --with-deps webkit` (CI job "testy-webkit").
+const { chromium, webkit } = require('playwright-core');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const { createServer } = require('../dev-server');
@@ -8,6 +10,21 @@ const { createServer } = require('../dev-server');
 const SHOTS = process.env.SHOTS || '/tmp';
 // The SPPN layer comes from the city's WMS; tests answer its tile requests with a transparent pixel (no outside traffic).
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
+// Accessibility (axe-core): serious and critical violations fail the test, except the ones listed here with a reason.
+const AXE = require.resolve('axe-core/axe.min.js');
+const A11Y_EXCEPTIONS = [
+  // White on the brand orange (#FC4C02) is 3.4:1 on the "O serwisie" buttons; changing the brand colour is the owner's
+  // decision (PLAN_NAPRAWCZY_TESTOW.md B5).
+  { id: 'color-contrast', target: /^\.(back|btn)\b/ },
+];
+async function a11y(page) {
+  if (!(await page.evaluate(() => !!window.axe))) await page.addScriptTag({ path: AXE });
+  const found = await page.evaluate(async () => (await window.axe.run(document, { resultTypes: ['violations'] })).violations
+    .filter((v) => v.impact === 'serious' || v.impact === 'critical')
+    .flatMap((v) => v.nodes.map((n) => ({ id: v.id, target: n.target.join(' '), why: ((n.any[0] || n.all[0] || n.none[0]) || {}).message }))));
+  const left = found.filter((f) => !A11Y_EXCEPTIONS.some((e) => e.id === f.id && e.target.test(f.target)));
+  assert.deepEqual(left, [], 'accessibility (axe)');
+}
 const wmsTiles = (ctx) => ctx.route('**/wms.um.warszawa.pl/**', (r) => { r.fulfill({ status: 200, contentType: 'image/png', body: PNG }); });
 function findChromium() {
   if (process.env.CHROME_PATH) return process.env.CHROME_PATH; // e.g. Google Chrome preinstalled on GitHub runners
@@ -21,7 +38,8 @@ function findChromium() {
   const server = createServer({ env: { MOCK: '1' } });
   await new Promise((r) => server.listen(0, r));
   const url = `http://localhost:${server.address().port}/`;
-  const browser = await chromium.launch({ executablePath: findChromium(), args: ['--no-sandbox'] });
+  const browser = process.env.BROWSER === 'webkit' ? await webkit.launch()
+    : await chromium.launch({ executablePath: findChromium(), args: ['--no-sandbox'] });
   const results = [];
   const step = async (name, fn) => {
     try { await fn(); } catch (e) { console.error('FAIL -', name); throw e; }
@@ -97,6 +115,7 @@ function findChromium() {
       assert.ok(await page.isVisible('#p-fleet'));
       await page.screenshot({ path: `${SHOTS}/waweye-${label}-fleet.png` });
     });
+    await step(`${label}: accessibility (axe): the map with the vehicle panel open`, () => a11y(page));
     await step(`${label}: selection survives refresh`, async () => {
       const id = (await S()).sel; const t0 = await page.evaluate(() => window.__waweye.state.lastOk); await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange'))); await page.evaluate(() => { Object.defineProperty(document, 'hidden', { value: false, configurable: true }); document.dispatchEvent(new Event('visibilitychange')); }); await page.waitForFunction((t) => window.__waweye.state.lastOk > t, t0);
       await page.waitForTimeout(100); assert.equal((await S()).sel, id);
@@ -295,6 +314,7 @@ function findChromium() {
       assert.match(panel.rows, /Standardowe233 wolnych z 500/); assert.match(panel.rows, /Cennik/);
       await page.screenshot({ path: `${SHOTS}/waweye-${label}-parking.png` });
     });
+    await step(`${label}: accessibility (axe): the parking panel`, () => a11y(page));
     await step(`${label}: the other panels collapse too (parking), sharing the remembered choice`, async () => {
       const Q = () => page.evaluate(() => { const p = document.getElementById('ppanel');
         return { min: p.classList.contains('min'), h: p.getBoundingClientRect().height, free: getComputedStyle(p.querySelector('.p-free')).display !== 'none',
@@ -764,6 +784,7 @@ function findChromium() {
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
       await page.screenshot({ path: `${SHOTS}/waweye-o-serwisie-${label}.png`, fullPage: true });
     });
+    await step(`${label}: accessibility (axe): "O serwisie"`, () => a11y(page));
     await step(`${label}: "O serwisie": the guide film comes in the device's format (16:9 desktop, 9:16 phone)`, async () => {
       const f = label === 'mobile' ? '9x16' : '16x9';
       const g = await page.evaluate(() => {
@@ -846,8 +867,11 @@ function findChromium() {
   await step('location: refused permission shows a message and a crossed-out button', async () => {
     await lp.waitForFunction(() => window.__waweye.state.markers.size > 50);
     // As if the user had clicked "Block" (Playwright has no API for refusing a permission prompt).
-    const cdp = await lctx.newCDPSession(lp), { targetInfo } = await cdp.send('Target.getTargetInfo');
-    await cdp.send('Browser.setPermission', { permission: { name: 'geolocation' }, setting: 'denied', origin: new URL(url).origin, browserContextId: targetInfo.browserContextId });
+    // WebKit has no CDP; there a context that was never granted the permission refuses geolocation by itself.
+    if (process.env.BROWSER !== 'webkit') {
+      const cdp = await lctx.newCDPSession(lp), { targetInfo } = await cdp.send('Target.getTargetInfo');
+      await cdp.send('Browser.setPermission', { permission: { name: 'geolocation' }, setting: 'denied', origin: new URL(url).origin, browserContextId: targetInfo.browserContextId });
+    }
     await lp.click('#locate');
     await lp.waitForSelector('#toast:not([hidden])');
     assert.match(await lp.textContent('#toast'), /Brak dostępu do lokalizacji/);
