@@ -8,7 +8,8 @@ const fs = require('fs');
 const { createServer } = require('../dev-server');
 
 const SHOTS = process.env.SHOTS || '/tmp';
-const FORCE_SYNTHETIC_WHEEL = process.env.SYNTHETIC_WHEEL === '1'; // check the WebKit fallback in Chromium
+// The WebKit-only workarounds below; WEBKIT_PATHS=1 runs them in Chromium too, to check them where WebKit is missing.
+const WEBKIT_PATHS = process.env.BROWSER === 'webkit' || process.env.WEBKIT_PATHS === '1';
 // The SPPN layer comes from the city's WMS; tests answer its tile requests with a transparent pixel (no outside traffic).
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
 // Accessibility (axe-core): serious and critical violations fail the test, except the ones listed here with a reason.
@@ -223,7 +224,7 @@ function findChromium() {
       const x = ctxOpts.viewport.width / 2 + 100, y = ctxOpts.viewport.height / 2 + 120;
       await page.mouse.move(x, y);
       // Mobile WebKit has no mouse wheel in Playwright: the same wheel event sent to the map runs Leaflet's same handler.
-      if (FORCE_SYNTHETIC_WHEEL || (process.env.BROWSER === 'webkit' && ctxOpts.isMobile)) {
+      if (WEBKIT_PATHS && ctxOpts.isMobile) {
         await page.evaluate(([x, y]) => document.getElementById('map').dispatchEvent(new WheelEvent('wheel', { deltaY: 300, clientX: x, clientY: y, bubbles: true, cancelable: true })), [x, y]);
       } else await page.mouse.wheel(0, 300);
       await page.waitForFunction((z) => window.__waweye.map.getZoom() < z, z0); await page.waitForTimeout(400);
@@ -897,6 +898,8 @@ function findChromium() {
   });
   await step('location outside Warsaw: the map goes there and says vehicles are only in Warsaw', async () => {
     await lctx.grantPermissions(['geolocation'], { origin: new URL(url).origin }); await lctx.setGeolocation({ latitude: 50.0614, longitude: 19.9366, accuracy: 20 }); // Kraków
+    // WebKit keeps a refusal for the open page, as Safari does until the user reloads it.
+    if (WEBKIT_PATHS) { await lp.reload(); await lp.waitForFunction(() => window.__waweye && window.__waweye.state.markers.size > 50); }
     await lp.click('#locate');
     await lp.waitForFunction(() => { const { me, map } = window.__waweye; return me.centered && !me.flying && map.distance(map.getCenter(), me.pos) < 2; });
     assert.match(await lp.textContent('#toast'), /poza Warszawą/);
