@@ -9,7 +9,7 @@
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <style>
 :root {
-  --orange: #FC4C02; --charcoal: #242428; --ink: #fff; --muted: #A7A7B1; --line: #3a3a41;
+  --orange: #FC4C02; --orange-btn: #C23A00; /* buttons with white text: 5.4:1 (the brand orange gives only 3.4:1) */ --charcoal: #242428; --ink: #fff; --muted: #A7A7B1; --line: #3a3a41;
   --bg: #F4F4F6; --surface: #fff; --fg: #242428; --fg-muted: #5F5F69; --border: #D9D9DF; --accent-ink: #C23A00;
   --free: #00A878; --tram: #0073E6; --inc: #F5A100;
   --gutter: clamp(16px, 4vw, 40px);
@@ -33,7 +33,7 @@ h1, h2, h3, p { margin: 0; } h1, h2 { text-wrap: balance; }
   padding-top: max(10px, env(safe-area-inset-top)); }
 .brand { display: inline-flex; align-items: center; gap: 9px; font-weight: 800; font-size: 18px; letter-spacing: .5px; color: var(--orange); text-decoration: none; }
 .brand svg { width: 26px; height: 26px; }
-.back { display: inline-flex; align-items: center; gap: 6px; color: #fff; background: var(--orange); text-decoration: none;
+.back { display: inline-flex; align-items: center; gap: 6px; color: #fff; background: var(--orange-btn); text-decoration: none;
   font-weight: 700; font-size: 14px; padding: 8px 14px; border-radius: 999px; }
 .back svg { width: 16px; height: 16px; }
 
@@ -48,7 +48,7 @@ h1 { font-size: clamp(30px, 3.2vw + 16px, 50px); line-height: 1.05; font-weight:
 h1 em { font-style: normal; color: var(--orange); }
 .lead { margin-top: 16px; font-size: clamp(16px, .4vw + 15px, 19px); color: #E4E4E9; max-width: 52ch; }
 .cta { margin-top: 22px; display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
-.btn { display: inline-flex; align-items: center; gap: 8px; background: var(--orange); color: #fff; text-decoration: none; font-weight: 700; font-size: 17px; padding: 13px 20px; border-radius: 10px; }
+.btn { display: inline-flex; align-items: center; gap: 8px; background: var(--orange-btn); color: #fff; text-decoration: none; font-weight: 700; font-size: 17px; padding: 13px 20px; border-radius: 10px; }
 .btn.ghost { background: none; border: 1px solid var(--line); color: #fff; }
 .btn svg { width: 18px; height: 18px; }
 .video { position: relative; border-radius: 14px; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,.5); background: #000; aspect-ratio: 16 / 9; }

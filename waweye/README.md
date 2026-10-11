@@ -28,8 +28,10 @@ MOCK=1 npm start          # dane symulowane, bez klucza
 
 ## Testy
 ```bash
-npm test          # jednostkowe: normalizacja, błędy API, handler, operacje Vercel/Cloudflare
-npm run test:e2e  # przeglądarka (Chromium, desktop + mobile) na danych symulowanych
+npm run lint           # ESLint
+npm test               # jednostkowe: normalizacja, błędy API, handler, operacje Vercel/Cloudflare
+npm run test:coverage  # jednostkowe z pomiarem pokrycia i progami (jak w CI)
+npm run test:e2e       # przeglądarka (Chromium, desktop + mobile) na danych symulowanych, z kontrolą dostępności (axe)
 node scripts/check-production.js   # kontrola produkcji: pojazdy, parkingi, utrudnienia, tabor
 ```
 W GitHub Actions (`.github/workflows/`):
@@ -90,6 +92,7 @@ Opcjonalnie dodaj do tokenu Cloudflare uprawnienie Account Analytics: Read, wted
 - `scripts/check-production.js` – kontrola produkcji (monitoring); `scripts/vercel-ops.js`, `scripts/cloudflare-ops.js` – operacje wywoływane przez workflowy na żądanie
 - `PIERWSZE_KROKI.md` – krótki przewodnik dla nowych osób: funkcje aplikacji i uruchomienie lokalne
 - `TESTY_I_JAKOSC.md` – testy i jakość: rodzaje testów, uruchamianie, raportowanie, klasyfikacja błędów, luki dla audytora, szacunek ról i godzin bez AI
+- `LISTA_REGRESJI_RECZNEJ.md` – lista testów ręcznych przed wydaniem (iPhone, wolna sieć, wszystkie warstwy)
 - `PLAN_NAPRAWCZY_TESTOW.md` – plan usunięcia luk w testach: zadania P0–P2, kryteria odbioru, harmonogram, mierniki
 - `ARCHITEKTURA.md` – architektura: komponenty i ich lokalizacja, przepływy danych (diagramy), infrastruktura, CI/CD, monitoring, sekrety
 - `ROADMAPA.md` – analiza produktu i plan rozwoju; `CONTEXT.md` – notatki dla kolejnych sesji

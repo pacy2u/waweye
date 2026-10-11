@@ -111,7 +111,7 @@ async function dodajDomene(ctx, value) {
     await api('POST', `/v10/projects/${projectId}/domains`, { name: domain });
   } catch (e) {
     if (e.status === 409 || /in.use|already|taken/i.test(String(e.code) + e.message)) {
-      throw new Error(`Domena ${domain} jest niedostępna (zajęta przez inny projekt?). Wybierz inną, np. z listy w planie migracji (D1). Odpowiedź Vercel: ${e.message}`);
+      throw new Error(`Domena ${domain} jest niedostępna (zajęta przez inny projekt?). Wybierz inną, np. z listy w planie migracji (D1). Odpowiedź Vercel: ${e.message}`, { cause: e });
     }
     throw e;
   }

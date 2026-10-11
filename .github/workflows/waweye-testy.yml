@@ -3,6 +3,8 @@ name: wawEye – testy
 # Unit and browser tests on every PR and on main. Docs-only changes (*.md) do not use test minutes: the "zmiany" job
 # sees that nothing else changed and the tests are skipped. The "bramka" job always reports a result, so it can be
 # the required check on main (a workflow skipped by a paths filter never reports, and the PR would wait forever).
+# "testy-webkit" runs the browser test in WebKit (Safari's engine); for now it only reports and does not gate
+# (PLAN_NAPRAWCZY_TESTOW.md B3).
 on:
   pull_request:
   push:
@@ -56,8 +58,13 @@ jobs:
           cache: npm
           cache-dependency-path: waweye/package-lock.json
       - run: npm ci
-      - name: Testy jednostkowe
-        run: npm test
+      - name: Lint (ESLint)
+        run: npm run lint
+      - name: Testy jednostkowe z pokryciem kodu (progi w package.json)
+        shell: bash
+        run: |
+          npm run test:coverage | tee pokrycie.txt
+          { echo '### Pokrycie kodu (testy jednostkowe)'; echo '```'; sed -n '/start of coverage report/,/end of coverage report/p' pokrycie.txt | sed 's/^# //'; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - name: Testy w przeglądarce (dane MOCK, desktop + telefon)
         run: npm run test:e2e
         env:
@@ -68,6 +75,38 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: zrzuty-ekranu-e2e
+          path: ${{ runner.temp }}/waweye-*.png
+          retention-days: 7
+
+  testy-webkit:
+    needs: zmiany
+    if: needs.zmiany.outputs.kod == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true # informational until the WebKit run is stable
+    defaults:
+      run:
+        working-directory: waweye
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: waweye/package-lock.json
+      - run: npm ci
+      - name: WebKit z zależnościami systemowymi
+        run: npx playwright-core install --with-deps webkit
+      - name: Testy w przeglądarce WebKit (dane MOCK, desktop + telefon)
+        run: npm run test:e2e
+        env:
+          BROWSER: webkit
+          SHOTS: ${{ runner.temp }}
+      - name: Zrzuty ekranu z testów
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zrzuty-ekranu-e2e-webkit
           path: ${{ runner.temp }}/waweye-*.png
           retention-days: 7
 

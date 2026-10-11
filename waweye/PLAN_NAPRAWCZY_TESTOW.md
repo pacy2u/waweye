@@ -43,7 +43,7 @@ Monitoring działa więc poprawnie, ale nie odróżnia krótkiej awarii dostawcy
 
 ## 2. Priorytety i harmonogram
 
-**Stan realizacji (2026-10-11):** w kodzie zrobione A1 (bramka CI), A4 i A5 (plik Dependabot) – gałąź `test/p0-bramka-ci-alarmy-dependabot`. Czekają na właściciela: A1 (reguła gałęzi `main`, po scaleniu bramki), A2, A3, A5 (włączenie CodeQL).
+**Stan realizacji (2026-10-11):** P0 w kodzie scalone (PR #73): A1 (bramka CI), A4, A5 (plik Dependabot). P1 w kodzie: B1 (pokrycie, progi 94/84/93%), B2 (ESLint, 15 poprawek), B3 (WebKit w CI, informacyjnie), B4 (lista regresji, szablon PR), B5 (axe w E2E) – gałąź `test/p1-pokrycie-lint-webkit-dostepnosc`. Decyzje właściciela (2026-10-11): przyciski „O serwisie” w wariancie B (biały na #C23A00, 5,4:1) – wyjątek w teście usunięty; **poziom WCAG zaparkowany** (axe nadal blokuje naruszenia serious/critical); bez prośby o czujniki ruchu na iOS. Czekają na właściciela: reguła gałęzi `main`, A2, A3, CodeQL, decyzja o formaterze (B2).
 
 | Priorytet | Kiedy | Zadania | Praca [Szacunek] | Charakter |
 |---|---|---|---|---|
@@ -59,9 +59,9 @@ gantt
     dateFormat YYYY-MM-DD
     axisFormat %d.%m
     section P0
-    A1 Ochrona main + bramka CI      :a1, 2026-10-12, 2d
+    A1 Ochrona main + bramka CI      :a1, 2026-10-11, 2d
     A2 Produkcja po testach          :a2, after a1, 1d
-    A3 Zewnętrzny monitor            :a3, 2026-10-12, 1d
+    A3 Zewnętrzny monitor            :a3, 2026-10-11, 1d
     A4 Klasyfikacja alarmów          :a4, 2026-10-13, 3d
     A5 Dependabot + CodeQL           :a5, 2026-10-14, 1d
     section P1

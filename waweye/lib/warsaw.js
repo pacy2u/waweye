@@ -77,7 +77,7 @@ async function fetchOnce(url, fetchImpl, init, extract) {
   try {
     res = await fetchImpl(url, { signal: AbortSignal.timeout(TIMEOUT_MS), ...init });
   } catch (e) {
-    throw new Error(describe(e));
+    throw new Error(describe(e), { cause: e });
   }
   if (!res.ok) {
     // Relay/API errors carry a JSON {error}; include it so "HTTP 403" says who refused and why.

@@ -305,7 +305,7 @@ async function routesRefreshHandler(req, res, { env = process.env, fetchImpl = f
     } catch (e) {
       via = `przez Workera (bezpośrednio: ${e.message})`;
       const r = await workerFetch(env, fetchImpl, 'resource=gtfs', { timeout: 30000 });
-      if (!r.ok) throw new Error(`GTFS niedostępny bezpośrednio (${e.message}) ani przez Workera (HTTP ${r.status})`);
+      if (!r.ok) throw new Error(`GTFS niedostępny bezpośrednio (${e.message}) ani przez Workera (HTTP ${r.status})`, { cause: e });
       buf = Buffer.from(await r.arrayBuffer());
     }
     const { lines, valid, problems, days = {} } = await (build || trasy.fromZip)(buf);

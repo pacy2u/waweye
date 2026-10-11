@@ -26,7 +26,9 @@ Stan na 2026-10-10 (commit `0f18edb` na `main`). Liczby testów pochodzą z uruc
 | Rodzaj | Narzędzie | Liczba | Czas | Uruchamianie | Wynik 2026-10-10 |
 |---|---|---|---|---|---|
 | Jednostkowe i integracyjne (z atrapami sieci) | `node --test` (Node ≥ 18, w CI Node 22) | 128 testów w 6 plikach | < 1 s | każdy PR, push do `main`, przed wdrożeniem Workera | 128/128 |
-| E2E w przeglądarce (dane MOCK) | Playwright (`playwright-core`) + Chromium | 112 sprawdzeń (50 kroków × 2 ekrany + 12 scenariuszy awarii i lokalizacji) | ok. 2 min | każdy PR, push do `main` | 112/112 |
+| E2E w przeglądarce (dane MOCK) | Playwright (`playwright-core`) + Chromium; WebKit informacyjnie | 118 sprawdzeń (53 kroki × 2 ekrany, w tym 3 kontrole dostępności axe, + 12 scenariuszy awarii i lokalizacji) | ok. 2 min | każdy PR, push do `main` |
+| Pokrycie kodu (od 2026-10-11) | `node --test --experimental-test-coverage` | progi: linie 94%, gałęzie 84%, funkcje 93% (pomiar bazowy 94,7 / 84,7 / 93,2%) | < 1 s | razem z testami jednostkowymi w CI |
+| Lint (od 2026-10-11) | ESLint, reguły `recommended` | cały kod poza `public/vendor` i folderami wideo | kilka s | każdy PR, push do `main` | 112/112 |
 | Kontrola jakości danych w repo | testy „committed … is plausible” + walidacja w skryptach | 3 testy + bramki w 3 skryptach | sekundy | z testami jednostkowymi i przy generowaniu danych | zielone |
 | Monitoring produkcji (smoke test na żywo) | `scripts/check-production.js` | 4–5 sprawdzeń × 2 domeny | 1–3 min | cron co 2 h (w praktyce rzadziej, patrz §11) | 17/25 przebiegów zielonych |
 | Kontrole po operacjach infrastruktury | `check-production.js`, `cloudflare-ops.js test-workera`, `test-gtfs` | – | – | po operacjach Vercel/Cloudflare | – |
@@ -247,8 +249,10 @@ Poziomy „Krytyczna” i „Wysoka” są uzupełnieniem tego dokumentu – w r
 ```bash
 cd waweye
 npm ci
+npm run lint               # ESLint
 npm test                   # jednostkowe, < 1 s, bez internetu
-npm run test:e2e           # Chromium, ok. 2 min, bez internetu
+npm run test:coverage      # to samo z pomiarem pokrycia i progami (jak w CI)
+npm run test:e2e           # Chromium, ok. 2 min, bez internetu; BROWSER=webkit – WebKit (wymaga pobranej przeglądarki)
 node scripts/check-production.js https://waweye.vercel.app   # produkcja (wymaga dostępu do internetu)
 ```
 
@@ -279,14 +283,14 @@ Ocena pewności: **[Pewne]** – sprawdzone w repozytorium lub historii Actions;
 | 2 | 8 z 25 przebiegów monitoringu było czerwonych; zgłoszenia zamykają się same bez opisu przyczyny. Analiza 5 zgłoszeń (`PLAN_NAPRAWCZY_TESTOW.md` §1): za każdym razem chwilowy błąd 522 API miasta dla części zbiorów, drugi adres chwilę później działał. | monitoring nie odróżnia krótkiej awarii dostawcy od awarii aplikacji; alarmy tracą wartość | kategorie przyczyn i ponowna kontrola błędu dostawcy po 4 min (plan, zadanie A4) | [Pewne] |
 | 3 | Produkcja Vercel wdraża się po merge do `main` równolegle z testami na `main`, nie po nich. Bramką są zielone testy na PR i decyzja właściciela. | zmiana zielona na PR, ale czerwona po scaleniu z nowszym `main`, trafi na produkcję | wymagane checki i „branch must be up to date” w ochronie gałęzi | [Prawdopodobne] |
 | 4 | Ochrona gałęzi `main` (wymagane checki, wymagany przegląd) nie jest widoczna w repozytorium. | merge z czerwonymi testami jest technicznie możliwy | sprawdzić i włączyć w ustawieniach repozytorium | [Niezweryfikowane] |
-| 5 | Brak pomiaru pokrycia kodu (`c8`, `--experimental-test-coverage`). | nie da się wykazać pokrycia liczbowo | dodać raport pokrycia do CI (Node 22 ma go wbudowanego) | [Pewne] |
-| 6 | Brak lintera, formatera i analizy statycznej. | błędy wykrywalne statycznie trafiają do testów lub produkcji | ESLint + Prettier w CI | [Pewne] |
+| 5 | Brak pomiaru pokrycia kodu (`c8`, `--experimental-test-coverage`). | nie da się wykazać pokrycia liczbowo | dodać raport pokrycia do CI (Node 22 ma go wbudowanego) **Zrobione 2026-10-11:** pomiar w CI z progami (B1). | [Pewne] |
+| 6 | Brak lintera, formatera i analizy statycznej. | błędy wykrywalne statycznie trafiają do testów lub produkcji | ESLint + Prettier w CI **Zrobione 2026-10-11:** ESLint w CI; formater czeka na decyzję (B2). | [Pewne] |
 | 7 | Brak skanowania zależności i SAST w repozytorium (brak `dependabot.yml`, CodeQL). Zależności są minimalne (Leaflet 1.9.4 w `public/vendor`, `playwright-core` tylko testowo). | niska podatność na łańcuch dostaw, ale brak dowodu kontroli | Dependabot + CodeQL (darmowe) | [Pewne] co do repo, [Niezweryfikowane] co do ustawień GitHub |
 | 8 | E2E działa wyłącznie na danych MOCK; zgodność z prawdziwym API sprawdza dopiero monitoring po wdrożeniu. | zmiana formatu API miasta wykrywana na produkcji, nie przed nią | okresowy test kontraktowy na prawdziwym API (utrudnione: API miasta nie odpowiada z chmur, patrz `ARCHITEKTURA.md` §10) | [Pewne] |
-| 9 | Tylko Chromium; brak Safari/iOS i Firefoksa. | błędy na iPhone'ach (duża część użytkowników mobilnych) niewykryte | dodać WebKit i Firefox w Playwright albo ręczny test na iOS przed większym wydaniem | [Pewne] |
-| 10 | Brak testów dostępności (czytnik ekranu, klawiatura; znaczniki mapy nie są dostępne z klawiatury – decyzja projektowa). | niezgodność z WCAG 2.1 (istotne, jeśli serwis miałby trafić do sektora publicznego) | axe-core w E2E, decyzja o zakresie WCAG | [Pewne] |
+| 9 | Tylko Chromium; brak Safari/iOS i Firefoksa. | błędy na iPhone'ach (duża część użytkowników mobilnych) niewykryte | dodać WebKit i Firefox w Playwright albo ręczny test na iOS przed większym wydaniem **Częściowo 2026-10-11:** WebKit w CI jako przebieg informacyjny, lista regresji z testem na iPhonie (B3, B4). | [Pewne] |
+| 10 | Brak testów dostępności (czytnik ekranu, klawiatura; znaczniki mapy nie są dostępne z klawiatury – decyzja projektowa). | niezgodność z WCAG 2.1 (istotne, jeśli serwis miałby trafić do sektora publicznego) | axe-core w E2E, decyzja o zakresie WCAG **Częściowo 2026-10-11:** axe w E2E bez wyjątków (kontrast przycisków „O serwisie” poprawiony); docelowy poziom WCAG zaparkowany decyzją właściciela (B5). | [Pewne] |
 | 11 | Brak testów wydajności i obciążenia. | nieznane zachowanie przy ruchu (limity Vercel/Cloudflare, limit Nominatim) | prosty test obciążenia API przed promocją serwisu | [Pewne] |
-| 12 | Testy ręczne nieformalne: jedna sesja eksploracyjna, brak planu testów, brak macierzy wymagania–testy. | słaby ślad audytowy dla testów ręcznych | lista kontrolna regresji ręcznej przed wydaniem (iOS, poziomo, wolna sieć) | [Pewne] |
+| 12 | Testy ręczne nieformalne: jedna sesja eksploracyjna, brak planu testów, brak macierzy wymagania–testy. | słaby ślad audytowy dla testów ręcznych | lista kontrolna regresji ręcznej przed wydaniem (iOS, poziomo, wolna sieć) **Częściowo 2026-10-11:** lista regresji ręcznej i szablon PR (B4); macierz wymagania–testy w etapie P2. | [Pewne] |
 | 13 | Proces jest jednoosobowy: ten sam właściciel zatwierdza i scala zmiany, w dużej części przygotowane przez Claude. | brak rozdzielenia obowiązków (autor/recenzent) | przy zespole: wymagany przegląd drugiej osoby | [Pewne] |
 
 Mocne strony: testy są szybkie, deterministyczne i nie wymagają sieci; każda awaria źródła danych ma test odporności; dane statyczne mają bramki jakości; operacje infrastruktury są skryptami z testami zamiast klikania w panelach; monitoring zakłada i zamyka zgłoszenia automatycznie; CI nie miało czerwonego przebiegu na `main`.
