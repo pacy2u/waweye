@@ -18,24 +18,19 @@ Znaczniki pewności: [Pewne] sprawdzone, [Prawdopodobne] silne przesłanki, [Zga
 - **Ryzyko:** przy następnej zmianie Workera wdrożenie może się nie udać (np. zmienione wejścia akcji) [Zgaduję]. Produkcja działa dalej na poprzedniej wersji Workera, więc awaria wdrożenia nie wyłącza aplikacji [Prawdopodobne].
 - **Do zrobienia:** uruchomić ręcznie Actions → „wawEye – wdrożenie Workera Cloudflare” → Run workflow (wdraża ten sam kod), sprawdzić, czy jest zielony. Jeśli jest czerwony: przeczytać informacje o wydaniu v4 i poprawić wejścia w kroku „Wdrożenie (wrangler deploy)”.
 
-### 2. Przebieg testów na `main` po scaleniu #82
-
-- **Stan:** o 01:51 przebieg „wawEye – testy” dla `01ae53c` (#82, akcje checkout/setup-node/upload-artifact v7 w `testy-webkit`) był w toku. Przebiegi po #74 i #75 skończyły się sukcesem [Pewne].
-- **Do zrobienia:** sprawdzić wynik. Na czerwono: Vercel nie wypromuje tej wersji na produkcję (Deployment Checks czekają na `bramka`), a produkcja zostaje na poprzedniej.
-
-### 3. Obserwacja A4 i stabilność WebKit – termin ok. 2026-10-25
+### 2. Obserwacja A4 i stabilność WebKit – termin ok. 2026-10-25
 
 - **Kryterium A4:** przez 2 tygodnie od wdrożenia każde zgłoszenie monitoringu ma etykietę `monitoring:dostawca` albo `monitoring:aplikacja` (`PLAN_NAPRAWCZY_TESTOW.md` A4).
 - **WebKit:** job `testy-webkit` jest informacyjny (`continue-on-error`). Jeśli przez ten czas jest stabilnie zielony, zaproponować właścicielowi włączenie go do `bramka` (B3).
 - **Dane do decyzji o błędach 522:** raport monitoringu wypisuje lokalizację Cloudflare (`[Cloudflare XXX]`). Jedno 522 widziano już z FRA, co osłabia hipotezę o odrzucanych lokalizacjach [Prawdopodobne]. Jeśli 522 nie zależy od lokalizacji, następny krok to zgłoszenie do operatora API miasta.
 - **Przypomnienie:** zaplanowane na 2026-10-25 08:00 (czasu warszawskiego, już po zmianie czasu) w sesji, w której powstała ta notatka. Nowa sesja go nie dostanie, więc sprawdź termin sam.
 
-### 4. Pomysł bez decyzji: oznaczenie pojazdów „poza trasą linii”
+### 3. Pomysł bez decyzji: oznaczenie pojazdów „poza trasą linii”
 
 - **Kontekst:** w nocy (ok. 01:30) tramwaje 9 i 1 stały poza swoimi trasami. Najpewniej to zjazdy do zajezdni albo postój z numerem ostatniej linii. GTFS nie opisuje zjazdów, więc aplikacja tego nie wie [Prawdopodobne].
 - **Propozycja:** wyróżnić pojazd daleko od trasy swojej linii (np. przygaszony znacznik i dopisek w panelu). Szacunek 2–4 h z testem. **Czeka na decyzję właściciela.**
 
-### 5. Zaparkowane decyzje
+### 4. Zaparkowane decyzje
 
 - **WCAG:** docelowy poziom zaparkowany przez właściciela. Testy axe w E2E blokują tylko błędy `serious` i `critical`, lista wyjątków jest pusta.
 - **Formatter (np. Prettier):** nie wybrany. Dziś jest tylko ESLint.
@@ -53,4 +48,4 @@ Znaczniki pewności: [Pewne] sprawdzone, [Prawdopodobne] silne przesłanki, [Zga
 - `TESTY_I_JAKOSC.md` (raport dla audytora i na wdrożenie), prezentacja tego raportu w Artifact (15 slajdów), `PLAN_NAPRAWCZY_TESTOW.md`.
 - P0 i P1 w kodzie: bramka CI z wykrywaniem zmian, pokrycie z progami, ESLint, axe w E2E, WebKit w CI, klasyfikacja alarmów z ponowną kontrolą, nagłówek `x-colo`, Dependabot, szablon PR, `LISTA_REGRESJI_RECZNEJ.md`, kolor przycisków „O serwisie” (wariant B), rezygnacja z pytania iOS o czujniki ruchu (`CONTEXT.md`).
 - Kroki ręczne właściciela: Vercel Deployment Checks na `bramka`, UptimeRobot (słowo `"source":"live"` na `/api/vehicles`, alarm przetestowany), alerty i aktualizacje Dependabot.
-- PR: #71, #73, #76–#82 oraz #74, #75 od Dependabota – wszystkie scalone.
+- PR: #71, #73, #76–#82 oraz #74, #75 od Dependabota – wszystkie scalone; testy na `main` po ostatnim (#82) zielone.
