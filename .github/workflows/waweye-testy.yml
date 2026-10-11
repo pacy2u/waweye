@@ -3,18 +3,19 @@ name: wawEye – testy
 # Unit and browser tests on every PR and on main. Docs-only changes (*.md) do not use test minutes: the "zmiany" job
 # sees that nothing else changed and the tests are skipped. The "bramka" job always reports a result, so it can be
 # the required check on main (a workflow skipped by a paths filter never reports, and the PR would wait forever).
+# It runs on every push to main too: Vercel promotes a production deployment only after "bramka" passes
+# (Deployment Checks), so a docs-only merge must still report a (quick, green) result.
 # "testy-webkit" runs the browser test in WebKit (Safari's engine); for now it only reports and does not gate
 # (PLAN_NAPRAWCZY_TESTOW.md B3).
 on:
   pull_request:
   push:
     branches: [main]
-    paths: ['waweye/**', '!waweye/**/*.md', '.github/workflows/waweye-*.yml']
   workflow_dispatch:
 
 concurrency:
   group: waweye-testy-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }} # on main every commit's deployment waits for its own result
 
 permissions:
   contents: read
@@ -33,11 +34,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
         run: |
-          if [ "${{ github.event_name }}" != pull_request ]; then echo "kod=true" >> "$GITHUB_OUTPUT"; exit 0; fi
-          gh api "repos/$GH_REPO/pulls/$PR/files" --paginate --jq '.[].filename' > pliki.txt
+          if [ "$EVENT" = pull_request ]; then
+            gh api "repos/$GH_REPO/pulls/$PR/files" --paginate --jq '.[].filename' > pliki.txt
+          elif [ "$EVENT" = push ] && [ -n "$BEFORE" ] && [ "$BEFORE" != 0000000000000000000000000000000000000000 ]; then
+            # If the comparison fails (e.g. after a force-push), test everything rather than stop the gate.
+            gh api "repos/$GH_REPO/compare/$BEFORE...$AFTER" --jq '.files[].filename' > pliki.txt || { echo "kod=true" >> "$GITHUB_OUTPUT"; exit 0; }
+          else
+            echo "kod=true" >> "$GITHUB_OUTPUT"; exit 0 # manual run or a new branch: test everything
+          fi
           cat pliki.txt
-          # Same rule as the push filter: waweye/** except *.md, and the waweye workflows.
+          # Code: waweye/** except *.md, and the waweye workflows.
           if grep -E '^(waweye/|\.github/workflows/waweye-)' pliki.txt | grep -qvE '^waweye/.*\.md$'; then kod=true; else kod=false; fi
           echo "kod=$kod" >> "$GITHUB_OUTPUT"
           echo "Zmiany w kodzie: $kod" >> "$GITHUB_STEP_SUMMARY"
