@@ -392,7 +392,7 @@ flowchart LR
     PR --> T["wawEye – testy<br/>npm test + npm run test:e2e<br/>(Chromium, desktop + telefon, MOCK)"]
     PR --> PV["Vercel: wdrożenie podglądowe"]
     T -->|zielone| MG["Merge (właściciel)"]
-    MG --> PROD["Vercel: wdrożenie produkcyjne<br/>waweye.vercel.app"]
+    MG --> PROD["Vercel: wdrożenie produkcyjne<br/>waweye.vercel.app<br/>(dopiero po zielonej bramce – Deployment Checks)"]
     MG -->|zmiany w waweye/worker/**| WD["wawEye – wdrożenie Workera<br/>npm test → podepnij KV → wrangler deploy → test-gtfs"]
     WD --> CFW["Worker waweye-proxy"]
 ```
@@ -447,6 +447,8 @@ flowchart TD
     R -->|nie| I["otwiera jedno zgłoszenie<br/>„[monitoring] wawEye nie działa poprawnie”<br/>→ e-mail od GitHuba"]
     R -->|tak| Z["zamyka otwarte zgłoszenie"]
 ```
+
+**Zewnętrzny monitor (od 2026-10-12):** UptimeRobot (konto właściciela) co 5 min sprawdza `https://waweye.vercel.app/api/vehicles` i alarmuje e-mailem, gdy odpowiedź nie zawiera `"source":"live"`. Uzupełnia monitoring w Actions, który przez opóźnienia harmonogramów GitHuba działa średnio co kilka godzin. Każdy błąd w raporcie monitoringu Actions ma kategorię **dostawca** albo **aplikacja**, a błąd samego dostawcy jest sprawdzany ponownie po 4 min.
 
 Dodatkowe sygnały: pasek statusu w aplikacji pokazuje błędy częściowe (`errors`) i wiek danych; `test-workera` w operacjach Cloudflare sprawdza wszystkie zasoby Workera i odmowę 403 bez sekretu. Aplikacja nie zbiera analityki użytkowników – mierzone jest tylko działanie techniczne.
 

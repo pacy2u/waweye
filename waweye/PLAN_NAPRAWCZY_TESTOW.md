@@ -43,7 +43,10 @@ Monitoring działa więc poprawnie, ale nie odróżnia krótkiej awarii dostawcy
 
 ## 2. Priorytety i harmonogram
 
-**Stan realizacji (2026-10-11):** P0 w kodzie scalone (PR #73): A1 (bramka CI), A4, A5 (plik Dependabot). P1 w kodzie: B1 (pokrycie, progi 94/84/93%), B2 (ESLint, 15 poprawek), B3 (WebKit w CI, informacyjnie), B4 (lista regresji, szablon PR), B5 (axe w E2E) – gałąź `test/p1-pokrycie-lint-webkit-dostepnosc`. Decyzje właściciela (2026-10-11): przyciski „O serwisie” w wariancie B (biały na #C23A00, 5,4:1) – wyjątek w teście usunięty; **poziom WCAG zaparkowany** (axe nadal blokuje naruszenia serious/critical); bez prośby o czujniki ruchu na iOS. Czekają na właściciela: reguła gałęzi `main`, A2, A3, CodeQL, decyzja o formaterze (B2).
+**Stan realizacji (2026-10-12):**
+- **P0 – zamknięte poza obserwacją A4.** A1: bramka CI w kodzie; reguła gałęzi zapisana, lecz nieegzekwowana (prywatne repozytorium bez organizacji Team, decyzja właściciela). A2: Vercel Deployment Checks czekają na `bramka`, a workflow testów uruchamia się przy każdym pushu do `main` (PR #78). A3: UptimeRobot co 5 min, alarm przetestowany. A4: w kodzie (PR #73), kryterium odbioru do sprawdzenia ok. 2026-10-25. A5: Dependabot włączony; CodeQL niedostępny dla konta osobistego – świadoma rezygnacja.
+- **P1 – zrobione w kodzie** (PR #76, #77): B1 pokrycie, B2 ESLint, B3 WebKit przechodzi w całości (informacyjnie; przestawienie na wymagany po kilku zielonych przebiegach na `main`), B4 lista regresji i szablon PR, B5 axe bez wyjątków.
+- **Decyzje właściciela (2026-10-11):** przyciski „O serwisie” w wariancie B; poziom WCAG zaparkowany; bez prośby o czujniki ruchu na iOS; reguła `main` bez egzekwowania. Otwarte: formater (B2).
 
 | Priorytet | Kiedy | Zadania | Praca [Szacunek] | Charakter |
 |---|---|---|---|---|
