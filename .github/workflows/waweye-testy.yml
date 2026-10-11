@@ -1,9 +1,10 @@
 name: wawEye – testy
 
-# Unit and browser tests on every PR and on main. Docs-only changes (*.md) do not use Actions minutes.
+# Unit and browser tests on every PR and on main. Docs-only changes (*.md) do not use test minutes: the "zmiany" job
+# sees that nothing else changed and the tests are skipped. The "bramka" job always reports a result, so it can be
+# the required check on main (a workflow skipped by a paths filter never reports, and the PR would wait forever).
 on:
   pull_request:
-    paths: ['waweye/**', '!waweye/**/*.md', '.github/workflows/waweye-*.yml']
   push:
     branches: [main]
     paths: ['waweye/**', '!waweye/**/*.md', '.github/workflows/waweye-*.yml']
@@ -15,9 +16,33 @@ concurrency:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
+  zmiany:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      kod: ${{ steps.pliki.outputs.kod }}
+    steps:
+      - name: Czy zmienił się kod
+        id: pliki
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          if [ "${{ github.event_name }}" != pull_request ]; then echo "kod=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          gh api "repos/$GH_REPO/pulls/$PR/files" --paginate --jq '.[].filename' > pliki.txt
+          cat pliki.txt
+          # Same rule as the push filter: waweye/** except *.md, and the waweye workflows.
+          if grep -E '^(waweye/|\.github/workflows/waweye-)' pliki.txt | grep -qvE '^waweye/.*\.md$'; then kod=true; else kod=false; fi
+          echo "kod=$kod" >> "$GITHUB_OUTPUT"
+          echo "Zmiany w kodzie: $kod" >> "$GITHUB_STEP_SUMMARY"
+
   testy:
+    needs: zmiany
+    if: needs.zmiany.outputs.kod == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -45,3 +70,19 @@ jobs:
           name: zrzuty-ekranu-e2e
           path: ${{ runner.temp }}/waweye-*.png
           retention-days: 7
+
+  bramka:
+    needs: [zmiany, testy]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Wynik
+        env:
+          ZMIANY: ${{ needs.zmiany.result }}
+          TESTY: ${{ needs.testy.result }}
+        run: |
+          echo "zmiany: $ZMIANY, testy: $TESTY"
+          if [ "$ZMIANY" != success ]; then echo "::error::Nie udało się sprawdzić zmienionych plików."; exit 1; fi
+          if [ "$TESTY" = success ] || [ "$TESTY" = skipped ]; then exit 0; fi
+          echo "::error::Testy nie przeszły ($TESTY)."; exit 1

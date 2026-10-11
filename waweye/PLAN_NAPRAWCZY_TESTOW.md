@@ -43,6 +43,8 @@ Monitoring działa więc poprawnie, ale nie odróżnia krótkiej awarii dostawcy
 
 ## 2. Priorytety i harmonogram
 
+**Stan realizacji (2026-10-11):** w kodzie zrobione A1 (bramka CI), A4 i A5 (plik Dependabot) – gałąź `test/p0-bramka-ci-alarmy-dependabot`. Czekają na właściciela: A1 (reguła gałęzi `main`, po scaleniu bramki), A2, A3, A5 (włączenie CodeQL).
+
 | Priorytet | Kiedy | Zadania | Praca [Szacunek] | Charakter |
 |---|---|---|---|---|
 | **P0** | tydzień 1 | A1–A5 | 11–19 h | głównie ustawienia; zamyka luki, które audytor uzna za kontrolne |
@@ -113,10 +115,10 @@ gantt
 - **Luka:** #2 (czerwone przebiegi bez opisanych przyczyn); ustalenia z §1.
 - **Działanie (kod, `scripts/check-production.js` i workflow monitoringu):**
   1. Każdy błąd w raporcie dostaje kategorię: **dostawca danych** (522, timeout, błąd sieci w odpowiedzi API miasta przekazany przez Workera) albo **aplikacja** (5xx bez błędu dostawcy, źródło MOCK, pusta lista, zły format, nieświeże trasy).
-  2. Zgłoszenie otwiera się od razu przy błędzie kategorii „aplikacja” albo gdy błąd „dostawca” powtarza się w **dwóch kolejnych przebiegach**. Pojedynczy błąd dostawcy trafia tylko do podsumowania przebiegu.
+  2. Zgłoszenie otwiera się od razu przy błędzie kategorii „aplikacja”. Błąd samego dostawcy jest sprawdzany ponownie **4 minuty później w tym samym przebiegu** i liczy się dopiero wtedy, gdy trwa; chwilowy trafia tylko do podsumowania przebiegu. (Pierwotnie: „dwa kolejne przebiegi”. Przy przebiegach co ok. 6,5 h potwierdzenie przychodziłoby po godzinach, a awarie z §1 trwały minuty, więc ponowna kontrola w przebiegu jest szybsza i dokładniejsza.)
   3. Zgłoszenie dostaje etykietę `monitoring:dostawca` albo `monitoring:aplikacja`. Komentarz przy automatycznym zamknięciu podaje czas trwania.
   4. Worker dodaje do odpowiedzi nagłówek z lokalizacją Cloudflare (`colo`), a raport go wypisuje. To potwierdzi albo obali hipotezę o odrzucanych lokalizacjach.
-- **Kryterium odbioru:** testy jednostkowe `evaluate()` dla obu kategorii i reguły „dwa przebiegi z rzędu”; przez 2 tygodnie po wdrożeniu 100% zgłoszeń ma etykietę przyczyny.
+- **Kryterium odbioru:** testy jednostkowe `evaluate()` dla obu kategorii i reguły ponownej kontroli; przez 2 tygodnie po wdrożeniu 100% zgłoszeń ma etykietę przyczyny.
 - **Praca:** 6–10 h.
 - **Odpowiedzialny:** Zespół.
 

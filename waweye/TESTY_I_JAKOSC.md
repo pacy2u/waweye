@@ -155,7 +155,7 @@ Smoke test na żywym systemie. Odpytuje równolegle `/api/vehicles`, `/api/parki
 | Tabor | pusty zbiór; mniej niż 90% pojazdów na żywo (autobusy, tramwaje osobno) ma wpis w zbiorze taboru; typ z mniej niż 20 pojazdami nie jest oceniany (np. tramwaje w nocy) |
 | Trasy linii (opcjonalnie) | brak daty odświeżenia, odświeżenie starsze niż 48 h, rozkład wygasły |
 
-Przy błędzie skrypt czeka 30 s i powtarza kontrolę raz, żeby pojedyncze zerwane połączenie nie wywołało alarmu. Wynik to tabela Markdown (OK/BŁĄD + szczegóły, godzina warszawska) i kod wyjścia 0/1. Logika oceny (`evaluate`) jest pokryta testami jednostkowymi.
+Przy błędzie skrypt czeka 30 s i powtarza kontrolę raz, żeby pojedyncze zerwane połączenie nie wywołało alarmu. Każdy błąd ma kategorię: **dostawca** (API Warszawy nie odpowiedziało albo zwróciło 5xx, np. 522 przez Workera; Worker podaje lokalizację Cloudflare, np. `[Cloudflare WAW]`) albo **aplikacja** (wszystko inne). Błąd samego dostawcy jest sprawdzany jeszcze raz po 4 min i liczy się tylko, gdy trwa. Wynik to tabela Markdown (OK/BŁĄD z kategorią + szczegóły, godzina warszawska) i kod wyjścia 0/1; zgłoszenie dostaje etykietę `monitoring:dostawca` albo `monitoring:aplikacja`. Logika oceny (`evaluate`) jest pokryta testami jednostkowymi.
 
 ### 5.2. Gdzie działa
 
@@ -276,7 +276,7 @@ Ocena pewności: **[Pewne]** – sprawdzone w repozytorium lub historii Actions;
 | # | Luka | Ryzyko | Rekomendacja | Pewność |
 |---|---|---|---|---|
 | 1 | Monitoring ma działać co 2 h, a w 6,5 dnia wykonał 25 przebiegów zamiast ok. 80 (średnio co ok. 6,5 h). Harmonogramy GitHub Actions są opóźniane lub pomijane. | awaria produkcji może trwać kilka godzin bez alarmu | zewnętrzny monitor dostępności (np. darmowy UptimeRobot, Cloudflare Health Checks) jako drugi kanał | [Pewne] |
-| 2 | 8 z 25 przebiegów monitoringu było czerwonych; zgłoszenia zamykają się same bez opisu przyczyny. Analiza 5 zgłoszeń (`PLAN_NAPRAWCZY_TESTOW.md` §1): za każdym razem chwilowy błąd 522 API miasta dla części zbiorów, drugi adres chwilę później działał. | monitoring nie odróżnia krótkiej awarii dostawcy od awarii aplikacji; alarmy tracą wartość | kategorie przyczyn i alarm dopiero po dwóch kolejnych błędach dostawcy (plan, zadanie A4) | [Pewne] |
+| 2 | 8 z 25 przebiegów monitoringu było czerwonych; zgłoszenia zamykają się same bez opisu przyczyny. Analiza 5 zgłoszeń (`PLAN_NAPRAWCZY_TESTOW.md` §1): za każdym razem chwilowy błąd 522 API miasta dla części zbiorów, drugi adres chwilę później działał. | monitoring nie odróżnia krótkiej awarii dostawcy od awarii aplikacji; alarmy tracą wartość | kategorie przyczyn i ponowna kontrola błędu dostawcy po 4 min (plan, zadanie A4) | [Pewne] |
 | 3 | Produkcja Vercel wdraża się po merge do `main` równolegle z testami na `main`, nie po nich. Bramką są zielone testy na PR i decyzja właściciela. | zmiana zielona na PR, ale czerwona po scaleniu z nowszym `main`, trafi na produkcję | wymagane checki i „branch must be up to date” w ochronie gałęzi | [Prawdopodobne] |
 | 4 | Ochrona gałęzi `main` (wymagane checki, wymagany przegląd) nie jest widoczna w repozytorium. | merge z czerwonymi testami jest technicznie możliwy | sprawdzić i włączyć w ustawieniach repozytorium | [Niezweryfikowane] |
 | 5 | Brak pomiaru pokrycia kodu (`c8`, `--experimental-test-coverage`). | nie da się wykazać pokrycia liczbowo | dodać raport pokrycia do CI (Node 22 ma go wbudowanego) | [Pewne] |
