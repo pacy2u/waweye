@@ -41,8 +41,8 @@ jobs:
       VERCEL_TEAM_ID: team_cc72c42CNFxSv2ZSpnhfbDIw # team ampm10 (an identifier, not a secret)
       VERCEL_PROJECT_ID: prj_BbZW22uPfts5S9gjDz7l3E9WnFwG # project waweye (until 2026-10: pasibus); the id survives renames
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       - name: Operacja

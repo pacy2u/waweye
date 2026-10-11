@@ -33,9 +33,9 @@ jobs:
           msg="Worker NIE został wdrożony: brak sekretów CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID w repozytorium. Dodaj je (waweye/README.md) albo wklej waweye/worker/index.js ręcznie w Cloudflare."
           echo "::warning::$msg"
           echo "$msg" >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: env.HAS_CF_TOKEN == 'true'
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         if: env.HAS_CF_TOKEN == 'true'
         with:
           node-version: 22
@@ -58,7 +58,7 @@ jobs:
           cat kv.md | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Wdrożenie (wrangler deploy)
         if: env.HAS_CF_TOKEN == 'true'
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
