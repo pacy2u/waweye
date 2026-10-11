@@ -8,6 +8,7 @@ const fs = require('fs');
 const { createServer } = require('../dev-server');
 
 const SHOTS = process.env.SHOTS || '/tmp';
+const FORCE_SYNTHETIC_WHEEL = process.env.SYNTHETIC_WHEEL === '1'; // check the WebKit fallback in Chromium
 // The SPPN layer comes from the city's WMS; tests answer its tile requests with a transparent pixel (no outside traffic).
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
 // Accessibility (axe-core): serious and critical violations fail the test, except the ones listed here with a reason.
@@ -219,7 +220,12 @@ function findChromium() {
     });
     await step(`${label}: zooming while centred keeps the user in the middle`, async () => {
       const z0 = (await L_()).z;
-      await page.mouse.move(ctxOpts.viewport.width / 2 + 100, ctxOpts.viewport.height / 2 + 120); await page.mouse.wheel(0, 300);
+      const x = ctxOpts.viewport.width / 2 + 100, y = ctxOpts.viewport.height / 2 + 120;
+      await page.mouse.move(x, y);
+      // Mobile WebKit has no mouse wheel in Playwright: the same wheel event sent to the map runs Leaflet's same handler.
+      if (FORCE_SYNTHETIC_WHEEL || (process.env.BROWSER === 'webkit' && ctxOpts.isMobile)) {
+        await page.evaluate(([x, y]) => document.getElementById('map').dispatchEvent(new WheelEvent('wheel', { deltaY: 300, clientX: x, clientY: y, bubbles: true, cancelable: true })), [x, y]);
+      } else await page.mouse.wheel(0, 300);
       await page.waitForFunction((z) => window.__waweye.map.getZoom() < z, z0); await page.waitForTimeout(400);
       const s = await L_(); assert.ok(s.centered); assert.ok(s.off < 1.5, 'centre off by px ' + s.off);
     });
