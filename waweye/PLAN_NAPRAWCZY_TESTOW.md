@@ -43,7 +43,7 @@ Monitoring działa więc poprawnie, ale nie odróżnia krótkiej awarii dostawcy
 
 ## 2. Priorytety i harmonogram
 
-**Stan realizacji (2026-10-11):** P0 w kodzie scalone (PR #73): A1 (bramka CI), A4, A5 (plik Dependabot). P1 w kodzie: B1 (pokrycie, progi 94/84/93%), B2 (ESLint, 15 poprawek), B3 (WebKit w CI, informacyjnie), B4 (lista regresji, szablon PR), B5 (axe w E2E) – gałąź `test/p1-pokrycie-lint-webkit-dostepnosc`. Czekają na właściciela: reguła gałęzi `main`, A2, A3, CodeQL, decyzje: formater (B2), kolor przycisków „O serwisie” i poziom WCAG (B5).
+**Stan realizacji (2026-10-11):** P0 w kodzie scalone (PR #73): A1 (bramka CI), A4, A5 (plik Dependabot). P1 w kodzie: B1 (pokrycie, progi 94/84/93%), B2 (ESLint, 15 poprawek), B3 (WebKit w CI, informacyjnie), B4 (lista regresji, szablon PR), B5 (axe w E2E) – gałąź `test/p1-pokrycie-lint-webkit-dostepnosc`. Decyzje właściciela (2026-10-11): przyciski „O serwisie” w wariancie B (biały na #C23A00, 5,4:1) – wyjątek w teście usunięty; **poziom WCAG zaparkowany** (axe nadal blokuje naruszenia serious/critical); bez prośby o czujniki ruchu na iOS. Czekają na właściciela: reguła gałęzi `main`, A2, A3, CodeQL, decyzja o formaterze (B2).
 
 | Priorytet | Kiedy | Zadania | Praca [Szacunek] | Charakter |
 |---|---|---|---|---|

@@ -12,11 +12,8 @@ const SHOTS = process.env.SHOTS || '/tmp';
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
 // Accessibility (axe-core): serious and critical violations fail the test, except the ones listed here with a reason.
 const AXE = require.resolve('axe-core/axe.min.js');
-const A11Y_EXCEPTIONS = [
-  // White on the brand orange (#FC4C02) is 3.4:1 on the "O serwisie" buttons; changing the brand colour is the owner's
-  // decision (PLAN_NAPRAWCZY_TESTOW.md B5).
-  { id: 'color-contrast', target: /^\.(back|btn)\b/ },
-];
+// Each entry: { id: axe rule, target: RegExp on the CSS selector } with a comment saying why. None at the moment.
+const A11Y_EXCEPTIONS = [];
 async function a11y(page) {
   if (!(await page.evaluate(() => !!window.axe))) await page.addScriptTag({ path: AXE });
   const found = await page.evaluate(async () => (await window.axe.run(document, { resultTypes: ['violations'] })).violations
@@ -783,8 +780,11 @@ function findChromium() {
         const r = await page.request.get(src);
         assert.equal(r.status(), 200, src);
       }
-      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)); await page.waitForTimeout(300);
+      // The screenshots load lazily, near the viewport (WebKit starts closer to it than Chromium): bring each into view.
+      for (const img of await page.$$('img')) await img.scrollIntoViewIfNeeded();
+      await page.waitForFunction(() => [...document.images].every((i) => i.complete && i.naturalWidth > 0), null, { timeout: 10000 }).catch(() => {});
       assert.ok(await page.$$eval('img', (els) => els.every((i) => i.complete && i.naturalWidth > 0)), 'screenshots render');
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)); await page.waitForTimeout(300);
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
       await page.screenshot({ path: `${SHOTS}/waweye-o-serwisie-${label}.png`, fullPage: true });
     });
