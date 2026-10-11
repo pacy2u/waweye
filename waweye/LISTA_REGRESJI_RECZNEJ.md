@@ -19,7 +19,7 @@ Gdzie: podgląd Vercel z PR (`waweye-git-<gałąź>-ampm10.vercel.app`), czyli p
 ## Moja lokalizacja
 
 - [ ] Pierwsze użycie: pytanie o zgodę, potem niebieska kropka i przybliżenie
-- [ ] Na iPhonie kompas obraca stożek kierunku w miejscu, nie tylko w ruchu. Uwaga: iOS daje dane kompasu dopiero po zgodzie (`DeviceOrientationEvent.requestPermission`), a `public/app.js` o nią nie prosi, więc stożek może się pojawiać tylko z kursu GPS podczas jazdy – do potwierdzenia na urządzeniu
+- [ ] Na iPhonie aplikacja **nie** prosi o dostęp do ruchu i orientacji (decyzja w `CONTEXT.md`); stożek kierunku pojawia się dopiero w ruchu (kurs z GPS). Na Androidzie stożek obraca się także w miejscu
 - [ ] Odmowa zgody: czytelny komunikat, przekreślony przycisk
 
 ## Warstwy
