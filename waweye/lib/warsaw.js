@@ -83,7 +83,9 @@ async function fetchOnce(url, fetchImpl, init, extract) {
     // Relay/API errors carry a JSON {error}; include it so "HTTP 403" says who refused and why.
     let why = '';
     try { const j = await res.json(); why = errorText(j) || ''; } catch {}
-    throw new Error(`HTTP ${res.status}${why ? ` (${why})` : ''}`);
+    // The Worker names its Cloudflare location; the Warsaw API refuses some of them with 522.
+    const colo = res.headers && typeof res.headers.get === 'function' && res.headers.get('x-colo');
+    throw new Error(`HTTP ${res.status}${why ? ` (${why})` : ''}${colo ? ` [Cloudflare ${colo}]` : ''}`);
   }
   const body = await res.json();
   const list = extract(body);

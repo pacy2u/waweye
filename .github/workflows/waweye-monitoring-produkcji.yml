@@ -3,6 +3,9 @@ name: wawEye – monitoring produkcji
 # Every 2 hours: checks vehicles, parkings, incidents and fleet on both production addresses
 # (https://waweye.vercel.app and, until the end of the wawEye migration, https://pasibus.vercel.app).
 # On failure it opens one issue (GitHub e-mails the repository owner) and closes it after the next good check.
+# Each failure is the data supplier's (the Warsaw API timed out or answered 5xx) or the application's; the issue gets
+# the label monitoring:dostawca or monitoring:aplikacja. A supplier-only failure is checked again 4 min later and only
+# counts if it lasts (check-production.js). Closing the issue notes how long it was open.
 # Budget: about 12 runs a day x 1-2 billed minutes = ~360-720 of the 2000 free minutes a month of a private repository.
 on:
   schedule:
@@ -20,12 +23,13 @@ permissions:
 jobs:
   kontrola:
     runs-on: ubuntu-latest
-    timeout-minutes: 10 # two addresses, each up to ~2.5 min with timeouts and the retry
+    timeout-minutes: 20 # two addresses, each up to ~7 min with timeouts, the 30 s retry and the 4 min supplier re-check
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       TITLE: '[monitoring] wawEye nie działa poprawnie'
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      WAWEYE_KATEGORIE: kategorie.txt
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -40,19 +44,36 @@ jobs:
             node waweye/scripts/check-production.js "$adres" >> raport.md || status=1
           done
           cat raport.md >> "$GITHUB_STEP_SUMMARY"
+          # One application problem on either address makes it an application failure.
+          if grep -qx aplikacja kategorie.txt; then kat=aplikacja; elif grep -qx dostawca kategorie.txt; then kat=dostawca; else kat=ok; fi
+          echo "kategoria=$kat" >> "$GITHUB_OUTPUT"
           exit $status
       - name: Zgłoś problem (jedno otwarte zgłoszenie naraz)
         if: steps.kontrola.outcome == 'failure'
+        env:
+          KATEGORIA: ${{ steps.kontrola.outputs.kategoria }}
         run: |
+          case "$KATEGORIA" in
+            dostawca) label=monitoring:dostawca; opis='API Warszawy nie odpowiada (np. 522), kod wawEye działa'; kolor=FBCA04 ;;
+            *) label=monitoring:aplikacja; opis='Błąd po stronie wawEye'; kolor=D93F0B ;;
+          esac
+          gh label create "$label" --color "$kolor" --description "$opis" --force || echo "::warning::Nie udało się utworzyć etykiety $label."
           nr=$(gh issue list --state open --limit 100 --json number,title --jq '.[] | select(.title == $ENV.TITLE) | .number' | head -n1)
-          if [ -n "$nr" ]; then echo "Zgłoszenie #$nr jest już otwarte."; exit 0; fi
+          if [ -n "$nr" ]; then
+            echo "Zgłoszenie #$nr jest już otwarte."
+            gh issue edit "$nr" --add-label "$label" || true
+            exit 0
+          fi
           { cat raport.md; echo; echo "Przebieg: $RUN_URL"; echo; echo "Zgłoszenie zamknie się samo po pierwszej udanej kontroli."; } > tresc.md
-          gh issue create --title "$TITLE" --body-file tresc.md
+          gh issue create --title "$TITLE" --body-file tresc.md --label "$label" || gh issue create --title "$TITLE" --body-file tresc.md
       - name: Zamknij zgłoszenie po powrocie do normy
         if: steps.kontrola.outcome == 'success'
         run: |
-          nr=$(gh issue list --state open --limit 100 --json number,title --jq '.[] | select(.title == $ENV.TITLE) | .number' | head -n1)
-          if [ -n "$nr" ]; then gh issue close "$nr" --comment "Kontrola przeszła, produkcja działa ponownie. Przebieg: $RUN_URL"; fi
+          read -r nr od < <(gh issue list --state open --limit 100 --json number,title,createdAt --jq '.[] | select(.title == $ENV.TITLE) | "\(.number) \(.createdAt)"' | head -n1) || true
+          if [ -n "$nr" ]; then
+            min=$(( ($(date +%s) - $(date -d "$od" +%s)) / 60 ))
+            gh issue close "$nr" --comment "Kontrola przeszła, produkcja działa ponownie. Zgłoszenie było otwarte ok. $((min / 60)) h $((min % 60)) min (między przebiegami monitoringu mija nawet kilka godzin, więc awaria mogła być krótsza). Przebieg: $RUN_URL"
+          fi
       - name: Wynik
         if: steps.kontrola.outcome == 'failure'
         run: exit 1

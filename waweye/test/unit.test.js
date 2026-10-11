@@ -446,6 +446,72 @@ test('health check: low fleet match fails, too few live vehicles of a type are n
   assert.ok(n.ok); assert.match(n.rows[3].detail, /tramwaje: za mało pojazdów na żywo \(3\)/);
 });
 
+test('health check: supplier failures (5xx, timeouts from the Warsaw API) are told apart from the application\'s', () => {
+  const cat = (spoil) => { const d = liveSet(); spoil(d); return evaluate(d); };
+  // As in the October 2026 alerts: a 522 for one vehicle type, and 502 (HTTP 522) for a whole dataset.
+  let r = cat((d) => { d.vehicles.body.errors = ['tram: HTTP 522 [Cloudflare WAW]']; });
+  assert.equal(r.kind, 'dostawca'); assert.equal(r.rows[0].kind, 'dostawca');
+  assert.match(report('https://x', r), /Pojazdy[^\n]*BŁĄD \(dostawca\)[^\n]*tram: HTTP 522 \[Cloudflare WAW\][\s\S]*dostawca danych/);
+  r = cat((d) => { d.incidents = { status: 502, body: { error: 'HTTP 522' }, ms: 1 }; d.fleet = { status: 502, body: { error: 'fetch failed (UND_ERR_CONNECT_TIMEOUT)' }, ms: 1 }; });
+  assert.equal(r.kind, 'dostawca'); assert.deepEqual(r.rows.map((x) => x.kind), [null, null, 'dostawca', 'dostawca']);
+  // Ours: no answer from our own API, a rejected key, mock data, a mixed partial failure.
+  for (const spoil of [
+    (d) => { d.parking = { status: 0, body: null, error: 'timeout', ms: 1 }; },
+    (d) => { d.vehicles = { status: 502, body: { error: 'HTTP 403 (forbidden)' }, ms: 1 }; },
+    (d) => { d.fleet = { status: 502, body: { error: 'HTTP 500 (worker is missing WARSAW_API_KEY)' }, ms: 1 }; },
+    (d) => { d.vehicles.body.source = 'mock'; },
+    (d) => { d.vehicles.body.errors = ['tram: HTTP 522', 'bus: Unexpected API response: {}']; },
+  ]) {
+    r = cat(spoil);
+    assert.equal(r.kind, 'aplikacja', JSON.stringify(r.rows)); assert.match(report('https://x', r), /BŁĄD \(aplikacja\)[\s\S]*Kategoria: \*\*aplikacja\*\*/);
+  }
+  // One application problem outweighs any number of supplier ones.
+  r = cat((d) => { d.incidents = { status: 502, body: { error: 'HTTP 522' }, ms: 1 }; d.parking.body.parkings = []; });
+  assert.equal(r.kind, 'aplikacja');
+  assert.equal(evaluate(liveSet()).kind, null);
+});
+
+test('health check run: a supplier failure is checked again later and passes quietly; an application failure does not wait', async () => {
+  const { monitor } = require('../scripts/check-production');
+  const meta = { valid: { from: '2026-01-01', to: '2099-01-01' }, refreshed: new Date().toISOString(), lines: 300 };
+  // bad(k) says how check number k (0, 1, 2…) fails: 'supplier', 'app' or false; each check asks /api/vehicles first.
+  const fakeProd = (bad) => { let k = -1; return async (url) => {
+    const d = liveSet(), path = new URL(url).pathname;
+    if (path === '/api/vehicles') k++;
+    const how = bad(k);
+    const body = path === '/api/vehicles' ? d.vehicles.body : path === '/api/parking' ? d.parking.body : path === '/api/fleet' ? d.fleet.body
+      : path === '/api/incidents' ? d.incidents.body : meta;
+    if (how && path === '/api/incidents') return new Response('{"error":"HTTP 522"}', { status: 502 });
+    if (how === 'app' && path === '/api/parking') return new Response('{"parkings":[]}', { status: 200 });
+    return new Response(JSON.stringify(body), { status: 200 });
+  }; };
+  const waits = [];
+  const wait = async (ms) => { waits.push(ms); };
+  // Down for the first two checks (the 30 s retry included), back for the late one.
+  let out = await monitor('https://x', { fetchImpl: fakeProd((k) => (k < 2 ? 'supplier' : false)), wait, recheckMs: 240000 });
+  assert.ok(out.result.ok); assert.deepEqual(waits, [30000, 240000]); assert.match(out.note, /Chwilowy błąd dostawcy danych \(Utrudnienia\) minął w ciągu 4 min/);
+  // Still down at the late check: it counts.
+  waits.length = 0;
+  out = await monitor('https://x', { fetchImpl: fakeProd(() => 'supplier'), wait, recheckMs: 240000 });
+  assert.equal(out.result.kind, 'dostawca'); assert.match(out.note, /utrzymał się/);
+  // The application's own failure: only the 30 s retry.
+  waits.length = 0;
+  out = await monitor('https://x', { fetchImpl: fakeProd(() => 'app'), wait, recheckMs: 240000 });
+  assert.equal(out.result.kind, 'aplikacja'); assert.deepEqual(waits, [30000]); assert.equal(out.note, '');
+});
+
+test('worker names its Cloudflare location on relayed answers and failures; the client puts it in the error', async () => {
+  const { handle } = await import('../worker/index.js');
+  const env = { PROXY_SECRET: 's3', WARSAW_API_KEY: 'KEY' };
+  const req = (q) => { const r = new Request('https://w.dev/' + q, { headers: { 'x-proxy-secret': 's3' } }); Object.defineProperty(r, 'cf', { value: { colo: 'WAW' } }); return r; };
+  const relayed = await handle(req('?resource=incidents'), env, async () => new Response('error code: 522', { status: 522 }));
+  assert.equal(relayed.status, 522); assert.equal(relayed.headers.get('x-colo'), 'WAW');
+  const failed = await handle(req('?type=1'), env, async () => { throw new Error('connect timeout'); });
+  assert.equal(failed.status, 502); assert.equal(failed.headers.get('x-colo'), 'WAW');
+  const f = async () => new Response('error code: 522', { status: 522, headers: { 'x-colo': 'WAW' } });
+  await assert.rejects(fetchIncidents({ fetchImpl: f, upstream: { url: 'https://w.dev', secret: 's3' } }), /^Error: HTTP 522 \[Cloudflare WAW\]$/);
+});
+
 // ---- Sport classes ("Zajęcia sportowe") ----
 // Records as the live API returned them on 2026-10-05 (text shortened).
 const LIVE_SPORT = [

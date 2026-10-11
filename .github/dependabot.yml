@@ -1,0 +1,26 @@
+# Weekly update PRs for the app's npm packages and for the GitHub Actions used by the workflows.
+# Each PR runs "wawEye – testy" like any other change.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /waweye
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Europe/Warsaw
+    open-pull-requests-limit: 5
+    groups:
+      zaleznosci-npm:
+        patterns: ['*']
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Europe/Warsaw
+    open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        patterns: ['*']

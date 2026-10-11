@@ -137,6 +137,8 @@ export async function handle(request, env, fetchImpl) {
   const type = params.get('type');
   if (!resourceUrl && type !== '1' && type !== '2') return json({ error: 'bad type' }, 400);
   if (!env.WARSAW_API_KEY) return json({ error: 'worker is missing WARSAW_API_KEY' }, 500);
+  // Which Cloudflare location the request went out from: the Warsaw API answers 522 to some of them (monitoring reports it).
+  const colo = (request.cf && request.cf.colo) || '';
   try {
     // The docs say "Authorization: token uzytkownika"; try the raw token, then "Bearer <token>" on 401/403.
     let res;
@@ -146,9 +148,11 @@ export async function handle(request, env, fetchImpl) {
         : { method: 'POST', headers: { Authorization: auth, 'Content-Type': 'application/json' }, body: JSON.stringify({ type: Number(type) }) });
       if (res.status !== 401 && res.status !== 403) break;
     }
-    return new Response(await res.text(), { status: res.status, headers: { 'Content-Type': 'application/json' } });
+    return new Response(await res.text(), { status: res.status, headers: { 'Content-Type': 'application/json', 'x-colo': colo } });
   } catch (e) {
-    return json({ error: 'upstream: ' + e.message }, 502);
+    const r = json({ error: 'upstream: ' + e.message }, 502);
+    r.headers.set('x-colo', colo);
+    return r;
   }
 }
 
