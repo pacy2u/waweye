@@ -239,7 +239,14 @@ function findChromium() {
         return new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r({ on: !!document.querySelector('.me.heading'), t: document.querySelector('.me-beam').style.transform }))));
       }, alpha);
       assert.ok(!(await page.evaluate(() => !!document.querySelector('.me.heading'))), 'no beam without a heading');
-      assert.deepEqual(await turn(270), { on: true, t: 'rotate(90deg)' }); // alpha counts counter-clockwise: 270 = facing east
+      // The expected angles are for a phone held upright. Emulated mobile WebKit may report a turned screen
+      // (screen.orientation.angle 90), which the app rightly adds to the heading: hold it upright for this step.
+      const angle = await page.evaluate(() => {
+        const o = screen.orientation, was = o ? o.angle : 0;
+        if (o && o.angle !== 0) Object.defineProperty(o, 'angle', { configurable: true, get: () => 0 });
+        return was;
+      });
+      assert.deepEqual(await turn(270), { on: true, t: 'rotate(90deg)' }, `screen.orientation.angle reported ${angle}`); // alpha counts counter-clockwise: 270 = facing east
       assert.deepEqual(await turn(100), { on: true, t: 'rotate(260deg)' });
       assert.deepEqual(await turn(0), { on: true, t: 'rotate(360deg)' }, '260° -> 0° turns +100°, not -260°');
       assert.ok(await page.isVisible('.me-beam'));
