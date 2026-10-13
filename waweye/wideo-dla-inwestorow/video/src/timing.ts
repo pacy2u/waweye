@@ -28,14 +28,15 @@ export const TEXT = {
   enter: 14, // frames for a word to settle
   stagger: 3, // frames between words
   exit: 8, // frames to leave
-  lead: 2, // words start this many frames before their narration
+  lead: 1, // words start this many frames before their narration (sync check: within 2 frames of the real speech onset)
 };
 
 // Real data time: sample index (0..99 over 22:12–22:51) as a function of the film frame.
 export const DATA_TIME = { from: 0, to: 450, s0: 0, s1: 99 };
 
-// Map reveal in beat 1: traces fade in from the centre outwards.
-export const REVEAL = { from: 0, to: 60, perTrace: 18 };
+// Map reveal in beat 1: traces fade in from the centre outwards. It starts before frame 0 so the first frame
+// already shows the city centre (the screen is never blank).
+export const REVEAL = { from: -14, to: 60, perTrace: 18 };
 
 // Camera keyframes: frame, zoom, world focus (x, y) and where on screen it sits.
 export const CAMERA = [
@@ -50,7 +51,8 @@ export const CAMERA = [
 // Beat 2 accents: which object holds the accent colour, and when it hands over.
 export const ACCENT = { bus: 88, parking: 126, incident: 172, busAgain: 234 };
 
-// Beat 3 stats: first number lands with "open data", stagger between columns.
+// Beat 3 stats: first number lands with "open data", stagger between columns. Numbers move in whole,
+// they never count up (a counting number shows values that are not in the data).
 export const STATS = { at: 262, stagger: 4, count: 16 };
 
 // Beat 4 end card. Carrier into it: the camera pulls the whole city into the bus dot while the dot
@@ -62,3 +64,10 @@ export const LOGO = { x: 96, y: 250, size: 128 }; // top-left and size of the lo
 
 // Map brightness under the beat 3 numbers (1 = full); small text has a knockout outline, so it keeps 4.5:1 over the lines.
 export const MAP_DIM_B3 = 0.5;
+
+// Mix. Measured: narration clips ≈ -21.6 LUFS, muzyka.wav ≈ -19.5 LUFS at volume 1.
+// Under the voice the music sits 18 dB lower (-39.6 LUFS → gain 0.099); with no voice, 8 dB lower (gain 0.31).
+// The master is then brought to -14 LUFS as a whole (scripts/renderuj.sh), which keeps these ratios.
+export const MIX = { duck: 0.099, open: 0.31, ramp: 8, pad: 3, sfx: 0.35 };
+// The one sound effect: the disruption ring appearing (beat 2).
+export const SFX = { utrudnienie: 168 };

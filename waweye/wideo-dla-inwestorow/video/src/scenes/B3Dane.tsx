@@ -29,7 +29,7 @@ export const B3Dane: React.FC = () => {
         return (
           <div key={i} style={{ position: 'absolute', left: 96 + i * 432, top: 806, opacity: Math.min(1, p * 3) * (1 - leave), transform: `translateY(${(1 - p) * 30 - leave * 20}px)`, textShadow: HALO }}>
             <div className="txt" style={{ fontFamily: FONT.head, fontWeight: 800, fontSize: TYPE.stat, lineHeight: 1, letterSpacing: '-0.01em', color: C.ink }}>
-              {Math.round(it.n * p).toLocaleString('en-US')}
+              {it.n.toLocaleString('en-US')}
             </div>
             <div className="txt" style={{ fontFamily: FONT.mono, fontWeight: 500, fontSize: TYPE.label, color: C.muted, marginTop: 12, ...KNOCKOUT }}>{it.label}</div>
           </div>
