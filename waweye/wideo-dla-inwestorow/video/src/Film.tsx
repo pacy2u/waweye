@@ -5,7 +5,7 @@ import { B1Miasto } from './scenes/B1Miasto';
 import { B2Dzien } from './scenes/B2Dzien';
 import { B3Dane } from './scenes/B3Dane';
 import { B4Inwestycja } from './scenes/B4Inwestycja';
-import { BEATS, END, MAP_DIM_B3, VO } from './timing';
+import { BEATS, END, MAP_DIM_B3, MORPH, VO } from './timing';
 import { C } from './look';
 
 const fonts = delayRender('fonts');
@@ -24,7 +24,7 @@ export const Film: React.FC<{ ghost?: boolean }> = ({ ghost = false }) => {
   return (
     <AbsoluteFill style={{ backgroundColor: C.bg }}>
       {ghost && <style>{'.txt, .txt * { color: transparent !important; } text.txt { fill: transparent !important; }'}</style>}
-      {f < END.heroOut && <Mapa frame={f} dim={dim} heroOpacity={interpolate(f, [END.mapOut, END.heroOut], [1, 0], clamp)} />}
+      {f < MORPH.logoIn + MORPH.logoInLen && <Mapa frame={f} dim={dim} />}
       {inBeat(f, BEATS.b1) && <B1Miasto />}
       {inBeat(f, BEATS.b2) && <B2Dzien />}
       {inBeat(f, BEATS.b3) && <B3Dane />}

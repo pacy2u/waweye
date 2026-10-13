@@ -1,5 +1,7 @@
 # Scenariusz – wawEye dla inwestorów smart city (15 s, 16:9, 30 kl./s)
 
+**Zatwierdzone przez właściciela (bramka 2), tekst zamrożony.** Głos `af_heart`, wymowa „Vav-Eye”, znak słowny na planszy końcowej biały.
+
 Lektor: Kokoro-82M, głos `af_heart` (Apache-2.0), angielski, tempo 1,0. Każde słowo lektora jest też na ekranie (napisy dla odtwarzania bez dźwięku).
 Dane: prawdziwa migawka z 2 października 2026, 22:12–22:51 czasu warszawskiego (dane.um.warszawa.pl przez waweye.vercel.app).
 
@@ -11,4 +13,4 @@ Dane: prawdziwa migawka z 2 października 2026, 22:12–22:51 czasu warszawskieg
 | 4 | 10,6–15,0 s | „wawEye. Open data, open for investment.” | wawEye jest otwarte na inwestycję. | Mapa zwija się do kropki autobusu, w jej miejscu logo; „Open data, / open for investment.” z akcentem na „investment.”; adres waweye.vercel.app; ostatnie ok. 2 s bez ruchu (od 12,9 s). |
 
 Słów lektora: 30. Mowa: ok. 10,6 s z 15 s.
-Uwaga: lektor czyta „wawEye” jako „Wav-Eye” (pisownia w tekście dla syntezatora; na ekranie zawsze „wawEye”).
+Uwaga: lektor czyta „wawEye” jako „Vav-Eye” (polskie W, decyzja właściciela) (pisownia w tekście dla syntezatora; na ekranie zawsze „wawEye”).

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Easing, interpolate } from 'remotion';
 import dane from '../dane.json';
-import { ACCENT, BEATS, CAMERA, DATA_TIME, REVEAL } from '../timing';
+import { ACCENT, BEATS, CAMERA, DATA_TIME, LOGO, MORPH, REVEAL } from '../timing';
 import { C, FONT, TYPE } from '../look';
 
 type Pt = [number, number];
@@ -24,10 +24,24 @@ export const posAt = (pts: Pt[], s: number): Pt => {
   return [pts[k][0] + (pts[k + 1][0] - pts[k][0]) * t, pts[k][1] + (pts[k + 1][1] - pts[k][1]) * t];
 };
 
-export const camera = (f: number) => {
+const keyCamera = (f: number) => {
   const fs = CAMERA.map((k) => k.f);
   const pick = (key: 'z' | 'wx' | 'wy' | 'sx' | 'sy') => interpolate(f, fs, CAMERA.map((k) => k[key]), { ...clamp, easing: inOut });
   return { z: pick('z'), wx: pick('wx'), wy: pick('wy'), sx: pick('sx'), sy: pick('sy') };
+};
+// Progress of the beat 3 -> 4 carrier (0..1), eased in then out.
+export const morph = (f: number) => interpolate(f, [MORPH.from, MORPH.to], [0, 1], { ...clamp, easing: inOut });
+const LOGO_C = { x: LOGO.x + LOGO.size / 2, y: LOGO.y + LOGO.size / 2 };
+
+export const camera = (f: number) => {
+  const k = keyCamera(f);
+  const m = morph(f);
+  if (m <= 0) return k;
+  // Zoom out around the bus dot and carry it to the logo's centre; zoom is interpolated in log space so it shrinks evenly.
+  const [hx, hy] = posAt(veh[hero.index].pts, dataSample(f));
+  const z = Math.exp(Math.log(k.z) + (Math.log(MORPH.z) - Math.log(k.z)) * m);
+  const sxHero = k.sx + (hx - k.wx) * k.z, syHero = k.sy + (hy - k.wy) * k.z; // where the dot would be without the carrier
+  return { z, wx: hx, wy: hy, sx: sxHero + (LOGO_C.x - sxHero) * m, sy: syHero + (LOGO_C.y - syHero) * m };
 };
 
 const accentOwner = (f: number) =>
@@ -39,6 +53,8 @@ export const Mapa: React.FC<{ frame: number; dim?: number; heroOpacity?: number 
   const cam = camera(frame);
   const s = dataSample(frame);
   const owner = accentOwner(frame);
+  const mo = morph(frame);
+  const sz = 28 + (LOGO.size - 28) * mo;
   const px = 1 / cam.z; // one screen pixel in world units
   const b2 = interpolate(frame, [BEATS.b2.from, BEATS.b2.from + 12, ACCENT.busAgain - 6, ACCENT.busAgain + 6], [0, 1, 1, 0], clamp);
   const [hx, hy] = posAt(veh[hero.index].pts, s);
@@ -81,7 +97,12 @@ export const Mapa: React.FC<{ frame: number; dim?: number; heroOpacity?: number 
           </g>
         )}
         <g transform={`translate(${hx} ${hy}) scale(${px})`} opacity={heroOpacity}>
-          <circle r={14} fill={owner === 'bus' ? C.accent : C.muted} />
+          {mo > 0 ? (
+            // Circle (r 14) -> the logo's rounded square (128 px, corner 25 %), same orange as the logo file.
+            <rect x={-sz / 2} y={-sz / 2} width={sz} height={sz} rx={14 + (LOGO.size / 4 - 14) * mo} fill={C.accent} />
+          ) : (
+            <circle r={14} fill={owner === 'bus' ? C.accent : C.muted} />
+          )}
           <circle r={20} fill="none" stroke={owner === 'bus' ? C.accent : C.muted} strokeWidth={3} opacity={b2} />
         </g>
       </g>

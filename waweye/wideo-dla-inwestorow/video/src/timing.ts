@@ -19,8 +19,8 @@ export const VO = {
   b2b: { at: 126, len: 38, text: 'A free parking space.' },
   b2c: { at: 172, len: 53, text: 'Disruptions, before you hit them.' },
   b3: { at: 238, len: 61, text: "All of it, from the city's open data." },
-  b4a: { at: 324, len: 19, text: 'wawEye.' },
-  b4b: { at: 348, len: 64, text: 'Open data, open for investment.' },
+  b4a: { at: 328, len: 20, text: 'wawEye.' },
+  b4b: { at: 352, len: 64, text: 'Open data, open for investment.' },
 } as const;
 
 // On-screen words: each line enters with its narration and leaves before the next one.
@@ -53,8 +53,12 @@ export const ACCENT = { bus: 88, parking: 126, incident: 172, busAgain: 234 };
 // Beat 3 stats: first number lands with "open data", stagger between columns.
 export const STATS = { at: 262, stagger: 4, count: 16 };
 
-// Beat 4 end card.
-export const END = { mapOut: 318, mapOutLen: 24, heroOut: 330, logo: 324, headline: 348, url: 372 };
+// Beat 4 end card. Carrier into it: the camera pulls the whole city into the bus dot while the dot
+// travels to the logo's place and grows into the logo's orange square; the real logo file then fades in on top.
+export const END = { mapOut: 316, mapOutLen: 14, url: 376 };
+// The square lands (to) before the wordmark and "Vav-Eye" start, so the two never overlap.
+export const MORPH = { from: 316, to: 330, z: 0.12, logoIn: 328, logoInLen: 4 };
+export const LOGO = { x: 96, y: 250, size: 128 }; // top-left and size of the logo on the end card
 
 // Map brightness under the beat 3 numbers (1 = full); small text has a knockout outline, so it keeps 4.5:1 over the lines.
 export const MAP_DIM_B3 = 0.5;
