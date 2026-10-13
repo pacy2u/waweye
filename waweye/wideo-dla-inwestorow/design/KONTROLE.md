@@ -18,3 +18,4 @@
 | number-meaning | w briefie „2 634 pojazdy na żywo”, a to liczba taboru w rejestrze (na żywo było 1 091) | przy każdej liczbie na ekranie w scenariuszu: pole zbioru danych i jego definicja |
 | no-transient-numbers | liczby w beacie 3 „nabijały się” od zera, więc na ekranie pojawiało się np. 1 060, którego nie ma w danych | liczby wchodzą w całości; arkusz klatek oglądany pod tym kątem |
 | near-empty-frames | klatka 0 animatiku była prawie pusta (sama kropka), a `blackdetect` jej nie złapał, bo tło nie jest czarne | `kontrola-wideo.sh`: co 0,5 s udział pikseli różnych od tła ≥ 1 % |
+| brand-colour | w finalnym renderze akcent dekodował się jako `#FF5800` zamiast `#FC4C02` (flaga `--color-space=bt709` w enkoderze Remotion); render przeszedł na klatki PNG + ffmpeg | `kontrola-wideo.sh`: kolor logo i tła po zdekodowaniu, każdy kanał ±3 |

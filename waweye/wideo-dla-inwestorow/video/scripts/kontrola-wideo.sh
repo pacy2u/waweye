@@ -23,3 +23,9 @@ ffmpeg -v error -i "$F" -vf "select='not(mod(n\,15))',scale=320:180" -fps_mode v
     let n = 0; for (let i = 0; i < W; i += 3) if (Math.abs(f[i] - 0x24) + Math.abs(f[i + 1] - 0x24) + Math.abs(f[i + 2] - 0x28) > 30) n++;
     const pct = n / (W / 3) * 100; if (pct < 1) { bad++; console.log('near-empty at ' + (k * 0.5).toFixed(1) + ' s: ' + pct.toFixed(2) + ' %'); } k++; } });
   process.stdin.on('end', () => console.log('near-empty frames: ' + bad + ' of ' + k + ' checked (every 0.5 s)'));"
+echo "== brand colour (accent #FC4C02 and background #242428 after decoding, each channel within 3; added after Remotion's encoder shifted the orange to #FF5800)"
+col() { ffmpeg -v error -ss 14 -i "$F" -frames:v 1 -vf "crop=$1,scale=1:1:flags=area" -f rawvideo -pix_fmt rgb24 - | od -An -tx1 | tr -d ' \n'; }
+H=$(ffprobe -v error -select_streams v -show_entries stream=height -of default=nw=1:nk=1 "$F" | head -1); K=$(node -e "console.log($H/1080)")
+cr() { node -e "const k=$K;console.log([$1].map(v=>Math.round(v*k)).join(':'))"; }
+for pair in "fc4c02 $(cr 40,8,140,254) logo" "242428 $(cr 20,20,1700,600) background"; do set -- $pair
+  got=$(col "$2"); node -e "const e='$1',g='$got';const d=[0,2,4].map(i=>Math.abs(parseInt(e.slice(i,i+2),16)-parseInt(g.slice(i,i+2),16)));console.log((Math.max(...d)<=3?'pass':'FAIL')+'  $3 expected #'+e+' got #'+g)"; done
