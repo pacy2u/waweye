@@ -6,7 +6,7 @@ const js = require('@eslint/js');
 const globals = require('globals');
 
 module.exports = [
-  { ignores: ['public/vendor/**', 'wideo-promocyjne/**', 'wideo-przewodnik/**', 'node_modules/**'] },
+  { ignores: ['public/vendor/**', 'wideo-promocyjne/**', 'wideo-przewodnik/**', 'wideo-dla-inwestorow/**', 'node_modules/**'] },
   js.configs.recommended,
   {
     files: ['**/*.js'],
