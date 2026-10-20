@@ -137,7 +137,8 @@ function findChromium() {
       await page.waitForFunction(() => window.__waweye.route.shown.length > 0);
       let r = await R();
       assert.ok(r.lines >= 1 && r.lines === r.shown, JSON.stringify(r)); assert.equal(r.stops, r.want); assert.ok(r.stops > 20);
-      assert.match(r.text, /Kierunek: /); assert.match(r.text, /Trasa wg rozkładu ZTM \(GTFS\) ważnego do \d/);
+      // The committed GTFS has an end date: past it the panel says so instead (both cases are checked on forged data below).
+      assert.match(r.text, /Kierunek: /); assert.match(r.text, /Trasa wg rozkładu ZTM \(GTFS\) ważnego do \d|Rozkład ZTM ważny do \d+\.\d+\.\d{4} – trasa może być nieaktualna/);
       assert.equal(await page.locator('.leaflet-overlay-pane canvas').count(), 1, 'the route shares the vehicles canvas');
       await page.screenshot({ path: `${SHOTS}/waweye-${label}-trasa.png` });
       await page.click('#close'); r = await R();
