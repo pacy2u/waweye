@@ -13,6 +13,21 @@ test('normalize maps fields', () => {
   assert.deepEqual({ ...v, time: undefined }, { id: '1-1234', type: 'bus', line: '175', vehicle: '1234', brigade: '3', lat: 52.2, lon: 21.0, time: undefined });
   assert.equal(v.time, Date.parse('2026-10-01T12:00:00+02:00'));
 });
+test('normalize keeps ZTM line numbers and drops vehicles whose line is not one (markup in the map label)', () => {
+  const lines = ['175', 'N44', 'Z-1', ' 9 ', '<img src=x onerror=alert(1)>', '1"><b>', '', 'LINIA-ZASTEPCZA'];
+  const out = normalize(lines.map((Lines, i) => row({ Lines, VehicleNumber: String(i) })), 1, NOW);
+  assert.deepEqual(out.map((v) => v.line), ['175', 'N44', 'Z-1', '9']);
+});
+test('vercel.json sends a CSP that allows only own scripts, and the other security headers', () => {
+  const rule = require('../vercel.json').headers.find((h) => h.source === '/(.*)');
+  const h = Object.fromEntries(rule.headers.map(({ key, value }) => [key, value]));
+  const csp = Object.fromEntries(h['Content-Security-Policy'].split(';').map((d) => d.trim().split(/\s+/)).map(([k, ...v]) => [k, v]));
+  assert.deepEqual(csp['script-src'], ["'self'"]);
+  assert.deepEqual(csp['frame-ancestors'], ["'none'"]);
+  assert.deepEqual(csp['object-src'], ["'none'"]);
+  assert.equal(h['X-Content-Type-Options'], 'nosniff');
+  assert.equal(h['X-Frame-Options'], 'DENY');
+});
 test('normalize drops stale, invalid and out-of-area vehicles', () => {
   const out = normalize([row({ Time: '2026-10-01 11:00:00' }), row({ Lat: 'x' }), row({ Lat: 0, Lon: 0 }), row({ VehicleNumber: '9' })], 2, NOW);
   assert.equal(out.length, 1);

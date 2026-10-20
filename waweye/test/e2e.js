@@ -17,7 +17,8 @@ const AXE = require.resolve('axe-core/axe.min.js');
 // Each entry: { id: axe rule, target: RegExp on the CSS selector } with a comment saying why. None at the moment.
 const A11Y_EXCEPTIONS = [];
 async function a11y(page) {
-  if (!(await page.evaluate(() => !!window.axe))) await page.addScriptTag({ path: AXE });
+  // Evaluated over DevTools rather than added as a <script>: the page's CSP (script-src 'self') blocks inline scripts.
+  if (!(await page.evaluate(() => !!window.axe))) await page.evaluate(fs.readFileSync(AXE, 'utf8'));
   const found = await page.evaluate(async () => (await window.axe.run(document, { resultTypes: ['violations'] })).violations
     .filter((v) => v.impact === 'serious' || v.impact === 'critical')
     .flatMap((v) => v.nodes.map((n) => ({ id: v.id, target: n.target.join(' '), why: ((n.any[0] || n.all[0] || n.none[0]) || {}).message }))));
@@ -52,6 +53,8 @@ function findChromium() {
     const page = await ctx.newPage();
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
+    // The dev server sends vercel.json's CSP: anything it blocks (a new outside host, an inline script) fails here.
+    page.on('console', (m) => { if (/Content Security Policy/i.test(m.text())) errors.push(m.text()); });
     await page.goto(url);
     const S = () => page.evaluate(() => ({ n: window.__waweye.state.markers.size, sel: window.__waweye.state.selected, z: window.__waweye.map.getZoom(),
       shown: [...window.__waweye.state.markers.values()].filter((m) => window.__waweye.map.hasLayer(m.mk)).length,

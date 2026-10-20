@@ -5,6 +5,8 @@
   // (clamped), so they keep moving between polls instead of jumping; the price is showing them up to that long behind.
   const ANIM_MIN = POLL_MS, ANIM_MAX = 3 * POLL_MS, JUMP_DEG = 0.02; // a jump of over ~2 km (e.g. back from a depot) is not animated
   const COLORS = { bus: '#2B2B33', tram: '#0073E6', sel: '#FC4C02' };
+  // For API text that goes into divIcon/tooltip markup (Leaflet sets it as HTML).
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
   const state = { range: 'today', events: false, eventItems: [], selectedEvent: null, eventMarkers: new Map(), eventError: null, eventMeta: null, sport: false, sportItems: [], selectedSport: null, sportMarkers: new Map(), sportError: null, sportMeta: null, inc: false, incidents: [], selectedInc: null, incLayers: new Map(), incError: null, park: false, parkings: [], selectedPark: null, parkMarkers: new Map(), parkError: null, types: { bus: true, tram: true }, query: '', words: [], selected: null, follow: false, markers: new Map(), lastOk: 0, data: [] };
 
   // Timelapse (section "Timelapse" below): predicted movement of the vehicles, up to 1000× faster than real time.
@@ -93,7 +95,7 @@
       const wantLabel = show && showLabels && bounds.contains(m.mk.getLatLng());
       if (wantLabel && !m.label) {
         m.label = L.marker(m.mk.getLatLng(), { interactive: false, keyboard: false, zIndexOffset: state.selected === m.v.id ? 1000 : 0,
-          icon: L.divIcon({ className: '', html: `<div class="lbl ${state.selected === m.v.id ? 'sel' : m.v.type}">${m.v.line}</div>`, iconSize: null, iconAnchor: [14, -2] }) }).addTo(labelLayer);
+          icon: L.divIcon({ className: '', html: `<div class="lbl ${state.selected === m.v.id ? 'sel' : m.v.type}">${esc(m.v.line)}</div>`, iconSize: null, iconAnchor: [14, -2] }) }).addTo(labelLayer);
       } else if (!wantLabel && m.label) { m.label.remove(); m.label = null; }
     }
     updateHighlight();
@@ -181,7 +183,7 @@
       lines.push(L.polyline(v.shape, { renderer: canvas, interactive: false, color: COLORS.sel, weight: 5, opacity: route.shown.length > 1 ? 0.5 : 0.75, lineJoin: 'round' }).addTo(routeLayer));
       for (const [name, lat, lon] of v.stops) {
         const st = L.circleMarker([lat, lon], { renderer: canvas, radius: 4, color: COLORS.sel, weight: 2, fillColor: '#fff', fillOpacity: 1 })
-          .bindTooltip(name, { direction: 'top', offset: [0, -4], className: 'stop-tip' }).addTo(routeLayer);
+          .bindTooltip(esc(name), { direction: 'top', offset: [0, -4], className: 'stop-tip' }).addTo(routeLayer);
         st.on('click', (e) => { L.DomEvent.stopPropagation(e); st.openTooltip(); });
         stops.push(st);
       }
