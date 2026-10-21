@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
-const URL = process.env.WAWEYE_URL || process.env.PASIBUS_URL || 'https://pasibus.vercel.app/';
+const URL = process.env.WAWEYE_URL || 'https://waweye.vercel.app/';
 const OUT = path.join(__dirname, 'zasoby');
 const CHROME = process.env.CHROME_PATH || '/opt/pw-browsers/chromium';
 

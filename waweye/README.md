@@ -1,6 +1,6 @@
 # wawEye – komunikacja miejska w Warszawie na żywo
 
-Nazwa produktu od 3 października 2026 r.: **wawEye** (wcześniej Pasibus, zmieniona z powodu kolizji z siecią burgerowni o tej nazwie). Migracja identyfikatorów technicznych trwa według `PLAN_MIGRACJI_WAWEYE.md`: aplikacja działa pod https://waweye.vercel.app i pod dotychczasowym https://pasibus.vercel.app; produkcja korzysta z Workera `waweye-proxy`, a aplikacja i workflowy mają już nowe nazwy (folder `waweye/`, „wawEye – …”). Projekt w Vercel nazywa się `waweye`, repozytorium `pacy2u/waweye` (do 2026-10 `pacy2u/tst`; GitHub przekierowuje stare adresy). Stary adres https://pasibus.vercel.app działa dalej i w Fazie 9 zacznie przekierowywać na nowy.
+Nazwa produktu od 3 października 2026 r.: **wawEye** (wcześniej Pasibus, zmieniona z powodu kolizji z siecią burgerowni o tej nazwie). Migracja identyfikatorów technicznych zakończyła się 21 października 2026 r. (`PLAN_MIGRACJI_WAWEYE.md`). Aplikacja działa pod https://waweye.vercel.app, a stary adres https://pasibus.vercel.app przekierowuje na nowy (308, z zachowaniem ścieżki). Produkcja korzysta z Workera `waweye-proxy`. Projekt w Vercel nazywa się `waweye`, repozytorium `pacy2u/waweye` (do 2026-10 `pacy2u/tst`; GitHub przekierowuje stare adresy).
 
 Mapa pojazdów (autobusy, tramwaje) w czasie rzeczywistym, z liniami i stacjami metra. Dane: [Lokalizacja pojazdów komunikacji miejskiej](https://dane.um.warszawa.pl/pl/catalogue/f319f602-7292-4e8c-b3d1-f5898aa9a638), m.st. Warszawa. Mapa: OpenStreetMap + Leaflet.
 
@@ -36,7 +36,7 @@ node scripts/check-production.js   # kontrola produkcji: pojazdy, parkingi, utru
 ```
 W GitHub Actions (`.github/workflows/`):
 - **wawEye – testy**: oba zestawy testów przy każdym PR i po zmianie na `main` (zmiany samych plików `.md` nie zużywają minut).
-- **wawEye – monitoring produkcji**: co 2 godziny `scripts/check-production.js` sprawdza https://waweye.vercel.app i https://pasibus.vercel.app (także to, czy pojazdy na żywo znajdują się w zbiorze taboru). Przy awarii zakłada jedno zgłoszenie (issue) „[monitoring] wawEye nie działa poprawnie”, a GitHub wysyła e-mail. GitHub uruchamia zaplanowane przebiegi z opóźnieniem albo je pomija (2026-10-03: 4 przebiegi w 17 godzin), więc odstępy bywają dłuższe niż 2 godziny. Po pierwszej udanej kontroli zgłoszenie zamyka się samo. Ręcznie: Actions → wawEye – monitoring produkcji → Run workflow.
+- **wawEye – monitoring produkcji**: co 2 godziny `scripts/check-production.js` sprawdza https://waweye.vercel.app (także to, czy pojazdy na żywo znajdują się w zbiorze taboru) oraz to, czy https://pasibus.vercel.app przekierowuje na nowy adres (`--przekierowanie`). Przy awarii zakłada jedno zgłoszenie (issue) „[monitoring] wawEye nie działa poprawnie”, a GitHub wysyła e-mail. GitHub uruchamia zaplanowane przebiegi z opóźnieniem albo je pomija (2026-10-03: 4 przebiegi w 17 godzin), więc odstępy bywają dłuższe niż 2 godziny. Po pierwszej udanej kontroli zgłoszenie zamyka się samo. Ręcznie: Actions → wawEye – monitoring produkcji → Run workflow.
 - Repo jest prywatne, więc obowiązuje darmowa pula minut Actions (2000 min/mies. na koncie GitHub Free). Monitoring zużywa ok. 360 min/mies., testy kilka minut na PR. Po wyczerpaniu puli zadania się zatrzymują, nie generując kosztów (przy domyślnym limicie wydatków 0 USD).
 
 ## Wdrożenie na Vercel

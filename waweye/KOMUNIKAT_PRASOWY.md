@@ -6,7 +6,7 @@
 
 **Darmowa aplikacja webowa pokazuje, gdzie w tej chwili jest każdy warszawski autobus i tramwaj. Na tej samej mapie widać wolne miejsca na parkingach i utrudnienia w ruchu. wawEye działa w przeglądarce na telefonie i komputerze. Nie trzeba go instalować ani zakładać konta, nie ma reklam i nie zbiera danych o użytkownikach.**
 
-wawEye (https://pasibus.vercel.app) to nowa aplikacja dla osób, które codziennie jeżdżą warszawską komunikacją miejską. Pozycje wszystkich autobusów i tramwajów odświeżają się na mapie co 10 sekund, a pojazdy przesuwają się płynnie. Po kliknięciu w pojazd widać jego linię i brygadę oraz dane konkretnego egzemplarza: model, rok produkcji, zajezdnię, liczbę miejsc i to, czy ma niską podłogę, klimatyzację i miejsce na wózek. Wszystkie dane pochodzą z oficjalnego portalu otwartych danych m.st. Warszawy.
+wawEye (https://waweye.vercel.app) to nowa aplikacja dla osób, które codziennie jeżdżą warszawską komunikacją miejską. Pozycje wszystkich autobusów i tramwajów odświeżają się na mapie co 10 sekund, a pojazdy przesuwają się płynnie. Po kliknięciu w pojazd widać jego linię i brygadę oraz dane konkretnego egzemplarza: model, rok produkcji, zajezdnię, liczbę miejsc i to, czy ma niską podłogę, klimatyzację i miejsce na wózek. Wszystkie dane pochodzą z oficjalnego portalu otwartych danych m.st. Warszawy.
 
 ### Cel: najszybszy podgląd miasta na żywo
 
@@ -89,7 +89,7 @@ wawEye nie będzie planerem podróży ani osobną aplikacją natywną. Nie wprow
 
 wawEye to niekomercyjna aplikacja webowa, która pokazuje warszawską komunikację miejską w czasie rzeczywistym na podstawie otwartych danych m.st. Warszawy. Nazwa łączy WAW, popularny skrót Warszawy, z angielskim „eye” (oko). Wersja produkcyjna powstała w dwa dni. Projekt nie ma budżetu: działa w darmowych planach usług chmurowych (Vercel, Cloudflare), a mapę rysuje biblioteka open source Leaflet na podkładzie OpenStreetMap. Klucz do miejskiego API jest przechowywany wyłącznie po stronie serwera.
 
-Aplikacja: https://pasibus.vercel.app
+Aplikacja: https://waweye.vercel.app
 
 ### Kontakt dla mediów
 

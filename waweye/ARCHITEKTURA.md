@@ -333,7 +333,7 @@ flowchart TB
     end
 
     subgraph VC["Vercel · zespół ampm10 · plan Hobby"]
-        DOM["Domeny<br/>waweye.vercel.app<br/>pasibus.vercel.app (do Fazy 9 migracji)"]
+        DOM["Domeny<br/>waweye.vercel.app<br/>pasibus.vercel.app (przekierowanie 308)"]
         EDGE["Edge Network / CDN<br/>outputDirectory: public · cleanUrls"]
         FRA["Functions · fra1 (Frankfurt)<br/>maxDuration 60 s<br/>env: UPSTREAM_URL, UPSTREAM_SECRET"]
         DOM --> EDGE --> FRA
@@ -343,7 +343,6 @@ flowchart TB
         WK["Worker waweye-proxy<br/>workers.dev, preview_urls = false<br/>secrets: WARSAW_API_KEY, PROXY_SECRET"]
         KVS[("KV waweye-geokody<br/>100 000 odczytów, 1000 zapisów / dzień")]
         WK --- KVS
-        OLD["Worker pasibus-proxy<br/>(bezczynny, do usunięcia w Fazie 9)"]
     end
 
     subgraph GHB["GitHub · repo prywatne · GitHub Free"]
@@ -439,7 +438,7 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-    CR["cron co 2 h<br/>(GitHub bywa opóźniony)"] --> CP["scripts/check-production.js<br/>waweye.vercel.app + pasibus.vercel.app"]
+    CR["cron co 2 h<br/>(GitHub bywa opóźniony)"] --> CP["scripts/check-production.js<br/>waweye.vercel.app + przekierowanie z pasibus.vercel.app"]
     CP --> C1["/api/vehicles: są autobusy i tramwaje?"]
     CP --> C2["/api/parking, /api/incidents: odpowiadają?"]
     CP --> C3["/api/fleet: ≥ 90% pojazdów na żywo w zbiorze taboru?"]
