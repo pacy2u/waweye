@@ -6,7 +6,7 @@ Data: 2026-10-02. Na podstawie kodu z `main` (po PR #18), `README.md`, `CONTEXT.
 
 ## 1. W skrócie
 
-wawEye (do 3 października 2026 r. Pasibus) to lekka mapa komunikacji miejskiej Warszawy na żywo. Od zera do produkcji (https://pasibus.vercel.app) powstał w dwa dni. Pokazuje autobusy i tramwaje, parkingi z wolnymi miejscami, utrudnienia drogowe i dane o taborze. Kod jest mały (ok. 1 700 linii razem z testami), dobrze przetestowany i odporny na kaprysy API Warszawy.
+wawEye (do 3 października 2026 r. Pasibus) to lekka mapa komunikacji miejskiej Warszawy na żywo. Od zera do produkcji (dziś https://waweye.vercel.app) powstał w dwa dni. Pokazuje autobusy i tramwaje, parkingi z wolnymi miejscami, utrudnienia drogowe i dane o taborze. Kod jest mały (ok. 1 700 linii razem z testami), dobrze przetestowany i odporny na kaprysy API Warszawy.
 
 Najważniejsze wnioski:
 

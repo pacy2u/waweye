@@ -163,7 +163,7 @@ Przy błędzie skrypt czeka 30 s i powtarza kontrolę raz, żeby pojedyncze zerw
 
 | Workflow | Kiedy | Co robi z wynikiem |
 |---|---|---|
-| wawEye – monitoring produkcji | cron `7 */2 * * *` (UTC) i ręcznie; obie domeny: `waweye.vercel.app`, `pasibus.vercel.app` | przy błędzie otwiera jedno zgłoszenie „[monitoring] wawEye nie działa poprawnie” (GitHub wysyła e-mail właścicielowi), przy pierwszej udanej kontroli zamyka je z komentarzem |
+| wawEye – monitoring produkcji | cron `7 */2 * * *` (UTC) i ręcznie; `waweye.vercel.app` i przekierowanie 308 z `pasibus.vercel.app` (`check-production.js --przekierowanie`) | przy błędzie otwiera jedno zgłoszenie „[monitoring] wawEye nie działa poprawnie” (GitHub wysyła e-mail właścicielowi), przy pierwszej udanej kontroli zamyka je z komentarzem |
 | wawEye – kontrola adresu | ręcznie, dowolny adres `https://` | raport w podsumowaniu przebiegu, bez zgłoszeń |
 | wawEye – operacje Vercel | po operacjach wdrażających i dodaniu domeny | kontrola dotkniętych domen; błąd = czerwony przebieg |
 | wawEye – operacje Cloudflare | `test-workera`, `test-gtfs` na żądanie | sprawdza wszystkie zasoby Workera z sekretem i odmowę 403 bez sekretu |

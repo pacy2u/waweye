@@ -177,7 +177,20 @@ Wynik: zmiana nazwy około 21:30. Po niej `wdroz-produkcje` (21:34) wdrożył `m
 3. Plik ma około 21 MB, a historia gita zachowa też stary. Lepiej trzymać wideo poza repozytorium, np. jako załącznik wydania (Release) na GitHubie.
 - Ryzyko: brak, bo wideo nie jest częścią aplikacji.
 
-### Faza 9 – Sprzątanie (po co najmniej 14 dniach zielonego monitoringu)
+### Faza 9 – Sprzątanie (po co najmniej 14 dniach zielonego monitoringu) – zrobione 2026-10-21
+
+Wynik:
+- **Obserwacja 4–17 października:** monitoring miał 52 przebiegi, 12 nieudanych, 8 zgłoszeń (pacy2u/waweye#36–#89). Wszystkie to HTTP 522 z API miasta, każde zamknęło się samo przy następnej kontroli. Awarii Vercel, Workera ani kodu nie było. Właściciel uznał warunek za spełniony: liczą się awarie po naszej stronie, bo API miasta daje 522 co 1–2 dni niezależnie od migracji.
+- **Przekierowanie, 2026-10-21 04:27:** `pasibus.vercel.app` odpowiada 308 na tę samą ścieżkę i zapytanie pod `waweye.vercel.app`. Sprawdzone `/` i `/api/vehicles?przekierowanie=1`.
+- **Stary Worker:** `stan` w Cloudflare pokazał dla `pasibus-proxy` 0 zapytań w 7 dni (`waweye-proxy`: 1309). O 04:30 `usun-workera pasibus-proxy` usunął go wraz z kluczami zapisanymi jawnym tekstem.
+- **Ten PR:**
+  - monitoring sprawdza tylko nowy adres i przekierowanie (`check-production.js --przekierowanie`);
+  - bez `PASIBUS_URL`;
+  - kontrola adresu i skrypty wideo domyślnie używają `waweye.vercel.app`;
+  - komunikat prasowy linkuje do nowego adresu.
+- **Vercel:** `stan` pokazuje już repozytorium `pacy2u/waweye` (patrz Faza 7).
+- **Zostaje celowo:** `pasibus.vercel.app` w projekcie Vercel jako przekierowanie (nie usuwać) i nazwy historyczne w raportach z testów i w opisie danych wideo.
+
 1. **Claude:** `operacje Vercel → przekieruj-domene`, wartość `pasibus.vercel.app`, przekieruj na `waweye.vercel.app` (308). Adres zostaje w projekcie, nie usuwamy go.
    - Karty otwarte na starym adresie przed tą zmianą przestaną odświeżać pojazdy, aż ktoś przeładuje stronę. Przeładowanie przeniesie na nowy adres.
 2. **Claude (PR):**
