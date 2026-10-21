@@ -6,6 +6,8 @@
 // the application's (anything else). Supplier outages usually pass within minutes (5 of 5 alerts in Oct 2026), so a
 // supplier-only failure is checked once more after SUPPLIER_RECHECK_MS before it counts.
 // WAWEYE_KATEGORIE=<file> appends the final category (ok | dostawca | aplikacja) as one line, for the monitoring workflow.
+// Redirect mode: node scripts/check-production.js --przekierowanie <old address> <new address> checks that the old
+// address only answers 308 to the same path and query on the new one (wawEye migration, Faza 9: pasibus.vercel.app).
 
 const fs = require('fs');
 
@@ -165,14 +167,56 @@ async function monitor(base, { fetchImpl = fetch, wait = (ms) => new Promise((r)
   return { result, note };
 }
 
+// A page and an API call with a query string: both must keep their path and query on the new address.
+const REDIRECT_PATHS = ['/', '/api/vehicles?przekierowanie=1'];
+
+// Same result shape as evaluate(), so report() prints it. A wrong or missing redirect is our setup: kind 'aplikacja'.
+async function checkRedirect(from, to, fetchImpl = fetch) {
+  const rows = await Promise.all(REDIRECT_PATHS.map(async (path) => {
+    const want = new URL(path, to).href;
+    const t0 = Date.now();
+    let problem = null;
+    try {
+      const res = await fetchImpl(new URL(path, from).href, { redirect: 'manual', signal: AbortSignal.timeout(TIMEOUT_MS) });
+      const loc = res.headers.get('location');
+      const got = loc ? new URL(loc, from).href : null;
+      if (res.status !== 308) problem = `HTTP ${res.status} zamiast 308${got ? ` (na ${got})` : ''}`;
+      else if (got !== want) problem = `przekierowuje na ${got || '(brak nagłówka Location)'} zamiast na ${want}`;
+    } catch (e) {
+      problem = `brak odpowiedzi (${e.message})`;
+    }
+    return { name: `Przekierowanie (${path})`, ok: !problem, detail: problem || `308 na ${want}, ${Date.now() - t0} ms`, kind: problem ? 'aplikacja' : null };
+  }));
+  const ok = rows.every((r) => r.ok);
+  return { ok, rows, kind: ok ? null : 'aplikacja' };
+}
+
+// One retry after 30 s, as in monitor(), so a single dropped connection does not raise an alert.
+async function monitorRedirect(from, to, { fetchImpl = fetch, wait = (ms) => new Promise((r) => setTimeout(r, ms)) } = {}) {
+  let result = await checkRedirect(from, to, fetchImpl);
+  if (!result.ok) { await wait(30000); result = await checkRedirect(from, to, fetchImpl); }
+  return result;
+}
+
 async function main() {
-  // PASIBUS_URL: old name, kept until the end of the wawEye migration (PLAN_MIGRACJI_WAWEYE.md, Faza 9).
-  const base = process.argv[2] || process.env.WAWEYE_URL || process.env.PASIBUS_URL || DEFAULT_URL;
-  const { result, note } = await monitor(base, { recheckMs: Number(process.env.SUPPLIER_RECHECK_MS ?? SUPPLIER_RECHECK_MS) });
+  let base, result, note = '';
+  if (process.argv[2] === '--przekierowanie') {
+    const [from, to] = process.argv.slice(3);
+    if (!from || !to) {
+      console.error('Użycie: node scripts/check-production.js --przekierowanie <stary adres> <nowy adres>');
+      process.exitCode = 2;
+      return;
+    }
+    base = from;
+    result = await monitorRedirect(from, to);
+  } else {
+    base = process.argv[2] || process.env.WAWEYE_URL || DEFAULT_URL;
+    ({ result, note } = await monitor(base, { recheckMs: Number(process.env.SUPPLIER_RECHECK_MS ?? SUPPLIER_RECHECK_MS) }));
+  }
   process.stdout.write(report(base, result, new Date(), note));
   if (process.env.WAWEYE_KATEGORIE) fs.appendFileSync(process.env.WAWEYE_KATEGORIE, (result.ok ? 'ok' : result.kind) + '\n');
   process.exitCode = result.ok ? 0 : 1;
 }
 
 if (require.main === module) main();
-module.exports = { evaluate, fleetMatch, report, get, monitor };
+module.exports = { evaluate, fleetMatch, report, get, monitor, checkRedirect, monitorRedirect };

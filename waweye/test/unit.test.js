@@ -515,6 +515,48 @@ test('health check run: a supplier failure is checked again later and passes qui
   assert.equal(out.result.kind, 'aplikacja'); assert.deepEqual(waits, [30000]); assert.equal(out.note, '');
 });
 
+test('redirect check: the old address must answer 308 to the same path and query on the new one', async () => {
+  const { checkRedirect, monitorRedirect, report } = require('../scripts/check-production');
+  // where(url) gives [status, Location] for each request; calls records the URLs and the redirect option.
+  const calls = [];
+  const fake = (where) => async (url, opts) => {
+    calls.push([url, opts.redirect]);
+    const [status, loc] = where(new URL(url));
+    return new Response(null, { status, headers: loc ? { location: loc } : {} });
+  };
+  const good = (u) => [308, 'https://new.example' + u.pathname + u.search];
+  let r = await checkRedirect('https://old.example', 'https://new.example/', fake(good));
+  assert.ok(r.ok); assert.equal(r.kind, null);
+  assert.deepEqual(calls, [['https://old.example/', 'manual'], ['https://old.example/api/vehicles?przekierowanie=1', 'manual']]);
+  assert.match(report('https://old.example', r), /wszystko działa[\s\S]*Przekierowanie \(\/api\/vehicles\?przekierowanie=1\) \| OK \| 308 na https:\/\/new\.example\/api\/vehicles\?przekierowanie=1/);
+  // A relative Location is resolved against the old address, so it does not count as the new one.
+  r = await checkRedirect('https://old.example', 'https://new.example', fake((u) => [308, u.pathname]));
+  assert.equal(r.kind, 'aplikacja'); assert.match(r.rows[0].detail, /przekierowuje na https:\/\/old\.example\/ zamiast na https:\/\/new\.example\//);
+  // Not redirected yet (the app answers itself), a 307, a lost path and a missing Location are all ours to fix.
+  for (const [where, re] of [
+    [() => [200], /HTTP 200 zamiast 308/],
+    [(u) => [307, 'https://new.example' + u.pathname + u.search], /HTTP 307 zamiast 308 \(na https:\/\/new\.example\/\)/],
+    [() => [308, 'https://new.example/'], /przekierowuje na https:\/\/new\.example\/ zamiast na https:\/\/new\.example\/api\/vehicles\?przekierowanie=1/],
+    [() => [308], /brak nagłówka Location/],
+  ]) {
+    r = await checkRedirect('https://old.example', 'https://new.example', fake(where));
+    assert.ok(!r.ok); assert.equal(r.kind, 'aplikacja');
+    assert.match(r.rows.map((x) => x.detail).join('\n'), re);
+    assert.match(report('https://old.example', r), /PROBLEM[\s\S]*BŁĄD \(aplikacja\)[\s\S]*Kategoria: \*\*aplikacja\*\*/);
+  }
+  r = await checkRedirect('https://old.example', 'https://new.example', async () => { throw new Error('fetch failed'); });
+  assert.match(r.rows[0].detail, /brak odpowiedzi \(fetch failed\)/);
+  // One retry after 30 s: a single dropped connection passes, a lasting one counts.
+  const waits = [];
+  const wait = async (ms) => { waits.push(ms); };
+  let n = 0;
+  r = await monitorRedirect('https://old.example', 'https://new.example', { fetchImpl: fake((u) => (n++ < 1 ? [502] : good(u))), wait });
+  assert.ok(r.ok); assert.deepEqual(waits, [30000]);
+  waits.length = 0;
+  r = await monitorRedirect('https://old.example', 'https://new.example', { fetchImpl: fake(() => [200]), wait });
+  assert.equal(r.kind, 'aplikacja'); assert.deepEqual(waits, [30000]);
+});
+
 test('worker names its Cloudflare location on relayed answers and failures; the client puts it in the error', async () => {
   const { handle } = await import('../worker/index.js');
   const env = { PROXY_SECRET: 's3', WARSAW_API_KEY: 'KEY' };

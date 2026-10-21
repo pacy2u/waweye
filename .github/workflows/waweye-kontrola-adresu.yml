@@ -10,7 +10,7 @@ on:
         description: 'Adres do sprawdzenia, np. https://waweye.vercel.app'
         type: string
         required: true
-        default: https://pasibus.vercel.app
+        default: https://waweye.vercel.app
 
 permissions:
   contents: read
