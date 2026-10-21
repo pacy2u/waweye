@@ -10,6 +10,9 @@ const EVENTS_ENDPOINT = 'https://dane.um.warszawa.pl/api/action/get_bmm_kalendar
 const TYPES = { 1: 'bus', 2: 'tram' };
 const MAX_AGE_MS = 5 * 60 * 1000;
 const BBOX = { minLat: 51.9, maxLat: 52.6, minLon: 20.5, maxLon: 21.6 };
+// Line numbers as ZTM writes them ("175", "N44", "Z-1"); anything else (e.g. HTML) drops the vehicle, since the
+// line ends up in the map label's markup.
+const LINE = /^[A-Za-z0-9-]{1,8}$/;
 
 // "2026-10-02 17:33:16" is Warsaw local time (CET/CEST); convert to epoch ms without hardcoding the offset.
 const WARSAW_FMT = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Warsaw', hourCycle: 'h23',
@@ -33,6 +36,7 @@ function normalize(raw, type, now = Date.now()) {
     if (lat < BBOX.minLat || lat > BBOX.maxLat || lon < BBOX.minLon || lon > BBOX.maxLon) continue;
     const time = parseWarsawTime(r.Time);
     if (time !== null && now - time > MAX_AGE_MS) continue;
+    if (!LINE.test(String(r.Lines).trim())) continue;
     out.push({
       id: `${type}-${r.VehicleNumber}`,
       type: TYPES[type],

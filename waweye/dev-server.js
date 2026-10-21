@@ -15,8 +15,12 @@ const { vehiclesHandler, parkingHandler, incidentsHandler, fleetHandler, sportHa
 const PUBLIC = path.join(__dirname, 'public');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.json': 'application/json', '.geojson': 'application/geo+json', '.webp': 'image/webp', '.mp4': 'video/mp4', '.m4a': 'audio/mp4' };
 
+// Same security headers (CSP etc.) as production: vercel.json's rule for every path, so the e2e test runs under them.
+const HEADERS = (require('./vercel.json').headers || []).filter((h) => h.source === '/(.*)').flatMap((h) => h.headers);
+
 function createServer(opts = {}) {
   return http.createServer((req, res) => {
+    for (const { key, value } of HEADERS) res.setHeader(key, value);
     const { pathname } = new URL(req.url, 'http://x');
     if (pathname === '/api/vehicles') return vehiclesHandler(req, res, opts);
     if (pathname === '/api/parking') return parkingHandler(req, res, opts);
