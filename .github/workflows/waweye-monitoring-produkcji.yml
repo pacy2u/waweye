@@ -1,7 +1,7 @@
 name: wawEye – monitoring produkcji
 
-# Every 2 hours: checks vehicles, parkings, incidents and fleet on both production addresses
-# (https://waweye.vercel.app and, until the end of the wawEye migration, https://pasibus.vercel.app).
+# Every 2 hours: checks vehicles, parkings, incidents and fleet on https://waweye.vercel.app, and that the old address
+# https://pasibus.vercel.app still answers 308 to the new one (wawEye migration, Faza 9).
 # On failure it opens one issue (GitHub e-mails the repository owner) and closes it after the next good check.
 # Each failure is the data supplier's (the Warsaw API timed out or answered 5xx) or the application's; the issue gets
 # the label monitoring:dostawca or monitoring:aplikacja. A supplier-only failure is checked again 4 min later and only
@@ -23,7 +23,7 @@ permissions:
 jobs:
   kontrola:
     runs-on: ubuntu-latest
-    timeout-minutes: 20 # two addresses, each up to ~7 min with timeouts, the 30 s retry and the 4 min supplier re-check
+    timeout-minutes: 12 # up to ~7 min with timeouts, the 30 s retry and the 4 min supplier re-check, plus ~2.5 min for the redirect
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
@@ -40,11 +40,10 @@ jobs:
         continue-on-error: true
         run: |
           status=0
-          for adres in https://waweye.vercel.app https://pasibus.vercel.app; do
-            node waweye/scripts/check-production.js "$adres" >> raport.md || status=1
-          done
+          node waweye/scripts/check-production.js https://waweye.vercel.app >> raport.md || status=1
+          node waweye/scripts/check-production.js --przekierowanie https://pasibus.vercel.app https://waweye.vercel.app >> raport.md || status=1
           cat raport.md >> "$GITHUB_STEP_SUMMARY"
-          # One application problem on either address makes it an application failure.
+          # One application problem (a wrong redirect counts as one) makes it an application failure.
           if grep -qx aplikacja kategorie.txt; then kat=aplikacja; elif grep -qx dostawca kategorie.txt; then kat=dostawca; else kat=ok; fi
           echo "kategoria=$kat" >> "$GITHUB_OUTPUT"
           exit $status
