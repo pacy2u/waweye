@@ -1,6 +1,6 @@
 # wawEye – stan prac i otwarte wątki
 
-Notatka do podjęcia pracy w nowej sesji (człowiek albo Claude). Stan na **2026-10-12, 01:55 czasu warszawskiego**. Po zamknięciu wątku usuń go stąd albo przenieś do „Zrobione”; gdy lista jest pusta, plik można skasować.
+Notatka do podjęcia pracy w nowej sesji (człowiek albo Claude). Stan na **2026-10-25, 08:20 czasu warszawskiego**. Po zamknięciu wątku usuń go stąd albo przenieś do „Zrobione”; gdy lista jest pusta, plik można skasować.
 
 Znaczniki pewności: [Pewne] sprawdzone, [Prawdopodobne] silne przesłanki, [Zgaduję] luka w danych.
 
@@ -12,12 +12,11 @@ Znaczniki pewności: [Pewne] sprawdzone, [Prawdopodobne] silne przesłanki, [Zga
 
 ## Otwarte wątki
 
-### 1. Obserwacja A4 i stabilność WebKit – termin ok. 2026-10-25
+### 1. Po odbiorze A4 (2026-10-25): trzy zadania
 
-- **Kryterium A4:** przez 2 tygodnie od wdrożenia każde zgłoszenie monitoringu ma etykietę `monitoring:dostawca` albo `monitoring:aplikacja` (`PLAN_NAPRAWCZY_TESTOW.md` A4).
-- **WebKit:** job `testy-webkit` jest informacyjny (`continue-on-error`). Jeśli przez ten czas jest stabilnie zielony, zaproponować właścicielowi włączenie go do `bramka` (B3).
-- **Dane do decyzji o błędach 522:** raport monitoringu wypisuje lokalizację Cloudflare (`[Cloudflare XXX]`). Jedno 522 widziano już z FRA, co osłabia hipotezę o odrzucanych lokalizacjach [Prawdopodobne]. Jeśli 522 nie zależy od lokalizacji, następny krok to zgłoszenie do operatora API miasta.
-- **Przypomnienie:** zaplanowane na 2026-10-25 08:00 (czasu warszawskiego, już po zmianie czasu) w sesji, w której powstała ta notatka. Nowa sesja go nie dostanie, więc sprawdź termin sam.
+- **Kategoria „0 pojazdów przy rekordach od API”** w `scripts/check-production.js`: dziś „aplikacja”, powinna być „dostawca” z ponowną kontrolą po 4 min (#95: 189 rekordów, wszystkie starsze niż 5 min). Szacunek 1 h z testem.
+- **Niestabilny test kompasu w WebKit** (`test/e2e.js`, krok „compass turns the heading beam”): raz na ok. 15 przebiegów po `alpha 0` wiązka zostaje na `rotate(90deg)`. Przyczyna niepotwierdzona [Zgaduję: wcześniejsza pozycja GPS z kursem 90° nadpisuje kompas]. Po poprawce można włączyć `testy-webkit` do `bramka`. Szacunek 1–2 h.
+- **Błędy 522 z API miasta:** wszystkie z Cloudflare FRA, więc lokalizacja nie jest przyczyną [Prawdopodobne]. Zgłoszenie do operatora API (dane.um.warszawa.pl) z datami z #88–#98 – po stronie właściciela.
 
 ### 2. Pomysł bez decyzji: oznaczenie pojazdów „poza trasą linii”
 
@@ -28,8 +27,8 @@ Znaczniki pewności: [Pewne] sprawdzone, [Prawdopodobne] silne przesłanki, [Zga
 
 - **WCAG:** docelowy poziom zaparkowany przez właściciela. Testy axe w E2E blokują tylko błędy `serious` i `critical`, lista wyjątków jest pusta.
 - **Formatter (np. Prettier):** nie wybrany. Dziś jest tylko ESLint.
-- **Reguła gałęzi `main`:** zapisana, ale nieegzekwowana (prywatne repozytorium bez organizacji GitHub Team). Bramkę realnie wymusza Vercel: produkcja czeka na `bramka`.
-- **CodeQL:** niedostępny dla konta osobistego, świadoma rezygnacja.
+- **Reguła gałęzi `main` i CodeQL:** repozytorium jest już publiczne, więc oba są dostępne bez opłat – do włączenia przez właściciela (Settings → Rules: „Enforcement status: Active”; Security → Code scanning → CodeQL → Default setup).
+- **Tematy (topics) repozytorium:** wciąż puste – do dodania w „About”.
 
 ## Uwagi do procesu (wnioski z tej sesji)
 
